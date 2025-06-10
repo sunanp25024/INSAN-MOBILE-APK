@@ -220,7 +220,7 @@ export default function AttendancePage() {
             </Alert>
           )}
           
-          <div className="flex space-x-4">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
             <Button 
               onClick={handleCheckIn} 
               disabled={!!todayRecord?.checkInTime}
@@ -320,7 +320,7 @@ export default function AttendancePage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={firstHalfMonthAttendance} margin={{ top: 5, right: 0, left: -25, bottom: 35 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={50} interval={0} tick={{fontSize: '0.7rem'}}/>
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} interval={0} tick={{fontSize: '0.65rem', dy: 5}}/>
                       <YAxis type="number" domain={[0,1]} tickCount={2} tickFormatter={(value) => value === 1 ? 'Hadir' : 'Absen'} allowDecimals={false} tick={{fontSize: '0.75rem'}} />
                       <Tooltip 
                         formatter={(value: number, name: string, props: any) => [props.payload.Kehadiran === 1 ? 'Hadir' : 'Absen', `Tgl ${props.payload.name}`]}
@@ -353,7 +353,7 @@ export default function AttendancePage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={secondHalfMonthAttendance} margin={{ top: 5, right: 0, left: -25, bottom: 35 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-                       <XAxis dataKey="name" angle={-45} textAnchor="end" height={50} interval={0} tick={{fontSize: '0.7rem'}}/>
+                       <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} interval={0} tick={{fontSize: '0.65rem', dy: 5}}/>
                       <YAxis type="number" domain={[0,1]} tickCount={2} tickFormatter={(value) => value === 1 ? 'Hadir' : 'Absen'} allowDecimals={false} tick={{fontSize: '0.75rem'}}/>
                       <Tooltip 
                         formatter={(value: number, name: string, props: any) => [props.payload.Kehadiran === 1 ? 'Hadir' : 'Absen', `Tgl ${props.payload.name}`]}

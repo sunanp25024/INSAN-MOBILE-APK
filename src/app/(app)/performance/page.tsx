@@ -128,7 +128,7 @@ export default function PerformancePage() {
       {/* Performance Harian dengan Kalender */}
       <Card>
         <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
                     <CardTitle className="flex items-center"><CalendarDays className="mr-2 h-5 w-5 text-primary"/> Performa Harian</CardTitle>
                     <CardDescription>Pilih tanggal untuk melihat detail performa harian.</CardDescription>
@@ -198,16 +198,18 @@ export default function PerformancePage() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={filteredDailyPerformance}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-              <XAxis dataKey="name" />
-              <YAxis />
+              <XAxis dataKey="name" tick={{fontSize: '0.75rem'}} interval="preserveStartEnd" />
+              <YAxis tick={{fontSize: '0.75rem'}} />
               <Tooltip
                 contentStyle={{
                     background: "hsl(var(--background))",
                     borderColor: "hsl(var(--border))",
                     borderRadius: "var(--radius)",
+                    fontSize: "0.8rem",
+                    padding: "0.5rem"
                 }}
               />
-              <Legend />
+              <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
               <Bar dataKey="totalDelivered" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]}/>
               <Bar dataKey="totalPending" name="Pending" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]}/>
             </BarChart>
@@ -225,16 +227,18 @@ export default function PerformancePage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={mockWeeklyPerformance}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-              <XAxis dataKey="weekLabel" />
-              <YAxis />
+              <XAxis dataKey="weekLabel" tick={{fontSize: '0.75rem'}} />
+              <YAxis tick={{fontSize: '0.75rem'}}/>
               <Tooltip 
                 contentStyle={{
                     background: "hsl(var(--background))",
                     borderColor: "hsl(var(--border))",
                     borderRadius: "var(--radius)",
+                    fontSize: "0.8rem",
+                    padding: "0.5rem"
                 }}
               />
-              <Legend />
+              <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
               <Line type="monotone" dataKey="delivered" name="Terkirim" stroke="hsl(var(--chart-1))" strokeWidth={2} activeDot={{ r: 6 }}/>
               <Line type="monotone" dataKey="pending" name="Pending" stroke="hsl(var(--chart-2))" strokeWidth={2} activeDot={{ r: 6 }}/>
             </LineChart>

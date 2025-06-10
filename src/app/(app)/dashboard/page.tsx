@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon } from 'lucide-react'; // Renamed CalendarIcon to avoid conflict
+import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { DailyPackageInput, PackageItem, CourierProfile } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -499,7 +499,7 @@ export default function DashboardPage() {
                 <Input id="totalPackages" type="number" {...register("totalPackages")} placeholder="cth: 50" />
                 {errors.totalPackages && <p className="text-destructive text-sm mt-1">{errors.totalPackages.message}</p>}
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="codPackages">Total Paket COD</Label>
                   <Input id="codPackages" type="number" {...register("codPackages")} placeholder="cth: 20" />
@@ -526,13 +526,13 @@ export default function DashboardPage() {
             <CardDescription>Scan barcode atau input manual nomor resi. Total {managedPackages.length}/{dailyInput.totalPackages} paket.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
                  <Button onClick={handleStartScan} disabled={managedPackages.length >= dailyInput.totalPackages} className="flex-1">
                     <Camera className="mr-2 h-4 w-4" /> Mulai Scan Barcode
                 </Button>
             </div>
             <div className="space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <Input
                         type="text"
                         placeholder="Input manual nomor resi"
@@ -541,7 +541,7 @@ export default function DashboardPage() {
                         disabled={managedPackages.length >= dailyInput.totalPackages}
                         className="flex-grow"
                     />
-                    <Button onClick={handleManualResiAdd} variant="outline" disabled={managedPackages.length >= dailyInput.totalPackages}>Tambah</Button>
+                    <Button onClick={handleManualResiAdd} variant="outline" disabled={managedPackages.length >= dailyInput.totalPackages} className="sm:w-auto w-full">Tambah</Button>
                 </div>
                 <div className="flex items-center space-x-2 pt-1">
                     <Checkbox
@@ -559,7 +559,7 @@ export default function DashboardPage() {
 
             {isScanning && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <Card className="w-full max-w-xl">
+                <Card className="w-[calc(100%-2rem)] max-w-md">
                   <CardHeader>
                     <CardTitle>Scan Barcode Paket</CardTitle>
                     <CardDescription>Arahkan kamera ke barcode paket.</CardDescription>
@@ -575,9 +575,9 @@ export default function DashboardPage() {
                     )}
                     {hasCameraPermission === null && <p>Meminta izin kamera...</p>}
                   </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button variant="outline" onClick={() => setIsScanning(false)}>Tutup</Button>
-                    <Button onClick={handleSimulateScan} disabled={!hasCameraPermission}>
+                  <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
+                    <Button variant="outline" onClick={() => setIsScanning(false)} className="w-full sm:w-auto">Tutup</Button>
+                    <Button onClick={handleSimulateScan} disabled={!hasCameraPermission} className="w-full sm:w-auto">
                         <Camera className="mr-2 h-4 w-4" /> Ambil Gambar (Simulasi Scan)
                     </Button>
                   </CardFooter>
@@ -590,8 +590,8 @@ export default function DashboardPage() {
                 <h3 className="font-semibold text-muted-foreground px-2">Paket Diproses ({managedPackages.length}):</h3>
                 {managedPackages.map(pkg => (
                   <div key={pkg.id} className="flex items-center justify-between p-2 bg-card-foreground/5 rounded-md">
-                    <span className="text-sm">{pkg.id} ({pkg.isCOD ? 'COD' : 'Non-COD'}) - <span className="italic text-xs text-primary">Proses</span></span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteManagedPackage(pkg.id)}>
+                    <span className="text-sm break-all">{pkg.id} ({pkg.isCOD ? 'COD' : 'Non-COD'}) - <span className="italic text-xs text-primary">Proses</span></span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive flex-shrink-0" onClick={() => handleDeleteManagedPackage(pkg.id)}>
                       <Trash2 size={16} />
                     </Button>
                   </div>
@@ -636,12 +636,12 @@ export default function DashboardPage() {
                 })
                 .map(pkg => (
               <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold">{pkg.id} <span className={`text-xs px-2 py-0.5 rounded-full ${pkg.isCOD ? 'bg-yellow-400/20 text-yellow-600 dark:text-yellow-300' : 'bg-blue-400/20 text-blue-600 dark:text-blue-300'}`}>{pkg.isCOD ? 'COD' : 'Non-COD'}</span></p>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-1">
+                  <p className="font-semibold break-all">{pkg.id} <span className={`text-xs px-2 py-0.5 rounded-full ${pkg.isCOD ? 'bg-yellow-400/20 text-yellow-600 dark:text-yellow-300' : 'bg-blue-400/20 text-blue-600 dark:text-blue-300'}`}>{pkg.isCOD ? 'COD' : 'Non-COD'}</span></p>
                   {pkg.status === 'delivered' ? (
-                     <span className="text-xs text-green-600 dark:text-green-400 flex items-center"><CheckCircle size={14} className="mr-1"/> Terkirim</span>
+                     <span className="text-xs text-green-600 dark:text-green-400 flex items-center flex-shrink-0"><CheckCircle size={14} className="mr-1"/> Terkirim</span>
                   ) : (
-                     <span className="text-xs text-orange-500 dark:text-orange-400">Dalam Perjalanan</span>
+                     <span className="text-xs text-orange-500 dark:text-orange-400 flex-shrink-0">Dalam Perjalanan</span>
                   )}
                 </div>
                 {pkg.status === 'in_transit' && (
@@ -667,7 +667,7 @@ export default function DashboardPage() {
           </CardContent>
            {capturingForPackageId && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <Card className="w-full max-w-xl">
+                <Card className="w-[calc(100%-2rem)] max-w-md">
                   <CardHeader>
                     <CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle>
                     <CardDescription>Ambil foto dan masukkan nama penerima.</CardDescription>
@@ -691,9 +691,9 @@ export default function DashboardPage() {
                         />
                     </div>
                   </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button variant="outline" onClick={() => setCapturingForPackageId(null)}>Batal</Button>
-                    <Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim()}>
+                  <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
+                    <Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button>
+                    <Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim()} className="w-full sm:w-auto">
                         <Camera className="mr-2 h-4 w-4" /> Ambil & Simpan
                     </Button>
                   </CardFooter>
@@ -702,7 +702,7 @@ export default function DashboardPage() {
             )}
             {isScanningForDeliveryUpdate && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <Card className="w-full max-w-xl">
+                <Card className="w-[calc(100%-2rem)] max-w-md">
                   <CardHeader>
                     <CardTitle>Scan Resi Paket untuk Update Pengiriman</CardTitle>
                     <CardDescription>Arahkan kamera ke barcode paket yang akan diupdate. (Simulasi)</CardDescription>
@@ -718,9 +718,9 @@ export default function DashboardPage() {
                     )}
                     {hasCameraPermission === null && <p>Meminta izin kamera...</p>}
                   </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button variant="outline" onClick={() => setIsScanningForDeliveryUpdate(false)}>Tutup</Button>
-                    <Button onClick={handleSimulateDeliveryScanAndIdentify} disabled={!hasCameraPermission}>
+                  <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
+                    <Button variant="outline" onClick={() => setIsScanningForDeliveryUpdate(false)} className="w-full sm:w-auto">Tutup</Button>
+                    <Button onClick={handleSimulateDeliveryScanAndIdentify} disabled={!hasCameraPermission} className="w-full sm:w-auto">
                         <ScanLine className="mr-2 h-4 w-4" /> Identifikasi (Simulasi)
                     </Button>
                   </CardFooter>
@@ -760,7 +760,7 @@ export default function DashboardPage() {
             <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
                 <h4 className="text-sm font-medium text-muted-foreground">Daftar Resi Pending:</h4>
                 {pendingReturnPackages.map(pkg => (
-                    <p key={pkg.id} className="text-sm text-muted-foreground">{pkg.id} - <span className="italic">Pending Retur</span></p>
+                    <p key={pkg.id} className="text-sm text-muted-foreground break-all">{pkg.id} - <span className="italic">Pending Retur</span></p>
                 ))}
             </div>
           </CardContent>
