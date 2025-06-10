@@ -19,7 +19,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const kurirSchema = z.object({
   id: z.string().min(1, "ID Kurir wajib diisi, cth: PISTESTXXXX").optional(),
@@ -31,7 +30,7 @@ const kurirSchema = z.object({
   area: z.string().min(1, "Area wajib diisi"),
   workLocation: z.string().min(1, "Lokasi kerja (Hub) wajib diisi"),
   joinDate: z.date({ required_error: "Tanggal join wajib diisi" }),
-  contractStatus: z.enum(['Permanent', 'Contract', 'Probation'], { required_error: "Status kontrak wajib dipilih" }),
+  contractStatus: z.string().min(1, "Status kontrak wajib diisi"),
   bankName: z.string().min(3, "Nama bank minimal 3 karakter").optional().or(z.literal('')),
   bankAccountNumber: z.string().min(5, "Nomor rekening minimal 5 digit").regex(/^\d+$/, "Nomor rekening hanya boleh berisi angka").optional().or(z.literal('')),
   bankRecipientName: z.string().min(3, "Nama pemilik rekening minimal 3 karakter").optional().or(z.literal('')),
@@ -67,7 +66,7 @@ export default function ManageKurirsPage() {
   const { register, handleSubmit, reset, control, formState: { errors }, setValue } = useForm<KurirFormData>({
     resolver: zodResolver(kurirSchema),
     defaultValues: {
-      wilayah: '', area: '', workLocation: '', passwordValue: '', contractStatus: 'Contract',
+      wilayah: '', area: '', workLocation: '', passwordValue: '', contractStatus: '',
       bankName: '', bankAccountNumber: '', bankRecipientName: '', email: '',
     }
   });
@@ -115,7 +114,7 @@ export default function ManageKurirsPage() {
     setValue('workLocation', kurir.workLocation || '');
     const joinDateObj = kurir.joinDate ? parseISO(kurir.joinDate) : new Date();
     setValue('joinDate', isValid(joinDateObj) ? joinDateObj : new Date());
-    setValue('contractStatus', kurir.contractStatus || 'Contract');
+    setValue('contractStatus', kurir.contractStatus || '');
     setValue('bankName', kurir.bankName || '');
     setValue('bankAccountNumber', kurir.bankAccountNumber || '');
     setValue('bankRecipientName', kurir.bankRecipientName || '');
@@ -281,22 +280,7 @@ export default function ManageKurirsPage() {
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirContractStatus" : "addKurirContractStatus"}>Status Kontrak <span className="text-destructive">*</span></Label>
-          <Controller
-            name="contractStatus"
-            control={control}
-            render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value}>
-                <SelectTrigger id={isEdit ? "editKurirContractStatus" : "addKurirContractStatus"}>
-                  <SelectValue placeholder="Pilih status kontrak" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Permanent">Permanent</SelectItem>
-                  <SelectItem value="Contract">Contract</SelectItem>
-                  <SelectItem value="Probation">Probation</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          />
+          <Input id={isEdit ? "editKurirContractStatus" : "addKurirContractStatus"} {...register("contractStatus")} placeholder="cth: Permanent, Contract"/>
           {errors.contractStatus && <p className="text-destructive text-sm mt-1">{errors.contractStatus.message}</p>}
         </div>
       </div>
@@ -348,7 +332,7 @@ export default function ManageKurirsPage() {
                   reset({
                     id: '', fullName: '', nik: '', passwordValue: '', jabatan: '',
                     wilayah: '', area: '', workLocation: '',
-                    joinDate: undefined, contractStatus: 'Contract', 
+                    joinDate: undefined, contractStatus: '', 
                     bankName: '', bankAccountNumber: '', bankRecipientName: '', email: ''
                   });
                 }}>
@@ -420,9 +404,9 @@ export default function ManageKurirsPage() {
                         if (currentUser?.role === 'Admin') {
                             toast({title: "Permintaan Diajukan", description: `Penghapusan kurir ${kurir.id} memerlukan persetujuan MasterAdmin.`});
                         } else {
-                            // Implement actual delete for MasterAdmin if needed, or keep as placeholder
                             const kurirToDelete = kurirs.find(k => k.id === kurir.id);
-                            toast({title: "Fungsi Hapus (MasterAdmin)", description: `Kurir ${kurirToDelete?.fullName || kurir.id} akan dihapus (simulasi).`});
+                            setKurirs(prev => prev.filter(k => k.id !== kurir.id));
+                            toast({title: "Kurir Dihapus", description: `Kurir ${kurirToDelete?.fullName || kurir.id} telah dihapus.`});
                         }
                       }}><Trash2 size={16}/></Button>
                     </TableCell>
@@ -441,7 +425,6 @@ export default function ManageKurirsPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Kurir Dialog */}
       <Dialog open={isEditKurirDialogOpen} onOpenChange={(open) => {
         if (!open) {
           setCurrentEditingKurir(null);

@@ -15,7 +15,7 @@ export interface UserProfile {
   workLocation?: string; // Hub Location
   joinDate?: string;
   position?: string; // Used as 'Jabatan' for Kurir, or Role name for others
-  contractStatus?: 'Permanent' | 'Contract' | 'Probation';
+  contractStatus?: string; // Changed from enum to string
   bankAccountNumber?: string;
   bankName?: string;
   bankRecipientName?: string;
@@ -186,3 +186,4 @@ export const mockLocationsData: Wilayah[] = [
     ],
   },
 ];
+
