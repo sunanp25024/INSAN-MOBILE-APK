@@ -72,6 +72,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const handleLogout = () => {
     // Clear auth state
     localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('courierCheckedInToday'); // Clear attendance status on logout
     router.push('/');
   };
 
