@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, FileUp, UserPlus, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,10 +17,10 @@ import type { UserProfile } from '@/types';
 import { Switch } from '@/components/ui/switch';
 
 const adminSchema = z.object({
-  id: z.string().min(1, "ID Admin tidak boleh kosong").optional(),
+  id: z.string().min(1, "ID Admin tidak boleh kosong").optional(), // ID is optional for add, but present for edit
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
-  passwordValue: z.string().min(6, "Password minimal 6 karakter"),
+  passwordValue: z.string().min(6, "Password minimal 6 karakter").optional().or(z.literal('')), // Optional for edit
 });
 
 type AdminFormData = z.infer<typeof adminSchema>;
@@ -34,24 +34,61 @@ export default function ManageAdminsPage() {
   const { toast } = useToast();
   const [admins, setAdmins] = useState<UserProfile[]>(initialAdminData);
   const [isAddAdminDialogOpen, setIsAddAdminDialogOpen] = useState(false);
+  const [isEditAdminDialogOpen, setIsEditAdminDialogOpen] = useState(false);
+  const [currentEditingAdmin, setCurrentEditingAdmin] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<AdminFormData>({
+  const { register, handleSubmit, reset, formState: { errors }, setValue } = useForm<AdminFormData>({
     resolver: zodResolver(adminSchema),
   });
 
   const handleAddAdmin: SubmitHandler<AdminFormData> = (data) => {
-    const newAdminId = data.id || `ADMIN${String(Date.now()).slice(-6)}`;
+    const newAdminId = data.id && data.id.trim() !== '' ? data.id : `ADMIN${String(Date.now()).slice(-6)}`;
+    if (admins.find(admin => admin.id === newAdminId)) {
+      toast({ title: "Gagal Menambahkan", description: `ID Admin ${newAdminId} sudah ada.`, variant: "destructive"});
+      return;
+    }
     const newAdmin: UserProfile = {
       ...data,
       id: newAdminId,
       role: 'Admin',
-      status: 'Aktif', // New users are active by default
+      status: 'Aktif',
+      passwordValue: data.passwordValue || 'defaultPassword', // Ensure passwordValue is set
     };
     setAdmins(prev => [...prev, newAdmin]);
     toast({ title: "Admin Ditambahkan", description: `Admin ${data.fullName} (ID: ${newAdminId}) berhasil ditambahkan.` });
     reset({id: '', fullName: '', email: '', passwordValue: ''});
     setIsAddAdminDialogOpen(false);
+  };
+
+  const handleOpenEditDialog = (admin: UserProfile) => {
+    setCurrentEditingAdmin(admin);
+    setValue('id', admin.id);
+    setValue('fullName', admin.fullName);
+    setValue('email', admin.email || '');
+    setValue('passwordValue', ''); // Clear password for edit, user can enter a new one if they want
+    setIsEditAdminDialogOpen(true);
+  };
+
+  const handleEditAdmin: SubmitHandler<AdminFormData> = (data) => {
+    if (!currentEditingAdmin) return;
+
+    setAdmins(prevAdmins =>
+      prevAdmins.map(admin =>
+        admin.id === currentEditingAdmin.id
+          ? {
+              ...admin,
+              fullName: data.fullName,
+              email: data.email,
+              passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : admin.passwordValue, // Update password only if new one is provided
+            }
+          : admin
+      )
+    );
+    toast({ title: "Admin Diperbarui", description: `Data Admin ${data.fullName} berhasil diperbarui.` });
+    reset({id: '', fullName: '', email: '', passwordValue: ''});
+    setIsEditAdminDialogOpen(false);
+    setCurrentEditingAdmin(null);
   };
 
   const handleImportAdmins = () => {
@@ -91,7 +128,7 @@ export default function ManageAdminsPage() {
           </div>
           <Dialog open={isAddAdminDialogOpen} onOpenChange={setIsAddAdminDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="mt-2 sm:mt-0 w-full sm:w-auto">
+              <Button className="mt-2 sm:mt-0 w-full sm:w-auto" onClick={() => reset()}>
                 <UserPlus className="mr-2 h-4 w-4" /> Tambah Admin Baru
               </Button>
             </DialogTrigger>
@@ -102,27 +139,27 @@ export default function ManageAdminsPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(handleAddAdmin)} className="space-y-4 py-4">
                 <div>
-                  <Label htmlFor="adminId">ID Admin (Opsional)</Label>
-                  <Input id="adminId" {...register("id")} placeholder="Otomatis jika kosong (cth: ADMINXXXXX)" />
+                  <Label htmlFor="addAdminId">ID Admin (Opsional)</Label>
+                  <Input id="addAdminId" {...register("id")} placeholder="Otomatis jika kosong (cth: ADMINXXXXX)" />
                   {errors.id && <p className="text-destructive text-sm mt-1">{errors.id.message}</p>}
                 </div>
                 <div>
-                  <Label htmlFor="adminFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
-                  <Input id="adminFullName" {...register("fullName")} />
+                  <Label htmlFor="addAdminFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
+                  <Input id="addAdminFullName" {...register("fullName")} />
                   {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
                 </div>
                 <div>
-                  <Label htmlFor="adminEmail">Email <span className="text-destructive">*</span></Label>
-                  <Input id="adminEmail" type="email" {...register("email")} />
+                  <Label htmlFor="addAdminEmail">Email <span className="text-destructive">*</span></Label>
+                  <Input id="addAdminEmail" type="email" {...register("email")} />
                   {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
                 </div>
                 <div>
-                  <Label htmlFor="adminPassword">Password Awal <span className="text-destructive">*</span></Label>
-                  <Input id="adminPassword" type="password" {...register("passwordValue")} />
-                  {errors.passwordValue && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
+                  <Label htmlFor="addAdminPassword">Password Awal <span className="text-destructive">*</span></Label>
+                  <Input id="addAdminPassword" type="password" {...register("passwordValue")} />
+                  {errors.passwordValue && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { reset({id: '', fullName: '', email: '', passwordValue: ''}); setIsAddAdminDialogOpen(false); }}>Batal</Button>
+                  <Button type="button" variant="outline" onClick={() => { reset(); setIsAddAdminDialogOpen(false); }}>Batal</Button>
                   <Button type="submit">Simpan Admin</Button>
                 </DialogFooter>
               </form>
@@ -166,7 +203,7 @@ export default function ManageAdminsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-center space-x-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Edit untuk ${admin.id} belum diimplementasikan.`})}><Edit size={16}/></Button>
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(admin)}><Edit size={16}/></Button>
                       <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${admin.id} belum diimplementasikan.`})}><Trash2 size={16}/></Button>
                     </TableCell>
                   </TableRow>
@@ -183,6 +220,41 @@ export default function ManageAdminsPage() {
           </p>
         </CardContent>
       </Card>
+      
+      {/* Edit Admin Dialog */}
+      <Dialog open={isEditAdminDialogOpen} onOpenChange={setIsEditAdminDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Admin</DialogTitle>
+            <DialogDescription>Perbarui detail Admin. ID tidak dapat diubah.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(handleEditAdmin)} className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="editAdminId">ID Admin</Label>
+              <Input id="editAdminId" {...register("id")} readOnly className="bg-muted/50" />
+            </div>
+            <div>
+              <Label htmlFor="editAdminFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
+              <Input id="editAdminFullName" {...register("fullName")} />
+              {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="editAdminEmail">Email <span className="text-destructive">*</span></Label>
+              <Input id="editAdminEmail" type="email" {...register("email")} />
+              {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="editAdminPassword">Password Baru (Opsional)</Label>
+              <Input id="editAdminPassword" type="password" {...register("passwordValue")} placeholder="Kosongkan jika tidak ingin diubah" />
+              {errors.passwordValue && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { reset(); setIsEditAdminDialogOpen(false); setCurrentEditingAdmin(null); }}>Batal</Button>
+              <Button type="submit">Simpan Perubahan</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

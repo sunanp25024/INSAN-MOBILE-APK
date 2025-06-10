@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Briefcase, FileUp, UserPlus, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ const picSchema = z.object({
   id: z.string().min(1, "ID PIC tidak boleh kosong").optional(),
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
-  passwordValue: z.string().min(6, "Password minimal 6 karakter"),
+  passwordValue: z.string().min(6, "Password minimal 6 karakter").optional().or(z.literal('')),
   workLocation: z.string().min(3, "Area tanggung jawab minimal 3 karakter"), // Represents 'Area' for PIC
 });
 
@@ -35,25 +35,65 @@ export default function ManagePICsPage() {
   const { toast } = useToast();
   const [pics, setPics] = useState<UserProfile[]>(initialPICData);
   const [isAddPICDialogOpen, setIsAddPICDialogOpen] = useState(false);
+  const [isEditPICDialogOpen, setIsEditPICDialogOpen] = useState(false);
+  const [currentEditingPIC, setCurrentEditingPIC] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<PICFormData>({
+  const { register, handleSubmit, reset, formState: { errors }, setValue } = useForm<PICFormData>({
     resolver: zodResolver(picSchema),
   });
 
   const handleAddPIC: SubmitHandler<PICFormData> = (data) => {
-    const newPICId = data.id || `PIC${String(Date.now()).slice(-6)}`;
+    const newPICId = data.id && data.id.trim() !== '' ? data.id : `PIC${String(Date.now()).slice(-6)}`;
+    if (pics.find(pic => pic.id === newPICId)) {
+      toast({ title: "Gagal Menambahkan", description: `ID PIC ${newPICId} sudah ada.`, variant: "destructive"});
+      return;
+    }
     const newPIC: UserProfile = {
       ...data,
       id: newPICId,
       role: 'PIC',
       status: 'Aktif',
+      passwordValue: data.passwordValue || 'defaultPassword',
     };
     setPics(prev => [...prev, newPIC]);
     toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} (ID: ${newPICId}) berhasil ditambahkan.` });
     reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
     setIsAddPICDialogOpen(false);
   };
+
+  const handleOpenEditDialog = (pic: UserProfile) => {
+    setCurrentEditingPIC(pic);
+    setValue('id', pic.id);
+    setValue('fullName', pic.fullName);
+    setValue('email', pic.email || '');
+    setValue('workLocation', pic.workLocation || '');
+    setValue('passwordValue', ''); // Clear password for edit
+    setIsEditPICDialogOpen(true);
+  };
+
+  const handleEditPIC: SubmitHandler<PICFormData> = (data) => {
+    if (!currentEditingPIC) return;
+
+    setPics(prevPics =>
+      prevPics.map(pic =>
+        pic.id === currentEditingPIC.id
+          ? {
+              ...pic,
+              fullName: data.fullName,
+              email: data.email,
+              workLocation: data.workLocation,
+              passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : pic.passwordValue,
+            }
+          : pic
+      )
+    );
+    toast({ title: "PIC Diperbarui", description: `Data PIC ${data.fullName} berhasil diperbarui.` });
+    reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
+    setIsEditPICDialogOpen(false);
+    setCurrentEditingPIC(null);
+  };
+
 
   const handleImportPICs = () => {
      toast({ title: "Fitur Dalam Pengembangan", description: "Impor PIC dari Excel belum diimplementasikan." });
@@ -93,7 +133,7 @@ export default function ManagePICsPage() {
           </div>
           <Dialog open={isAddPICDialogOpen} onOpenChange={setIsAddPICDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="mt-2 sm:mt-0 w-full sm:w-auto">
+              <Button className="mt-2 sm:mt-0 w-full sm:w-auto" onClick={() => reset()}>
                 <UserPlus className="mr-2 h-4 w-4" /> Tambah PIC Baru
               </Button>
             </DialogTrigger>
@@ -104,31 +144,31 @@ export default function ManagePICsPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(handleAddPIC)} className="space-y-4 py-4">
                 <div>
-                  <Label htmlFor="picId">ID PIC (Opsional)</Label>
-                  <Input id="picId" {...register("id")} placeholder="Otomatis jika kosong (cth: PICXXXXX)" />
+                  <Label htmlFor="addPicId">ID PIC (Opsional)</Label>
+                  <Input id="addPicId" {...register("id")} placeholder="Otomatis jika kosong (cth: PICXXXXX)" />
                 </div>
                 <div>
-                  <Label htmlFor="picFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
-                  <Input id="picFullName" {...register("fullName")} />
+                  <Label htmlFor="addPicFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
+                  <Input id="addPicFullName" {...register("fullName")} />
                   {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
                 </div>
                 <div>
-                  <Label htmlFor="picEmail">Email <span className="text-destructive">*</span></Label>
-                  <Input id="picEmail" type="email" {...register("email")} />
+                  <Label htmlFor="addPicEmail">Email <span className="text-destructive">*</span></Label>
+                  <Input id="addPicEmail" type="email" {...register("email")} />
                   {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
                 </div>
                 <div>
-                  <Label htmlFor="picPassword">Password Awal <span className="text-destructive">*</span></Label>
-                  <Input id="picPassword" type="password" {...register("passwordValue")} />
-                  {errors.passwordValue && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
+                  <Label htmlFor="addPicPassword">Password Awal <span className="text-destructive">*</span></Label>
+                  <Input id="addPicPassword" type="password" {...register("passwordValue")} />
+                  {errors.passwordValue && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
                 </div>
                 <div>
-                  <Label htmlFor="picWorkLocation">Area Tanggung Jawab <span className="text-destructive">*</span></Label>
-                  <Input id="picWorkLocation" {...register("workLocation")} placeholder="cth: Jakarta Pusat"/>
+                  <Label htmlFor="addPicWorkLocation">Area Tanggung Jawab <span className="text-destructive">*</span></Label>
+                  <Input id="addPicWorkLocation" {...register("workLocation")} placeholder="cth: Jakarta Pusat"/>
                   {errors.workLocation && <p className="text-destructive text-sm mt-1">{errors.workLocation.message}</p>}
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''}); setIsAddPICDialogOpen(false); }}>Batal</Button>
+                  <Button type="button" variant="outline" onClick={() => { reset(); setIsAddPICDialogOpen(false); }}>Batal</Button>
                   <Button type="submit">Simpan PIC</Button>
                 </DialogFooter>
               </form>
@@ -174,7 +214,7 @@ export default function ManagePICsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-center space-x-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Edit untuk ${pic.id} belum diimplementasikan.`})}><Edit size={16}/></Button>
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(pic)}><Edit size={16}/></Button>
                       <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${pic.id} belum diimplementasikan.`})}><Trash2 size={16}/></Button>
                     </TableCell>
                   </TableRow>
@@ -191,6 +231,47 @@ export default function ManagePICsPage() {
           </p>
         </CardContent>
       </Card>
+      
+      {/* Edit PIC Dialog */}
+      <Dialog open={isEditPICDialogOpen} onOpenChange={setIsEditPICDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit PIC</DialogTitle>
+            <DialogDescription>Perbarui detail PIC. ID tidak dapat diubah.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(handleEditPIC)} className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="editPicId">ID PIC</Label>
+              <Input id="editPicId" {...register("id")} readOnly className="bg-muted/50" />
+            </div>
+            <div>
+              <Label htmlFor="editPicFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
+              <Input id="editPicFullName" {...register("fullName")} />
+              {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="editPicEmail">Email <span className="text-destructive">*</span></Label>
+              <Input id="editPicEmail" type="email" {...register("email")} />
+              {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="editPicWorkLocation">Area Tanggung Jawab <span className="text-destructive">*</span></Label>
+              <Input id="editPicWorkLocation" {...register("workLocation")} />
+              {errors.workLocation && <p className="text-destructive text-sm mt-1">{errors.workLocation.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="editPicPassword">Password Baru (Opsional)</Label>
+              <Input id="editPicPassword" type="password" {...register("passwordValue")} placeholder="Kosongkan jika tidak ingin diubah"/>
+              {errors.passwordValue && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { reset(); setIsEditPICDialogOpen(false); setCurrentEditingPIC(null);}}>Batal</Button>
+              <Button type="submit">Simpan Perubahan</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
 
       <Card>
         <CardHeader>
