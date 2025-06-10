@@ -16,7 +16,7 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from 'next/link';
-import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
+import { Checkbox } from '@/components/ui/checkbox';
 
 // Mock data (replace with actual data fetching)
 const mockCourier: CourierProfile = {
@@ -58,21 +58,21 @@ export default function DashboardPage() {
   const [pendingReturnPackages, setPendingReturnPackages] = useState<PackageItem[]>([]);
 
   const [currentScannedResi, setCurrentScannedResi] = useState('');
-  const [isManualCOD, setIsManualCOD] = useState(false); // State for COD checkbox
+  const [isManualCOD, setIsManualCOD] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [deliveryStarted, setDeliveryStarted] = useState(false);
   const [dayFinished, setDayFinished] = useState(false);
 
   const [motivationalQuote, setMotivationalQuote] = useState('');
   const [returnProofPhoto, setReturnProofPhoto] = useState<File | null>(null);
-  const [returnLeadReceiverName, setReturnLeadReceiverName] = useState(''); // State for Lead Receiver Name
+  const [returnLeadReceiverName, setReturnLeadReceiverName] = useState('');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const photoCanvasRef = useRef<HTMLCanvasElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [packagePhotoMap, setPackagePhotoMap] = useState<Record<string, string>>({});
   const [capturingForPackageId, setCapturingForPackageId] = useState<string | null>(null);
-  const [photoRecipientName, setPhotoRecipientName] = useState(''); // State for recipient name in photo modal
+  const [photoRecipientName, setPhotoRecipientName] = useState('');
   const [isCourierCheckedIn, setIsCourierCheckedIn] = useState<boolean | null>(null);
 
 
@@ -84,9 +84,26 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
-    const checkedInDate = localStorage.getItem('courierCheckedInToday');
-    const today = new Date().toISOString().split('T')[0];
-    setIsCourierCheckedIn(checkedInDate === today);
+    const updateCheckInStatus = () => {
+      const checkedInDate = localStorage.getItem('courierCheckedInToday');
+      const today = new Date().toISOString().split('T')[0];
+      setIsCourierCheckedIn(checkedInDate === today);
+    };
+
+    updateCheckInStatus(); // Initial check
+
+    // Re-check when the window gains focus or visibility changes
+    window.addEventListener('focus', updateCheckInStatus);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        updateCheckInStatus();
+      }
+    });
+
+    return () => {
+      window.removeEventListener('focus', updateCheckInStatus);
+      document.removeEventListener('visibilitychange', updateCheckInStatus);
+    };
   }, []);
 
   useEffect(() => {
@@ -176,10 +193,9 @@ export default function DashboardPage() {
       return;
     }
     if (dailyInput && managedPackages.length < dailyInput.totalPackages) {
-      // For manual add, `isCOD` is taken directly from the checkbox state
       setManagedPackages(prev => [...prev, { id: resiToAdd, status: 'process', isCOD: isManualCOD, lastUpdateTime: new Date().toISOString() }]);
       setCurrentScannedResi('');
-      setIsManualCOD(false); // Reset checkbox
+      setIsManualCOD(false);
       toast({ title: "Resi Ditambahkan", description: `${resiToAdd} (${isManualCOD ? "COD" : "Non-COD"}) berhasil ditambahkan.` });
        if (managedPackages.length + 1 === dailyInput.totalPackages) {
         setIsScanning(false);
@@ -194,7 +210,6 @@ export default function DashboardPage() {
     if (photoDataUrl) {
         const dummyResi = `SPX${Date.now().toString().slice(-8)}`;
         if (dailyInput && managedPackages.length < dailyInput.totalPackages) {
-          // For simulated scan, isCOD is determined by remaining COD quota
           const currentCODPackages = managedPackages.filter(p => p.isCOD).length;
           const isCOD = currentCODPackages < dailyInput.codPackages;
 
@@ -229,7 +244,7 @@ export default function DashboardPage() {
 
   const handleOpenPackageCamera = (packageId: string) => {
     setCapturingForPackageId(packageId);
-    setPhotoRecipientName(''); // Clear recipient name for new photo
+    setPhotoRecipientName('');
   };
 
   const handleCapturePackagePhoto = () => {
@@ -251,7 +266,7 @@ export default function DashboardPage() {
       toast({ title: "Gagal Mengambil Foto", variant: "destructive" });
     }
     setCapturingForPackageId(null);
-    setPhotoRecipientName(''); // Clear after capture attempt
+    setPhotoRecipientName('');
   };
 
   const handleDeletePackagePhoto = (packageId: string) => {
@@ -668,3 +683,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
