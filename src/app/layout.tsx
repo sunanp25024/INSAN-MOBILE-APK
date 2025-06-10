@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'Luminous Greetings',
-  description: 'Craft personalized messages for any occasion.',
+  title: 'MITRA KURIR SPX by PIS',
+  description: 'Aplikasi Manajemen Kurir SPX by PIS',
 };
 
 export default function RootLayout({
