@@ -315,7 +315,7 @@ export default function AttendancePage() {
                         }}
                       />
                       <Legend formatter={(value) => value === 'Kehadiran' ? 'Status Kehadiran' : value} />
-                      <Bar dataKey="Kehadiran" fill="hsl(var(--chart-1))" barSize={15} name="Status Kehadiran"/>
+                      <Bar dataKey="Kehadiran" fill="hsl(var(--chart-1))" barSize={15} name="Status Kehadiran" radius={[4, 4, 0, 0]}/>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -342,7 +342,7 @@ export default function AttendancePage() {
                         }}
                       />
                       <Legend formatter={(value) => value === 'Kehadiran' ? 'Status Kehadiran' : value} />
-                      <Bar dataKey="Kehadiran" fill="hsl(var(--chart-2))" barSize={15} name="Status Kehadiran"/>
+                      <Bar dataKey="Kehadiran" fill="hsl(var(--chart-2))" barSize={15} name="Status Kehadiran" radius={[4, 4, 0, 0]}/>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -356,5 +356,7 @@ export default function AttendancePage() {
     </div>
   );
 }
+
+    
 
     
