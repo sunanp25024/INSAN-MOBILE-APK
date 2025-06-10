@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIcon, AlertCircle, UserCheck as UserCheckIcon } from 'lucide-react';
+import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon } from 'lucide-react'; // Renamed CalendarIcon to avoid conflict
 import { useToast } from '@/hooks/use-toast';
 import type { DailyPackageInput, PackageItem, CourierProfile } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -74,6 +74,7 @@ export default function DashboardPage() {
   const [capturingForPackageId, setCapturingForPackageId] = useState<string | null>(null);
   const [photoRecipientName, setPhotoRecipientName] = useState('');
   const [isCourierCheckedIn, setIsCourierCheckedIn] = useState<boolean | null>(null);
+  const [isScanningForDeliveryUpdate, setIsScanningForDeliveryUpdate] = useState(false);
 
 
   const { toast } = useToast();
@@ -90,9 +91,8 @@ export default function DashboardPage() {
       setIsCourierCheckedIn(checkedInDate === today);
     };
 
-    updateCheckInStatus(); // Initial check
+    updateCheckInStatus(); 
 
-    // Re-check when the window gains focus or visibility changes
     window.addEventListener('focus', updateCheckInStatus);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
@@ -111,7 +111,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (isScanning || capturingForPackageId) {
+    if (isScanning || capturingForPackageId || isScanningForDeliveryUpdate) {
       const getCameraStream = async () => {
         let stream;
         try {
@@ -130,6 +130,7 @@ export default function DashboardPage() {
             });
             setIsScanning(false);
             setCapturingForPackageId(null);
+            setIsScanningForDeliveryUpdate(false);
             return;
           }
         }
@@ -149,7 +150,7 @@ export default function DashboardPage() {
         }
       };
     }
-  }, [isScanning, capturingForPackageId, toast]);
+  }, [isScanning, capturingForPackageId, isScanningForDeliveryUpdate, toast]);
 
   const handleDailyPackageInputSubmit: SubmitHandler<DailyPackageInput> = (data) => {
     setDailyInput(data);
@@ -236,7 +237,7 @@ export default function DashboardPage() {
       toast({ title: "Paket Belum Lengkap", description: "Pastikan semua paket telah di-scan sesuai total harian.", variant: "destructive" });
       return;
     }
-    setInTransitPackages(managedPackages.map(p => ({ ...p, status: 'in_transit' })));
+    setInTransitPackages(managedPackages.map(p => ({ ...p, status: 'in_transit', lastUpdateTime: new Date().toISOString() })));
     setManagedPackages([]);
     setDeliveryStarted(true);
     toast({ title: "Pengantaran Dimulai", description: "Semangat mengantarkan paket!" });
@@ -259,7 +260,13 @@ export default function DashboardPage() {
     if (photoDataUrl) {
       setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: photoDataUrl }));
       setInTransitPackages(prev => prev.map(p =>
-        p.id === capturingForPackageId ? { ...p, deliveryProofPhotoUrl: photoDataUrl, status: 'delivered', recipientName: photoRecipientName.trim() } : p
+        p.id === capturingForPackageId ? { 
+            ...p, 
+            deliveryProofPhotoUrl: photoDataUrl, 
+            status: 'delivered', 
+            recipientName: photoRecipientName.trim(),
+            lastUpdateTime: new Date().toISOString() 
+        } : p
       ));
       toast({ title: "Foto Bukti Terkirim", description: `Foto untuk paket ${capturingForPackageId} disimpan. Penerima: ${photoRecipientName.trim()}.` });
     } else {
@@ -276,7 +283,7 @@ export default function DashboardPage() {
       return newState;
     });
     setInTransitPackages(prev => prev.map(p =>
-        p.id === packageId ? { ...p, deliveryProofPhotoUrl: undefined, status: 'in_transit', recipientName: undefined } : p
+        p.id === packageId ? { ...p, deliveryProofPhotoUrl: undefined, status: 'in_transit', recipientName: undefined, lastUpdateTime: new Date().toISOString() } : p
     ));
     toast({ title: "Foto Dihapus", description: `Foto untuk paket ${packageId} dihapus.` });
   };
@@ -287,17 +294,17 @@ export default function DashboardPage() {
     if (remainingInTransit.length > 0) {
       if (!returnProofPhoto) {
         toast({ title: "Upload Bukti Paket Pending", description: "Harap upload foto bukti pengembalian paket yang tidak terkirim.", variant: "destructive" });
-        setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return' })));
+        setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', lastUpdateTime: new Date().toISOString() })));
         return;
       }
       if (!returnLeadReceiverName.trim()) {
         toast({ title: "Nama Leader Serah Terima Kosong", description: "Harap isi nama leader yang menerima paket retur.", variant: "destructive" });
-        setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return' })));
+        setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', lastUpdateTime: new Date().toISOString() })));
         return;
       }
     }
 
-    setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', returnProofPhotoUrl: returnProofPhoto ? URL.createObjectURL(returnProofPhoto) : undefined, returnLeadReceiverName: returnLeadReceiverName.trim() })));
+    setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', returnProofPhotoUrl: returnProofPhoto ? URL.createObjectURL(returnProofPhoto) : undefined, returnLeadReceiverName: returnLeadReceiverName.trim(), lastUpdateTime: new Date().toISOString() })));
     setInTransitPackages(prev => prev.filter(p => p.status === 'delivered'));
     setDayFinished(true);
     toast({ title: "Pengantaran Selesai", description: `Terima kasih untuk kerja keras hari ini! Paket retur diserahkan kepada ${returnLeadReceiverName.trim() || 'N/A'}.` });
@@ -322,18 +329,47 @@ export default function DashboardPage() {
     setReturnLeadReceiverName('');
     setPackagePhotoMap({});
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
-    localStorage.removeItem('courierCheckedInToday');
-    setIsCourierCheckedIn(false);
+    setIsCourierCheckedIn(false); // Reset check-in status for new day
+    localStorage.removeItem('courierCheckedInToday'); 
     toast({ title: "Hari Baru Dimulai", description: "Semua data telah direset. Selamat bekerja!" });
   };
 
-  const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length + pendingReturnPackages.filter(p => p.status === 'returned').length;
-  const pendingCount = pendingReturnPackages.filter(p => p.status === 'pending_return').length;
+  const handleOpenDeliveryScan = () => {
+    if (!inTransitPackages.some(p => p.status === 'in_transit')) {
+      toast({ title: "Semua Paket Terupdate", description: "Tidak ada paket dalam perjalanan yang menunggu update scan."});
+      return;
+    }
+    setIsScanningForDeliveryUpdate(true);
+  };
+
+  const handleSimulateDeliveryScanAndIdentify = () => {
+    const photoDataUrl = capturePhoto(); 
+    if (!photoDataUrl) {
+       toast({ title: "Gagal Mengambil Gambar Awal", description: "Tidak bisa mengambil gambar dari kamera untuk simulasi.", variant: "destructive" });
+       setIsScanningForDeliveryUpdate(false);
+       return;
+    }
+  
+    const packageToUpdate = inTransitPackages.find(p => p.status === 'in_transit');
+  
+    if (packageToUpdate) {
+      toast({ title: "Paket Teridentifikasi (Simulasi)", description: `Mempersiapkan update untuk ${packageToUpdate.id}...` });
+      handleOpenPackageCamera(packageToUpdate.id); 
+      setIsScanningForDeliveryUpdate(false); 
+    } else {
+      toast({ title: "Tidak Ada Paket In-Transit Lagi", description: "Semua paket tampaknya sudah terkirim atau diproses." });
+      setIsScanningForDeliveryUpdate(false);
+    }
+  };
+
+
+  const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length + pendingReturnPackages.filter(p => p.status === 'returned').length; // Assuming 'returned' also counts as "handled"
+  const pendingCountOnFinish = pendingReturnPackages.filter(p => p.status === 'pending_return').length; // Use this for the final report
   const dailyTotalForChart = (dailyInput?.totalPackages || 0) === 0 ? 1 : (dailyInput?.totalPackages || 0);
 
   const performanceData = [
     { name: 'Terkirim', value: deliveredCount, color: 'hsl(var(--chart-1))' },
-    { name: 'Pending', value: pendingCount, color: 'hsl(var(--chart-2))' },
+    { name: 'Pending/Retur', value: pendingCountOnFinish, color: 'hsl(var(--chart-2))' },
   ];
 
   if (isCourierCheckedIn === null) {
@@ -353,10 +389,10 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <p>Total Paket Dibawa: <strong>{dailyInput?.totalPackages || 0}</strong></p>
                 <p>Total Paket Terkirim: <strong className="text-green-500 dark:text-green-400">{deliveredCount}</strong></p>
-                <p>Total Paket Pending/Retur: <strong className="text-red-500 dark:text-red-400">{pendingCount}</strong></p>
+                <p>Total Paket Pending/Retur: <strong className="text-red-500 dark:text-red-400">{pendingCountOnFinish}</strong></p>
                 <p>Tingkat Keberhasilan: <strong className="text-primary">{((deliveredCount / dailyTotalForChart) * 100).toFixed(1)}%</strong></p>
                 {pendingReturnPackages.length > 0 && (
-                    <p>Diserahkan ke Leader: <strong>{pendingReturnPackages[0]?.returnLeadReceiverName || 'N/A'}</strong></p>
+                    <p>Paket Retur Diserahkan ke Leader: <strong>{returnLeadReceiverName || 'N/A'}</strong></p>
                 )}
               </div>
               <div className="h-60">
@@ -557,11 +593,32 @@ export default function DashboardPage() {
       {deliveryStarted && inTransitPackages.length > 0 && isCourierCheckedIn && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center"><PackageCheck className="mr-2 h-6 w-6 text-green-500" /> Sedang Dalam Pengantaran</CardTitle>
-            <CardDescription>Daftar paket yang sedang diantarkan. {inTransitPackages.filter(p => p.status === 'in_transit').length} paket belum terkirim.</CardDescription>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div className="flex-grow">
+                    <CardTitle className="flex items-center"><PackageCheck className="mr-2 h-6 w-6 text-green-500" /> Sedang Dalam Pengantaran</CardTitle>
+                    <CardDescription>Daftar paket yang sedang diantarkan. {inTransitPackages.filter(p => p.status === 'in_transit').length} paket belum terkirim.</CardDescription>
+                </div>
+                <Button 
+                    onClick={handleOpenDeliveryScan} 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full sm:w-auto"
+                    disabled={!inTransitPackages.some(p => p.status === 'in_transit')}>
+                  <ScanLine className="mr-2 h-4 w-4" /> Scan Update Kirim
+                </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
-            {inTransitPackages.map(pkg => (
+            {[...inTransitPackages]
+                .sort((a, b) => {
+                  if (a.status === 'delivered' && b.status !== 'delivered') return -1;
+                  if (a.status !== 'delivered' && b.status === 'delivered') return 1;
+                  if (a.status === 'delivered' && b.status === 'delivered') {
+                      return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime();
+                  }
+                  return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime(); // Default sort by time for in_transit as well
+                })
+                .map(pkg => (
               <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
                 <div className="flex items-center justify-between mb-2">
                   <p className="font-semibold">{pkg.id} <span className={`text-xs px-2 py-0.5 rounded-full ${pkg.isCOD ? 'bg-yellow-400/20 text-yellow-600 dark:text-yellow-300' : 'bg-blue-400/20 text-blue-600 dark:text-blue-300'}`}>{pkg.isCOD ? 'COD' : 'Non-COD'}</span></p>
@@ -622,6 +679,33 @@ export default function DashboardPage() {
                     <Button variant="outline" onClick={() => setCapturingForPackageId(null)}>Batal</Button>
                     <Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim()}>
                         <Camera className="mr-2 h-4 w-4" /> Ambil & Simpan
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </div>
+            )}
+            {isScanningForDeliveryUpdate && (
+              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                <Card className="w-full max-w-lg">
+                  <CardHeader>
+                    <CardTitle>Scan Resi Paket untuk Update Pengiriman</CardTitle>
+                    <CardDescription>Arahkan kamera ke barcode paket yang akan diupdate. (Simulasi)</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+                    <canvas ref={photoCanvasRef} style={{display: 'none'}} />
+                    {hasCameraPermission === false && (
+                      <Alert variant="destructive" className="mt-2">
+                        <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
+                        <AlertDescription>Mohon izinkan akses kamera.</AlertDescription>
+                      </Alert>
+                    )}
+                    {hasCameraPermission === null && <p>Meminta izin kamera...</p>}
+                  </CardContent>
+                  <CardFooter className="flex justify-between">
+                    <Button variant="outline" onClick={() => setIsScanningForDeliveryUpdate(false)}>Tutup</Button>
+                    <Button onClick={handleSimulateDeliveryScanAndIdentify} disabled={!hasCameraPermission}>
+                        <ScanLine className="mr-2 h-4 w-4" /> Identifikasi (Simulasi)
                     </Button>
                   </CardFooter>
                 </Card>
