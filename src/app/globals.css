@@ -8,48 +8,96 @@ body {
 
 @layer base {
   :root {
-    /* Dark, Elegant Theme - Mitra Kurir SPX */
-    --background: 224 71% 4%; /* Very Dark Blue */
-    --foreground: 210 40% 98%; /* Almost White / Light Gray */
+    /* Light, Elegant Theme - Mitra Kurir SPX */
+    --background: 0 0% 98%; /* Almost White */
+    --foreground: 224 71% 10%; /* Dark Blue/Black for text */
 
-    --card: 224 71% 9%; /* Darker Blue for cards */
-    --card-foreground: 210 40% 96%; /* Light Gray for card text */
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 224 71% 10%; /* Dark Blue/Black for card text */
 
-    --popover: 224 71% 6%; /* Even Darker Blue for popovers */
-    --popover-foreground: 210 40% 96%; /* Light Gray for popover text */
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 224 71% 10%; /* Dark Blue/Black for popover text */
 
-    --primary: 45 100% 50%; /* Gold */
-    --primary-foreground: 30 30% 10%; /* Dark Brown/Black for text on gold */
+    --primary: 45 90% 50%; /* Vibrant Gold */
+    --primary-foreground: 45 90% 15%; /* Dark Brown for text on gold */
 
-    --secondary: 210 30% 30%; /* Muted Blue/Gray */
-    --secondary-foreground: 210 30% 90%; /* Light text for secondary */
+    --secondary: 210 30% 90%; /* Light Muted Blue/Gray */
+    --secondary-foreground: 210 30% 30%; /* Darker text for secondary */
 
-    --muted: 215 28% 17%; /* Dark Muted Blue/Gray */
-    --muted-foreground: 210 40% 70%; /* Lighter Muted Text */
+    --muted: 215 28% 90%; /* Light Muted Blue/Gray */
+    --muted-foreground: 210 40% 45%; /* Slightly Darker Muted Text */
 
-    --accent: 50 90% 55%; /* Brighter Gold/Amber for accents */
-    --accent-foreground: 45 90% 5%; /* Dark text for accent */
+    --accent: 48 95% 58%; /* Brighter, slightly more orangey Gold/Amber for accents */
+    --accent-foreground: 45 90% 10%; /* Dark text for accent */
 
     --destructive: 0 70% 50%; /* Deep Red */
     --destructive-foreground: 0 0% 100%; /* White */
 
-    --border: 215 28% 20%; /* Dark Border */
-    --input: 215 28% 12%; /* Dark Input Background */
-    --ring: 45 100% 55%; /* Gold for Focus Rings */
+    --border: 215 28% 85%; /* Light Gray Border */
+    --input: 215 28% 92%; /* Very Light Gray Input Background */
+    --ring: 45 90% 55%; /* Gold for Focus Rings */
 
     --radius: 0.5rem;
 
     /* Chart colors */
-    --chart-1: 210 90% 50%; /* Blue */
-    --chart-2: 45 90% 50%;  /* Gold */
-    --chart-3: 160 60% 45%; /* Teal */
-    --chart-4: 280 65% 60%; /* Purple */
-    --chart-5: 0 70% 60%;   /* Red */
+    --chart-1: 210 70% 50%; /* Blue */
+    --chart-2: 45 80% 45%;  /* Gold/Orange */
+    --chart-3: 160 60% 40%; /* Teal */
+    --chart-4: 280 60% 55%; /* Purple */
+    --chart-5: 0 65% 55%;   /* Red */
+
+    /* Sidebar colors - Light Sidebar */
+    --sidebar-background: 0 0% 96%;
+    --sidebar-foreground: 224 71% 15%;
+    --sidebar-primary: 45 90% 50%;
+    --sidebar-primary-foreground: 45 90% 15%;
+    --sidebar-accent: 215 28% 88%;
+    --sidebar-accent-foreground: 224 71% 10%;
+    --sidebar-border: 215 28% 80%;
+    --sidebar-ring: 45 90% 55%;
+  }
+
+  .dark {
+    /* Dark, Elegant Theme - Mitra Kurir SPX (Kept for potential toggle) */
+    --background: 224 71% 4%;
+    --foreground: 210 40% 98%;
+
+    --card: 224 71% 9%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 224 71% 6%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 45 100% 50%;
+    --primary-foreground: 30 30% 10%;
+
+    --secondary: 210 30% 30%;
+    --secondary-foreground: 210 30% 90%;
+
+    --muted: 215 28% 17%;
+    --muted-foreground: 210 40% 70%;
+
+    --accent: 50 90% 55%;
+    --accent-foreground: 45 90% 5%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 28% 20%;
+    --input: 215 28% 12%;
+    --ring: 45 100% 55%;
+
+    /* Chart colors */
+    --chart-1: 210 90% 50%;
+    --chart-2: 45 90% 50%;
+    --chart-3: 160 60% 45%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 0 70% 60%;
 
     /* Sidebar colors */
-    --sidebar-background: 224 71% 7%; /* Slightly lighter than main bg */
+    --sidebar-background: 224 71% 7%;
     --sidebar-foreground: 210 40% 85%;
-    --sidebar-primary: 45 100% 50%; /* Gold */
+    --sidebar-primary: 45 100% 50%;
     --sidebar-primary-foreground: 30 30% 10%;
     --sidebar-accent: 215 28% 22%;
     --sidebar-accent-foreground: 210 40% 95%;
