@@ -7,8 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog } from 'lucide-react';
+import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { DailyPackageInput, PackageItem, UserProfile, UserRole } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,6 +17,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from 'next/link';
 import { Checkbox } from '@/components/ui/checkbox';
+import { format, subDays } from 'date-fns';
+import { id as indonesiaLocale } from 'date-fns/locale';
 
 // Existing mockCourier data structure can be used for Kurir role
 const mockKurirProfileData: UserProfile = {
@@ -52,6 +54,15 @@ const MotivationalQuotes = [
   "Terima kasih atas dedikasimu. Setiap langkahmu berarti!"
 ];
 
+interface DashboardSummaryData {
+  activeCouriersToday: number;
+  totalPackagesProcessedToday: number;
+  totalPackagesDeliveredToday: number;
+  onTimeDeliveryRateToday: number; // percentage
+  dailyShipmentSummary: { date: string; name: string; terkirim: number; pending: number }[];
+}
+
+
 export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [dailyInput, setDailyInput] = useState<DailyPackageInput | null>(null);
@@ -77,6 +88,7 @@ export default function DashboardPage() {
   const [photoRecipientName, setPhotoRecipientName] = useState('');
   const [isCourierCheckedIn, setIsCourierCheckedIn] = useState<boolean | null>(null);
   const [isScanningForDeliveryUpdate, setIsScanningForDeliveryUpdate] = useState(false);
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummaryData | null>(null);
 
 
   const { toast } = useToast();
@@ -92,18 +104,39 @@ export default function DashboardPage() {
       try {
         const parsedUser = JSON.parse(userDataString) as UserProfile;
         setCurrentUser(parsedUser);
+
+        if (parsedUser.role !== 'Kurir') {
+          // Generate mock summary data for Admin/PIC/MasterAdmin
+          const today = new Date();
+          const summaryData: DashboardSummaryData = {
+            activeCouriersToday: Math.floor(Math.random() * 15) + 5, // 5-20 active couriers
+            totalPackagesProcessedToday: Math.floor(Math.random() * 200) + 100, // 100-300 packages
+            totalPackagesDeliveredToday: Math.floor(Math.random() * 150) + 80,   // 80-230 delivered
+            onTimeDeliveryRateToday: Math.floor(Math.random() * 15) + 85,      // 85-100% on time
+            dailyShipmentSummary: Array.from({ length: 7 }).map((_, i) => {
+              const day = subDays(today, 6 - i); // Last 7 days including today
+              const delivered = Math.floor(Math.random() * 100) + 50;
+              const pending = Math.floor(Math.random() * 20) + 5;
+              return {
+                date: day.toISOString(),
+                name: format(day, 'dd/MM', { locale: indonesiaLocale }),
+                terkirim: delivered,
+                pending: pending,
+              };
+            }),
+          };
+          setDashboardSummary(summaryData);
+        }
+
       } catch (error) {
         console.error("Failed to parse user data from localStorage for dashboard", error);
-        // Handle error, maybe redirect to login
       }
-    } else {
-        // Redirect to login if no user data
     }
   }, []);
 
 
   useEffect(() => {
-    if (currentUser?.role !== 'Kurir') return; // Only Kurirs need check-in for this page
+    if (currentUser?.role !== 'Kurir') return;
 
     const updateCheckInStatus = () => {
       const checkedInDate = localStorage.getItem('courierCheckedInToday');
@@ -216,7 +249,7 @@ export default function DashboardPage() {
     if (dailyInput && managedPackages.length < dailyInput.totalPackages) {
       setManagedPackages(prev => [...prev, { id: resiToAdd, status: 'process', isCOD: isManualCOD, lastUpdateTime: new Date().toISOString() }]);
       setCurrentScannedResi('');
-      setIsManualCOD(false);
+      setIsManualCOD(false); // Reset checkbox after adding
       toast({ title: "Resi Ditambahkan", description: `${resiToAdd} (${isManualCOD ? "COD" : "Non-COD"}) berhasil ditambahkan.` });
        if (managedPackages.length + 1 === dailyInput.totalPackages) {
         setIsScanning(false);
@@ -417,12 +450,10 @@ export default function DashboardPage() {
     return <div className="flex justify-center items-center h-screen"><p>Memuat data pengguna...</p></div>;
   }
   
-  // Kurir Specific Loading for Check-in
   if (currentUser.role === 'Kurir' && isCourierCheckedIn === null) {
     return <div className="flex justify-center items-center h-screen"><p>Memeriksa status absensi...</p></div>;
   }
 
-  // Kurir Finished Day View
   if (currentUser.role === 'Kurir' && dayFinished) {
     return (
       <div className="space-y-6">
@@ -435,14 +466,14 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
               <div className="space-y-2">
                 <p>Total Paket Dibawa: <strong>{dailyInput?.totalPackages || 0}</strong></p>
-                <p>Total Paket Terkirim: <strong className="text-green-500 dark:text-green-400">{deliveredCount}</strong></p>
-                <p>Total Paket Pending/Retur: <strong className="text-red-500 dark:text-red-400">{pendingCountOnFinish}</strong></p>
+                <p>Total Paket Terkirim: <strong className="text-green-600 dark:text-green-400">{deliveredCount}</strong></p>
+                <p>Total Paket Pending/Retur: <strong className="text-red-600 dark:text-red-400">{pendingCountOnFinish}</strong></p>
                 <p>Tingkat Keberhasilan: <strong className="text-primary">{((deliveredCount / dailyTotalForChart) * 100).toFixed(1)}%</strong></p>
                 {pendingReturnPackages.length > 0 && (
                     <p>Paket Retur Diserahkan ke Leader: <strong>{returnLeadReceiverName || 'N/A'}</strong></p>
                 )}
               </div>
-              <div className="h-60">
+              <div className="h-60 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={performanceData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
@@ -457,7 +488,7 @@ export default function DashboardPage() {
                         borderRadius: "var(--radius)",
                       }}
                     />
-                    <Legend />
+                    <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -465,10 +496,13 @@ export default function DashboardPage() {
             {pendingReturnPackages.length > 0 && returnProofPhoto && (
               <div className="mt-6">
                 <h3 className="font-semibold text-lg mb-2">Bukti Paket Retur:</h3>
-                <img
+                <Image
                   src={URL.createObjectURL(returnProofPhoto)}
                   alt="Bukti Retur"
                   className="max-w-sm w-full md:max-w-xs rounded-lg shadow-md border border-border"
+                  width={300}
+                  height={200}
+                  style={{objectFit: 'contain'}}
                   data-ai-hint="package receipt"
                 />
               </div>
@@ -488,7 +522,6 @@ export default function DashboardPage() {
     );
   }
 
-  // Kurir Main Dashboard View
   if (currentUser.role === 'Kurir') {
     return (
       <div className="space-y-8">
@@ -500,7 +533,7 @@ export default function DashboardPage() {
             </Avatar>
             <div>
               <CardTitle className="text-2xl">{currentUser.fullName}</CardTitle>
-              <CardDescription>{currentUser.id} - {mockKurirProfileData.workLocation}</CardDescription>
+              <CardDescription>{currentUser.id} - {currentUser.workLocation || mockKurirProfileData.workLocation}</CardDescription>
             </div>
           </CardHeader>
         </Card>
@@ -684,7 +717,7 @@ export default function DashboardPage() {
                     <div className="mt-2">
                       <p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p>
                       <div className="flex items-end gap-2">
-                          <img src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" data-ai-hint="package at door"/>
+                          <Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" width={96} height={96} data-ai-hint="package at door"/>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}>
                               <Trash2 size={16} />
                           </Button>
@@ -813,7 +846,15 @@ export default function DashboardPage() {
     );
   }
 
-  // Fallback for non-Kurir roles or if Kurir hasn't reached specific states
+  // Fallback for non-Kurir roles (Admin, PIC, MasterAdmin)
+  if (!dashboardSummary) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <p>Memuat ringkasan dashboard...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
@@ -821,13 +862,85 @@ export default function DashboardPage() {
           <CardTitle className="text-2xl text-primary flex items-center">
             <UserCog className="mr-2 h-7 w-7" /> Selamat Datang, {currentUser.fullName}!
           </CardTitle>
-          <CardDescription>Anda login sebagai {currentUser.role}.</CardDescription>
+          <CardDescription>Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir hari ini.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p>Konten dashboard spesifik untuk peran Anda akan ditampilkan di sini.</p>
-          {/* Add role-specific summary widgets or links here in the future */}
+      </Card>
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Kurir Aktif Hari Ini</CardTitle>
+            <Users className="h-5 w-5 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboardSummary.activeCouriersToday}</div>
+            <p className="text-xs text-muted-foreground">Total kurir yang beroperasi</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Paket Diproses Hari Ini</CardTitle>
+            <PackageIcon className="h-5 w-5 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboardSummary.totalPackagesProcessedToday}</div>
+            <p className="text-xs text-muted-foreground">Total paket ditugaskan</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Paket Terkirim Hari Ini</CardTitle>
+            <PackageCheck className="h-5 w-5 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboardSummary.totalPackagesDeliveredToday}</div>
+            <p className="text-xs text-muted-foreground">
+              Dari {dashboardSummary.totalPackagesProcessedToday} paket
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Rate Tepat Waktu</CardTitle>
+            <Clock className="h-5 w-5 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{dashboardSummary.onTimeDeliveryRateToday}%</div>
+            <p className="text-xs text-muted-foreground">Pengiriman berhasil tepat waktu</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5"/>Ringkasan Pengiriman (7 Hari Terakhir)</CardTitle>
+          <CardDescription>Visualisasi jumlah paket terkirim dan pending/retur.</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[350px] pt-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsBarChart data={dashboardSummary.dailyShipmentSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
+              <XAxis dataKey="name" tick={{fontSize: '0.75rem'}}/>
+              <YAxis tick={{fontSize: '0.75rem'}}/>
+              <Tooltip
+                contentStyle={{
+                    background: "hsl(var(--background))",
+                    borderColor: "hsl(var(--border))",
+                    borderRadius: "var(--radius)",
+                    fontSize: "0.8rem",
+                    padding: "0.5rem"
+                }}
+                cursor={{ fill: "hsl(var(--accent)/0.2)" }}
+              />
+              <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
+              <Bar dataKey="terkirim" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={20}/>
+              <Bar dataKey="pending" name="Pending/Retur" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={20}/>
+            </RechartsBarChart>
+          </ResponsiveContainer>
         </CardContent>
       </Card>
     </div>
   );
 }
+
+    
