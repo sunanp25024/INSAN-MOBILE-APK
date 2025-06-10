@@ -1325,8 +1325,8 @@ export default function DashboardPage() {
                             cursor={{ fill: "hsl(var(--accent)/0.2)" }}
                         />
                         <Legend wrapperStyle={{fontSize: "0.8rem"}} />
-                        <Line type="monotone" dataKey="terkirim" name="Terkirim" stroke="hsl(var(--chart-1))" strokeWidth={2} activeDot={{ r: 6 }} />
-                        <Line type="monotone" dataKey="pending" name="Pending/Retur" stroke="hsl(var(--chart-2))" strokeWidth={2} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="terkirim" name="Terkirim" stroke="hsl(var(--chart-3))" strokeWidth={2} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="pending" name="Pending/Retur" stroke="hsl(var(--chart-4))" strokeWidth={2} activeDot={{ r: 6 }} />
                     </LineChart>
                 </ResponsiveContainer>
             </CardContent>
@@ -1342,14 +1342,14 @@ export default function DashboardPage() {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
                         <XAxis dataKey="month" tick={{fontSize: '0.75rem'}} />
                         <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--chart-1))" tick={{fontSize: '0.75rem'}} />
-                        <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-2))" tick={{fontSize: '0.75rem'}} />
+                        <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-5))" tick={{fontSize: '0.75rem'}} />
                         <Tooltip
                             contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }}
                             cursor={{ fill: "hsl(var(--accent)/0.2)" }}
                         />
                         <Legend wrapperStyle={{fontSize: "0.8rem"}} />
                         <Bar yAxisId="left" dataKey="totalDelivered" name="Total Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={25} />
-                        <Bar yAxisId="left" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={25} />
+                        <Bar yAxisId="right" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-5))" radius={[4, 4, 0, 0]} barSize={25} />
                     </RechartsBarChart>
                 </ResponsiveContainer>
             </CardContent>
