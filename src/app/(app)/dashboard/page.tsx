@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight } from 'lucide-react';
+import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight, Filter as FilterIcon, Download as DownloadIcon, Search as SearchIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { DailyPackageInput, PackageItem, UserProfile, UserRole, AttendanceActivity, DeliveryActivity } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { format, subDays, formatDistanceToNow } from 'date-fns';
 import { id as indonesiaLocale } from 'date-fns/locale';
 import Image from 'next/image';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // Existing mockCourier data structure can be used for Kurir role
 const mockKurirProfileData: UserProfile = {
@@ -131,19 +132,19 @@ export default function DashboardPage() {
           setDashboardSummary(summaryData);
 
           const mockAttendance: AttendanceActivity[] = [
-            { id: 'att1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(7, 55, 0, 0).valueOf().toString() },
-            { id: 'att2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(8, 5, 0, 0).valueOf().toString() },
-            { id: 'att3', kurirName: 'Charlie Van Houten', kurirId: 'KURIR003', action: 'reported-late', timestamp: subDays(new Date(), 0).setHours(9, 15, 0, 0).valueOf().toString() },
-            { id: 'att4', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-out', timestamp: subDays(new Date(), 0).setHours(17, 2, 0, 0).valueOf().toString() },
+            { id: 'att1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(7, 55, 0, 0).valueOf().toString(), location: 'Jakarta Pusat Hub' },
+            { id: 'att2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(8, 5, 0, 0).valueOf().toString(), location: 'Bandung Kota Hub' },
+            { id: 'att3', kurirName: 'Charlie Van Houten', kurirId: 'KURIR003', action: 'reported-late', timestamp: subDays(new Date(), 0).setHours(9, 15, 0, 0).valueOf().toString(), location: 'Surabaya Timur Hub' },
+            { id: 'att4', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-out', timestamp: subDays(new Date(), 0).setHours(17, 2, 0, 0).valueOf().toString(), location: 'Jakarta Pusat Hub' },
           ].sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
           setAttendanceActivities(mockAttendance);
           
           const mockDeliveries: DeliveryActivity[] = [
-            { id: 'del1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', packageId: 'SPX001', action: 'delivered', timestamp: subDays(new Date(), 0).setHours(14, 30, 0, 0).valueOf().toString(), details: 'Diterima Bpk. Agus' },
-            { id: 'del2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', packageId: 'SPX002', action: 'in-transit', timestamp: subDays(new Date(), 0).setHours(13,0,0,0).valueOf().toString() },
-            { id: 'del3', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', packageId: 'SPX003', action: 'delivery-failed', timestamp: subDays(new Date(), 0).setHours(11, 45, 0, 0).valueOf().toString(), details: 'Alamat tidak ditemukan' },
-            { id: 'del4', kurirName: 'Charlie Van Houten', kurirId: 'KURIR003', packageId: 'SPX004', action: 'picked-up', timestamp: subDays(new Date(), 0).setHours(10,0,0,0).valueOf().toString() },
-            { id: 'del5', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', packageId: 'SPX005', action: 'returned-to-hub', timestamp: subDays(new Date(), 0).setHours(17,30,0,0).valueOf().toString(), details: 'Retur dari pengiriman gagal' },
+            { id: 'del1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', packageId: 'SPX001', action: 'delivered', timestamp: subDays(new Date(), 0).setHours(14, 30, 0, 0).valueOf().toString(), details: 'Diterima Bpk. Agus', location: 'Jakarta Pusat Hub' },
+            { id: 'del2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', packageId: 'SPX002', action: 'in-transit', timestamp: subDays(new Date(), 0).setHours(13,0,0,0).valueOf().toString(), location: 'Bandung Kota Hub' },
+            { id: 'del3', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', packageId: 'SPX003', action: 'delivery-failed', timestamp: subDays(new Date(), 0).setHours(11, 45, 0, 0).valueOf().toString(), details: 'Alamat tidak ditemukan', location: 'Jakarta Pusat Hub' },
+            { id: 'del4', kurirName: 'Charlie Van Houten', kurirId: 'KURIR003', packageId: 'SPX004', action: 'picked-up', timestamp: subDays(new Date(), 0).setHours(10,0,0,0).valueOf().toString(), location: 'Surabaya Timur Hub' },
+            { id: 'del5', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', packageId: 'SPX005', action: 'returned-to-hub', timestamp: subDays(new Date(), 0).setHours(17,30,0,0).valueOf().toString(), details: 'Retur dari pengiriman gagal', location: 'Bandung Kota Hub' },
           ].sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
           setDeliveryActivities(mockDeliveries);
 
@@ -495,6 +496,14 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDashboardFilterApply = () => {
+    toast({ title: "Filter Diterapkan (Simulasi)", description: "Data dashboard akan diperbarui sesuai filter." });
+  };
+
+  const handleDownloadDashboardSummary = () => {
+    toast({ title: "Unduh Ringkasan (Simulasi)", description: "Ringkasan data dashboard sedang disiapkan untuk diunduh." });
+  };
+
   if (!currentUser) {
     return <div className="flex justify-center items-center h-screen"><p>Memuat data pengguna...</p></div>;
   }
@@ -571,6 +580,7 @@ export default function DashboardPage() {
     );
   }
 
+  // Kurir Dashboard - Active Day
   if (currentUser.role === 'Kurir') {
     return (
       <div className="space-y-8">
@@ -741,9 +751,8 @@ export default function DashboardPage() {
             <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
               {[...inTransitPackages]
                   .sort((a, b) => {
-                    if (a.status === 'delivered' && b.status !== 'delivered') return 1; // Delivered at the bottom
-                    if (a.status !== 'delivered' && b.status === 'delivered') return -1; // In-transit at the top
-                    // If both are 'delivered' or both are 'in-transit', sort by lastUpdateTime descending (newest first)
+                    if (a.status === 'delivered' && b.status !== 'delivered') return 1; 
+                    if (a.status !== 'delivered' && b.status === 'delivered') return -1; 
                     return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime();
                   })
                   .map(pkg => (
@@ -905,6 +914,7 @@ export default function DashboardPage() {
     );
   }
 
+  // Managerial Dashboard (MasterAdmin, Admin, PIC)
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
@@ -915,6 +925,83 @@ export default function DashboardPage() {
           <CardDescription>Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir hari ini.</CardDescription>
         </CardHeader>
       </Card>
+
+      {/* Filter and Quick Actions Card - Only for Managerial Roles */}
+      {currentUser.role !== 'Kurir' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-xl">
+              <FilterIcon className="mr-2 h-5 w-5 text-primary" />
+              Filter & Aksi Cepat Dashboard
+            </CardTitle>
+            <CardDescription>
+              Saring data yang ditampilkan di dashboard atau unduh ringkasan.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+              <div>
+                <Label htmlFor="dashboard-wilayah">Wilayah</Label>
+                <Select>
+                  <SelectTrigger id="dashboard-wilayah">
+                    <SelectValue placeholder="Semua Wilayah" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Wilayah</SelectItem>
+                    <SelectItem value="jabodetabek">Jabodetabek</SelectItem>
+                    <SelectItem value="jawa-barat">Jawa Barat</SelectItem>
+                    <SelectItem value="jawa-tengah">Jawa Tengah</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="dashboard-area">Area Operasional</Label>
+                <Select>
+                  <SelectTrigger id="dashboard-area">
+                    <SelectValue placeholder="Semua Area" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Area</SelectItem>
+                    <SelectItem value="jakarta-pusat">Jakarta Pusat</SelectItem>
+                    <SelectItem value="bandung-kota">Bandung Kota</SelectItem>
+                    <SelectItem value="surabaya-timur">Surabaya Timur</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="dashboard-lokasi-kerja">Lokasi Kerja (Hub)</Label>
+                <Select>
+                  <SelectTrigger id="dashboard-lokasi-kerja">
+                    <SelectValue placeholder="Semua Hub" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Hub</SelectItem>
+                    <SelectItem value="hub-a">Hub A (Jakarta)</SelectItem>
+                    <SelectItem value="hub-b">Hub B (Bandung)</SelectItem>
+                    <SelectItem value="hub-c">Hub C (Surabaya)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="lg:col-span-2">
+                <Label htmlFor="dashboard-search-kurir">Cari Kurir (Nama/ID)</Label>
+                <div className="relative">
+                  <SearchIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input id="dashboard-search-kurir" type="search" placeholder="Masukkan Nama atau ID Kurir..." className="pl-8" />
+                </div>
+              </div>
+              <Button onClick={handleDashboardFilterApply} className="w-full lg:w-auto self-end">
+                <FilterIcon className="mr-2 h-4 w-4" /> Terapkan Filter
+              </Button>
+            </div>
+          </CardContent>
+           <CardFooter>
+              <Button onClick={handleDownloadDashboardSummary} variant="outline" className="w-full sm:w-auto">
+                <DownloadIcon className="mr-2 h-4 w-4" /> Unduh Ringkasan Dashboard
+              </Button>
+            </CardFooter>
+        </Card>
+      )}
+
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -994,7 +1081,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center text-xl text-primary"><ListChecks className="mr-2 h-5 w-5"/>Aktivitas Absensi Terkini</CardTitle>
-            <CardDescription>Update check-in/out kurir.</CardDescription>
+            <CardDescription>Update check-in/out kurir. Termasuk lokasi kerja kurir.</CardDescription>
           </CardHeader>
           <CardContent className="max-h-[400px] overflow-y-auto pr-2">
             {attendanceActivities.length > 0 ? (
@@ -1010,6 +1097,7 @@ export default function DashboardPage() {
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {activity.action === 'check-in' ? 'melakukan check-in' : activity.action === 'check-out' ? 'melakukan check-out' : 'melaporkan keterlambatan'}
+                        {activity.location && <span className="text-xs"> di {activity.location}</span>}
                       </p>
                       <p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(activity.timestamp)}</p>
                     </div>
@@ -1025,7 +1113,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center text-xl text-primary"><Truck className="mr-2 h-5 w-5"/>Aktivitas Pengiriman Terkini</CardTitle>
-            <CardDescription>Update status pengiriman paket oleh kurir.</CardDescription>
+            <CardDescription>Update status pengiriman paket oleh kurir. Termasuk lokasi kerja kurir.</CardDescription>
           </CardHeader>
           <CardContent className="max-h-[400px] overflow-y-auto pr-2">
             {deliveryActivities.length > 0 ? (
@@ -1049,6 +1137,7 @@ export default function DashboardPage() {
                           'status tidak diketahui'
                         }
                         {activity.details && <span className="italic">: {activity.details}</span>}
+                        {activity.location && <span className="text-xs"> ({activity.location})</span>}
                       </p>
                       <p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(activity.timestamp)}</p>
                     </div>

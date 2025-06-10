@@ -70,6 +70,7 @@ export interface AttendanceActivity {
   kurirId: string;
   action: 'check-in' | 'check-out' | 'reported-late';
   timestamp: string; // ISO date string
+  location?: string; // Added location
 }
 
 export interface DeliveryActivity {
@@ -80,4 +81,6 @@ export interface DeliveryActivity {
   action: 'picked-up' | 'in-transit' | 'delivered' | 'delivery-failed' | 'returned-to-hub';
   timestamp: string; // ISO date string
   details?: string; // e.g., "Recipient not home", "Package damaged"
+  location?: string; // Added location
 }
+
