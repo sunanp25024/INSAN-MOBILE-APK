@@ -1,3 +1,4 @@
+
 export interface CourierProfile {
   id: string;
   fullName: string;
@@ -19,6 +20,7 @@ export interface PackageItem {
   recipientName?: string;
   deliveryProofPhotoUrl?: string; // URL of the photo
   returnProofPhotoUrl?: string; // URL of the return photo for a batch of pending items
+  returnLeadReceiverName?: string; // Name of the lead/supervisor who received the returned packages
   lastUpdateTime: string; // ISO date string
 }
 
@@ -47,3 +49,6 @@ export interface WeeklyPerformancePoint {
   delivered: number;
   pending: number;
 }
+
+
+    

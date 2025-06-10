@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIcon, AlertCircle } from 'lucide-react';
+import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIcon, AlertCircle, UserCheck as UserCheckIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { DailyPackageInput, PackageItem, CourierProfile } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -16,6 +16,7 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from 'next/link';
+import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
 
 // Mock data (replace with actual data fetching)
 const mockCourier: CourierProfile = {
@@ -38,7 +39,7 @@ const packageInputSchema = z.object({
   nonCodPackages: z.coerce.number().min(0).max(200),
 }).refine(data => data.codPackages + data.nonCodPackages === data.totalPackages, {
   message: "Jumlah paket COD dan Non-COD harus sama dengan Total Paket",
-  path: ["totalPackages"],
+  path: ["totalPackages"], 
 });
 
 
@@ -57,24 +58,27 @@ export default function DashboardPage() {
   const [pendingReturnPackages, setPendingReturnPackages] = useState<PackageItem[]>([]);
   
   const [currentScannedResi, setCurrentScannedResi] = useState('');
+  const [isManualCOD, setIsManualCOD] = useState(false); // State for COD checkbox
   const [isScanning, setIsScanning] = useState(false);
   const [deliveryStarted, setDeliveryStarted] = useState(false);
   const [dayFinished, setDayFinished] = useState(false);
   
   const [motivationalQuote, setMotivationalQuote] = useState('');
   const [returnProofPhoto, setReturnProofPhoto] = useState<File | null>(null);
+  const [returnLeadReceiverName, setReturnLeadReceiverName] = useState(''); // State for Lead Receiver Name
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const photoCanvasRef = useRef<HTMLCanvasElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [packagePhotoMap, setPackagePhotoMap] = useState<Record<string, string>>({});
   const [capturingForPackageId, setCapturingForPackageId] = useState<string | null>(null);
+  const [photoRecipientName, setPhotoRecipientName] = useState(''); // State for recipient name in photo modal
   const [isCourierCheckedIn, setIsCourierCheckedIn] = useState<boolean | null>(null);
 
 
   const { toast } = useToast();
 
-  const { register, handleSubmit, watch, formState: { errors }, setValue, reset: resetPackageInputForm } = useForm<DailyPackageInput>({
+  const { register, handleSubmit: handlePackageFormSubmit, watch, formState: { errors }, setValue, reset: resetPackageInputForm } = useForm<DailyPackageInput>({
     resolver: zodResolver(packageInputSchema),
     defaultValues: { totalPackages: 0, codPackages: 0, nonCodPackages: 0 }
   });
@@ -94,7 +98,6 @@ export default function DashboardPage() {
       const getCameraStream = async () => {
         let stream;
         try {
-          // Prefer rear camera
           stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } });
         } catch (err) {
           console.warn("Rear camera not accessible, trying default camera:", err);
@@ -131,7 +134,7 @@ export default function DashboardPage() {
     }
   }, [isScanning, capturingForPackageId, toast]);
 
-  const handlePackageInputSubmit: SubmitHandler<DailyPackageInput> = (data) => {
+  const handleDailyPackageInputSubmit: SubmitHandler<DailyPackageInput> = (data) => {
     setDailyInput(data);
     toast({ title: "Data Paket Harian Disimpan", description: `Total ${data.totalPackages} paket akan diproses.` });
   };
@@ -162,20 +165,22 @@ export default function DashboardPage() {
   }
 
   const handleManualResiAdd = () => {
-    if (!currentScannedResi.trim()) {
+    const resiToAdd = currentScannedResi.trim();
+    if (!resiToAdd) {
       toast({ title: "Resi Kosong", description: "Masukkan nomor resi.", variant: "destructive" });
       return;
     }
-    if (managedPackages.find(p => p.id === currentScannedResi.trim())) {
+    if (managedPackages.find(p => p.id === resiToAdd)) {
       toast({ title: "Resi Duplikat", description: "Nomor resi ini sudah ada.", variant: "destructive" });
       setCurrentScannedResi('');
       return;
     }
     if (dailyInput && managedPackages.length < dailyInput.totalPackages) {
-      const isCOD = managedPackages.filter(p => p.isCOD).length < dailyInput.codPackages;
-      setManagedPackages(prev => [...prev, { id: currentScannedResi.trim(), status: 'process', isCOD, lastUpdateTime: new Date().toISOString() }]);
+      // For manual add, `isCOD` is taken directly from the checkbox state
+      setManagedPackages(prev => [...prev, { id: resiToAdd, status: 'process', isCOD: isManualCOD, lastUpdateTime: new Date().toISOString() }]);
       setCurrentScannedResi('');
-      toast({ title: "Resi Ditambahkan", description: `${currentScannedResi} berhasil ditambahkan.` });
+      setIsManualCOD(false); // Reset checkbox
+      toast({ title: "Resi Ditambahkan", description: `${resiToAdd} (${isManualCOD ? "COD" : "Non-COD"}) berhasil ditambahkan.` });
        if (managedPackages.length + 1 === dailyInput.totalPackages) {
         setIsScanning(false); 
       }
@@ -184,16 +189,17 @@ export default function DashboardPage() {
     }
   };
   
-  const handleSimulateScan = () => { // This function now simulates taking a picture for barcode scanning
-    const photoDataUrl = capturePhoto(); // Capture photo
+  const handleSimulateScan = () => { 
+    const photoDataUrl = capturePhoto(); 
     if (photoDataUrl) {
-        // In a real app, you'd send this photoDataUrl to a barcode scanning service/library
-        // For simulation, we generate a dummy resi
         const dummyResi = `SPX${Date.now().toString().slice(-8)}`;
         if (dailyInput && managedPackages.length < dailyInput.totalPackages) {
-          const isCOD = managedPackages.filter(p => p.isCOD).length < dailyInput.codPackages;
+          // For simulated scan, isCOD is determined by remaining COD quota
+          const currentCODPackages = managedPackages.filter(p => p.isCOD).length;
+          const isCOD = currentCODPackages < dailyInput.codPackages;
+          
           setManagedPackages(prev => [...prev, { id: dummyResi, status: 'process', isCOD, lastUpdateTime: new Date().toISOString() }]);
-          toast({ title: "Resi Ter-scan (Simulasi)", description: `${dummyResi} berhasil ditambahkan setelah mengambil foto.` });
+          toast({ title: "Resi Ter-scan (Simulasi)", description: `${dummyResi} (${isCOD ? "COD" : "Non-COD"}) berhasil ditambahkan.` });
           if (managedPackages.length + 1 === dailyInput.totalPackages) {
             setIsScanning(false);
           }
@@ -223,21 +229,29 @@ export default function DashboardPage() {
 
   const handleOpenPackageCamera = (packageId: string) => {
     setCapturingForPackageId(packageId);
+    setPhotoRecipientName(''); // Clear recipient name for new photo
   };
 
   const handleCapturePackagePhoto = () => {
     if (!capturingForPackageId) return;
+
+    if (!photoRecipientName.trim()) {
+      toast({ title: "Nama Penerima Kosong", description: "Harap isi nama penerima paket.", variant: "destructive" });
+      return;
+    }
+
     const photoDataUrl = capturePhoto();
     if (photoDataUrl) {
       setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: photoDataUrl }));
       setInTransitPackages(prev => prev.map(p => 
-        p.id === capturingForPackageId ? { ...p, deliveryProofPhotoUrl: photoDataUrl, status: 'delivered', recipientName: `Penerima ${p.id.slice(-4)}` } : p
+        p.id === capturingForPackageId ? { ...p, deliveryProofPhotoUrl: photoDataUrl, status: 'delivered', recipientName: photoRecipientName.trim() } : p
       ));
-      toast({ title: "Foto Bukti Terkirim", description: `Foto untuk paket ${capturingForPackageId} disimpan.` });
+      toast({ title: "Foto Bukti Terkirim", description: `Foto untuk paket ${capturingForPackageId} disimpan. Penerima: ${photoRecipientName.trim()}.` });
     } else {
       toast({ title: "Gagal Mengambil Foto", variant: "destructive" });
     }
     setCapturingForPackageId(null);
+    setPhotoRecipientName(''); // Clear after capture attempt
   };
   
   const handleDeletePackagePhoto = (packageId: string) => {
@@ -254,16 +268,24 @@ export default function DashboardPage() {
 
   const handleFinishDay = () => {
     const remainingInTransit = inTransitPackages.filter(p => p.status === 'in_transit');
-    if (remainingInTransit.length > 0 && !returnProofPhoto) {
-      toast({ title: "Upload Bukti Paket Pending", description: "Harap upload foto bukti pengembalian paket yang tidak terkirim.", variant: "destructive" });
-      setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return' })));
-      return;
+    
+    if (remainingInTransit.length > 0) {
+      if (!returnProofPhoto) {
+        toast({ title: "Upload Bukti Paket Pending", description: "Harap upload foto bukti pengembalian paket yang tidak terkirim.", variant: "destructive" });
+        setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return' })));
+        return;
+      }
+      if (!returnLeadReceiverName.trim()) {
+        toast({ title: "Nama Leader Serah Terima Kosong", description: "Harap isi nama leader yang menerima paket retur.", variant: "destructive" });
+        setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return' })));
+        return;
+      }
     }
     
-    setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', returnProofPhotoUrl: returnProofPhoto ? URL.createObjectURL(returnProofPhoto) : undefined })));
+    setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', returnProofPhotoUrl: returnProofPhoto ? URL.createObjectURL(returnProofPhoto) : undefined, returnLeadReceiverName: returnLeadReceiverName.trim() })));
     setInTransitPackages(prev => prev.filter(p => p.status === 'delivered'));
     setDayFinished(true);
-    toast({ title: "Pengantaran Selesai", description: "Terima kasih untuk kerja keras hari ini!" });
+    toast({ title: "Pengantaran Selesai", description: `Terima kasih untuk kerja keras hari ini! Paket retur diserahkan kepada ${returnLeadReceiverName.trim() || 'N/A'}.` });
   };
 
   const handleReturnProofUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -282,9 +304,10 @@ export default function DashboardPage() {
     setDeliveryStarted(false);
     setDayFinished(false);
     setReturnProofPhoto(null);
+    setReturnLeadReceiverName('');
     setPackagePhotoMap({});
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
-    localStorage.removeItem('courierCheckedInToday'); // Reset status check-in untuk hari berikutnya
+    localStorage.removeItem('courierCheckedInToday'); 
     setIsCourierCheckedIn(false);
     toast({ title: "Hari Baru Dimulai", description: "Semua data telah direset. Selamat bekerja!" });
   };
@@ -299,24 +322,27 @@ export default function DashboardPage() {
   ];
 
   if (isCourierCheckedIn === null) {
-    return <div className="flex justify-center items-center h-screen"><p>Memeriksa status absensi...</p></div>; // Loading state
+    return <div className="flex justify-center items-center h-screen"><p>Memeriksa status absensi...</p></div>;
   }
 
   if (dayFinished) {
     return (
       <div className="space-y-6">
-        <Card>
+        <Card className="shadow-xl">
           <CardHeader>
             <CardTitle className="text-2xl text-primary">Laporan Performa Harian</CardTitle>
             <CardDescription>Ringkasan pengantaran paket hari ini.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-              <div className="space-y-1">
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              <div className="space-y-2">
                 <p>Total Paket Dibawa: <strong>{dailyInput?.totalPackages || 0}</strong></p>
                 <p>Total Paket Terkirim: <strong className="text-green-500 dark:text-green-400">{deliveredCount}</strong></p>
                 <p>Total Paket Pending/Retur: <strong className="text-red-500 dark:text-red-400">{pendingCount}</strong></p>
                 <p>Tingkat Keberhasilan: <strong className="text-primary">{((deliveredCount / dailyTotalForChart) * 100).toFixed(1)}%</strong></p>
+                {pendingReturnPackages.length > 0 && (
+                    <p>Diserahkan ke Leader: <strong>{pendingReturnPackages[0]?.returnLeadReceiverName || 'N/A'}</strong></p>
+                )}
               </div>
               <div className="h-60">
                 <ResponsiveContainer width="100%" height="100%">
@@ -338,24 +364,23 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-            {pendingReturnPackages.length > 0 && (
+            {pendingReturnPackages.length > 0 && returnProofPhoto && (
               <div className="mt-6">
                 <h3 className="font-semibold text-lg mb-2">Bukti Paket Retur:</h3>
-                {returnProofPhoto ? (
-                  <img 
-                    src={URL.createObjectURL(returnProofPhoto)} 
-                    alt="Bukti Retur" 
-                    className="max-w-sm w-full md:max-w-xs rounded-lg shadow-md border border-border" 
-                    data-ai-hint="package receipt"
-                  />
-                ) : (
-                  <p className="text-muted-foreground">Tidak ada foto bukti retur yang diupload.</p>
-                )}
+                <img 
+                  src={URL.createObjectURL(returnProofPhoto)} 
+                  alt="Bukti Retur" 
+                  className="max-w-sm w-full md:max-w-xs rounded-lg shadow-md border border-border" 
+                  data-ai-hint="package receipt"
+                />
               </div>
             )}
+             {pendingReturnPackages.length > 0 && !returnProofPhoto && (
+                <p className="text-muted-foreground text-center">Tidak ada foto bukti retur yang diupload untuk paket pending.</p>
+            )}
           </CardContent>
-          <CardFooter className="flex flex-col items-center space-y-4 pt-6">
-             <p className="text-lg italic text-muted-foreground text-center">{motivationalQuote}</p>
+          <CardFooter className="flex flex-col items-center space-y-4 pt-6 border-t mt-6">
+             <p className="text-lg italic text-muted-foreground text-center px-4">{motivationalQuote}</p>
             <Button onClick={resetDay} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto">
               Mulai Hari Baru
             </Button>
@@ -391,7 +416,6 @@ export default function DashboardPage() {
         </Alert>
       )}
 
-      {/* Data Input Paket Harian */}
       {!dailyInput && isCourierCheckedIn && (
         <Card>
           <CardHeader>
@@ -399,7 +423,7 @@ export default function DashboardPage() {
             <CardDescription>Masukkan jumlah total paket yang akan dibawa hari ini.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit(handlePackageInputSubmit)} className="space-y-4">
+            <form onSubmit={handlePackageFormSubmit(handleDailyPackageInputSubmit)} className="space-y-4">
               <div>
                 <Label htmlFor="totalPackages">Total Paket Dibawa</Label>
                 <Input id="totalPackages" type="number" {...register("totalPackages")} placeholder="cth: 50" />
@@ -437,16 +461,31 @@ export default function DashboardPage() {
                     <Camera className="mr-2 h-4 w-4" /> Mulai Scan Barcode
                 </Button>
             </div>
-            <div className="flex items-center gap-2">
-                <Input 
-                    type="text" 
-                    placeholder="Input manual nomor resi" 
-                    value={currentScannedResi}
-                    onChange={(e) => setCurrentScannedResi(e.target.value)}
-                    disabled={managedPackages.length >= dailyInput.totalPackages}
-                />
-                <Button onClick={handleManualResiAdd} variant="outline" disabled={managedPackages.length >= dailyInput.totalPackages}>Tambah</Button>
+            <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <Input 
+                        type="text" 
+                        placeholder="Input manual nomor resi" 
+                        value={currentScannedResi}
+                        onChange={(e) => setCurrentScannedResi(e.target.value)}
+                        disabled={managedPackages.length >= dailyInput.totalPackages}
+                        className="flex-grow"
+                    />
+                    <Button onClick={handleManualResiAdd} variant="outline" disabled={managedPackages.length >= dailyInput.totalPackages}>Tambah</Button>
+                </div>
+                <div className="flex items-center space-x-2 pt-1">
+                    <Checkbox
+                        id="isManualCOD"
+                        checked={isManualCOD}
+                        onCheckedChange={(checked) => setIsManualCOD(checked as boolean)}
+                        disabled={managedPackages.length >= dailyInput.totalPackages}
+                    />
+                    <Label htmlFor="isManualCOD" className="text-sm font-normal text-muted-foreground">
+                        Paket COD
+                    </Label>
+                </div>
             </div>
+
 
             {isScanning && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
@@ -489,7 +528,7 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-            <Progress value={(managedPackages.length / dailyInput.totalPackages) * 100} className="w-full" />
+            <Progress value={(managedPackages.length / dailyInput.totalPackages) * 100} className="w-full h-2.5" />
           </CardContent>
           <CardFooter>
             <Button onClick={handleStartDelivery} className="w-full" disabled={managedPackages.length !== dailyInput.totalPackages}>
@@ -519,22 +558,14 @@ export default function DashboardPage() {
                 </div>
                 {pkg.status === 'in_transit' && (
                   <div className="flex items-center gap-2 mt-2">
-                     <Input 
-                        type="text" 
-                        placeholder="Nama Penerima" 
-                        className="text-xs h-8" 
-                        onChange={(e) => {
-                            // In a real app, update state carefully
-                        }}
-                    />
-                    <Button variant="outline" size="sm" onClick={() => handleOpenPackageCamera(pkg.id)}>
-                      <Camera size={16} className="mr-1" /> Foto Bukti
+                    <Button variant="outline" size="sm" onClick={() => handleOpenPackageCamera(pkg.id)} className="flex-1">
+                      <Camera size={16} className="mr-1" /> Foto Bukti & Nama Penerima
                     </Button>
                   </div>
                 )}
                 {pkg.deliveryProofPhotoUrl && (
                   <div className="mt-2">
-                    <p className="text-xs text-muted-foreground mb-1">Penerima: {pkg.recipientName || 'N/A'}</p>
+                    <p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p>
                     <div className="flex items-end gap-2">
                         <img src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" data-ai-hint="package at door"/>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}>
@@ -551,8 +582,9 @@ export default function DashboardPage() {
                 <Card className="w-full max-w-lg">
                   <CardHeader>
                     <CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle>
+                    <CardDescription>Ambil foto dan masukkan nama penerima.</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-4">
                     <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
                     <canvas ref={photoCanvasRef} style={{display: 'none'}} />
                      {hasCameraPermission === false && (
@@ -560,11 +592,21 @@ export default function DashboardPage() {
                         <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
                       </Alert>
                     )}
+                     <div>
+                        <Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label>
+                        <Input 
+                            id="photoRecipientName" 
+                            type="text" 
+                            placeholder="Masukkan nama penerima" 
+                            value={photoRecipientName}
+                            onChange={(e) => setPhotoRecipientName(e.target.value)}
+                        />
+                    </div>
                   </CardContent>
                   <CardFooter className="flex justify-between">
                     <Button variant="outline" onClick={() => setCapturingForPackageId(null)}>Batal</Button>
-                    <Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission}>
-                        <Camera className="mr-2 h-4 w-4" /> Ambil & Simpan Foto
+                    <Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim()}>
+                        <Camera className="mr-2 h-4 w-4" /> Ambil & Simpan
                     </Button>
                   </CardFooter>
                 </Card>
@@ -584,20 +626,31 @@ export default function DashboardPage() {
             <CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle>
             <CardDescription>{pendingReturnPackages.length} paket belum terkirim dan perlu di-retur.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-4">
             <div>
-                <Label htmlFor="returnProof" className="mb-2 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang</Label>
+                <Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label>
                 <Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />
                 {returnProofPhoto && <p className="text-xs text-green-500 dark:text-green-400 mt-1">{returnProofPhoto.name} dipilih.</p>}
             </div>
+            <div>
+                <Label htmlFor="returnLeadReceiverName">Nama Leader Serah Terima <span className="text-destructive">*</span></Label>
+                <Input 
+                    id="returnLeadReceiverName" 
+                    type="text" 
+                    placeholder="Nama Leader/Supervisor" 
+                    value={returnLeadReceiverName}
+                    onChange={(e) => setReturnLeadReceiverName(e.target.value)}
+                />
+            </div>
             <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
+                <h4 className="text-sm font-medium text-muted-foreground">Daftar Resi Pending:</h4>
                 {pendingReturnPackages.map(pkg => (
                     <p key={pkg.id} className="text-sm text-muted-foreground">{pkg.id} - <span className="italic">Pending Retur</span></p>
                 ))}
             </div>
           </CardContent>
            <CardFooter>
-             <Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={!returnProofPhoto}>
+             <Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={!returnProofPhoto || !returnLeadReceiverName.trim()}>
                 Konfirmasi Selesai dengan Paket Pending
              </Button>
            </CardFooter>
@@ -615,5 +668,6 @@ export default function DashboardPage() {
     </div>
   );
 }
+    
 
     
