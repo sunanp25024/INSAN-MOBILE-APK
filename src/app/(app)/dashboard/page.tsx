@@ -350,9 +350,28 @@ export default function DashboardPage() {
        return;
     }
   
+    // Simulate resi not found (20% chance if there are packages to scan)
+    if (inTransitPackages.some(p => p.status === 'in_transit') && Math.random() < 0.2) {
+      toast({
+        variant: 'destructive',
+        title: "Resi Tidak Ditemukan (Simulasi)",
+        description: "Nomor resi yang di-scan tidak cocok dengan daftar paket yang sedang diantar.",
+      });
+      setIsScanningForDeliveryUpdate(false); // Close scan modal
+      return;
+    }
+
     const packageToUpdate = inTransitPackages.find(p => p.status === 'in_transit');
   
     if (packageToUpdate) {
+      const nowISO = new Date().toISOString();
+      setInTransitPackages(prevPackages =>
+        prevPackages.map(pkg =>
+          pkg.id === packageToUpdate.id
+            ? { ...pkg, lastUpdateTime: nowISO }
+            : pkg
+        )
+      );
       toast({ title: "Paket Teridentifikasi (Simulasi)", description: `Mempersiapkan update untuk ${packageToUpdate.id}...` });
       handleOpenPackageCamera(packageToUpdate.id); 
       setIsScanningForDeliveryUpdate(false); 
@@ -540,7 +559,7 @@ export default function DashboardPage() {
 
             {isScanning && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <Card className="w-full max-w-lg">
+                <Card className="w-full max-w-xl">
                   <CardHeader>
                     <CardTitle>Scan Barcode Paket</CardTitle>
                     <CardDescription>Arahkan kamera ke barcode paket.</CardDescription>
@@ -613,10 +632,7 @@ export default function DashboardPage() {
                 .sort((a, b) => {
                   if (a.status === 'delivered' && b.status !== 'delivered') return -1;
                   if (a.status !== 'delivered' && b.status === 'delivered') return 1;
-                  if (a.status === 'delivered' && b.status === 'delivered') {
-                      return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime();
-                  }
-                  return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime(); // Default sort by time for in_transit as well
+                  return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime();
                 })
                 .map(pkg => (
               <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
@@ -651,7 +667,7 @@ export default function DashboardPage() {
           </CardContent>
            {capturingForPackageId && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <Card className="w-full max-w-lg">
+                <Card className="w-full max-w-xl">
                   <CardHeader>
                     <CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle>
                     <CardDescription>Ambil foto dan masukkan nama penerima.</CardDescription>
@@ -686,7 +702,7 @@ export default function DashboardPage() {
             )}
             {isScanningForDeliveryUpdate && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <Card className="w-full max-w-lg">
+                <Card className="w-full max-w-xl">
                   <CardHeader>
                     <CardTitle>Scan Resi Paket untuk Update Pengiriman</CardTitle>
                     <CardDescription>Arahkan kamera ke barcode paket yang akan diupdate. (Simulasi)</CardDescription>
