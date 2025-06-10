@@ -2,107 +2,103 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: 'Alegreya', serif;
-}
-
 @layer base {
   :root {
-    /* Calmer, Softer Light Theme - Mitra Kurir SPX */
-    --background: 210 60% 98%; /* Very Light Cool Gray */
-    --foreground: 210 20% 25%; /* Soft Dark Blue/Gray for text */
+    /* Simple & Elegant Light Theme */
+    --background: 210 40% 98%; /* Very light, cool gray */
+    --foreground: 210 25% 30%; /* Soft, dark slate blue for text */
 
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 210 20% 25%; /* Soft Dark Blue/Gray for card text */
+    --card: 0 0% 100%; /* Clean white */
+    --card-foreground: 210 25% 30%; /* Soft, dark slate blue for card text */
 
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 210 20% 25%; /* Soft Dark Blue/Gray for popover text */
+    --popover: 0 0% 100%; /* Clean white */
+    --popover-foreground: 210 25% 30%; /* Soft, dark slate blue for popover text */
 
-    --primary: 200 50% 50%; /* Muted Blue */
-    --primary-foreground: 200 50% 95%; /* Very Light Blue/White for text on primary */
+    --primary: 200 60% 50%; /* Clear, medium blue */
+    --primary-foreground: 0 0% 100%; /* White text on primary */
 
-    --secondary: 210 30% 90%; /* Light Muted Blue/Gray */
-    --secondary-foreground: 210 30% 40%; /* Darker text for secondary */
+    --secondary: 210 30% 94%; /* Light cool gray */
+    --secondary-foreground: 210 25% 45%; /* Darker text for secondary */
 
-    --muted: 210 40% 95%; /* Very Light Cool Gray */
-    --muted-foreground: 210 30% 55%; /* Medium Muted Text */
+    --muted: 210 30% 96%; /* Very light cool gray */
+    --muted-foreground: 210 25% 55%; /* Medium muted text */
 
-    --accent: 180 40% 60%; /* Soft Teal/Aqua */
-    --accent-foreground: 180 40% 15%; /* Dark text for accent */
+    --accent: 180 50% 45%; /* Muted teal */
+    --accent-foreground: 0 0% 100%; /* White text on accent */
 
-    --destructive: 0 60% 60%; /* Softer Red */
+    --destructive: 0 70% 55%; /* Softer Red */
     --destructive-foreground: 0 0% 100%; /* White */
 
-    --border: 210 30% 88%; /* Light Gray Border */
-    --input: 210 30% 94%; /* Very Light Gray Input Background */
-    --ring: 200 50% 55%; /* Muted Blue for Focus Rings */
+    --border: 210 20% 88%; /* Subtle cool gray Border */
+    --input: 210 20% 96%; /* Very light cool gray Input Background */
+    --ring: 200 60% 55%; /* Primary blue for Focus Rings */
 
     --radius: 0.5rem;
 
-    /* Chart colors - Softer Tones */
+    /* Chart colors - Kept distinct for clarity */
     --chart-1: 200 55% 60%; /* Muted Blue */
     --chart-2: 170 40% 55%;  /* Soft Teal/Green */
     --chart-3: 30 60% 65%; /* Soft Orange */
     --chart-4: 260 45% 70%; /* Soft Purple */
     --chart-5: 0 50% 65%;   /* Softer Red */
 
-    /* Sidebar colors - Calmer Light Sidebar */
-    --sidebar-background: 210 50% 96%; /* Slightly off-white cool gray */
-    --sidebar-foreground: 210 20% 30%; /* Darker, soft blue/gray text */
-    --sidebar-primary: 200 50% 50%; /* Muted Blue (same as primary) */
-    --sidebar-primary-foreground: 200 50% 95%; /* Very Light Blue/White */
-    --sidebar-accent: 210 30% 92%; /* Lighter accent for hover */
-    --sidebar-accent-foreground: 200 50% 30%; /* Darker blue for accent text */
-    --sidebar-border: 210 30% 85%; /* Softer border */
-    --sidebar-ring: 200 50% 55%; /* Muted Blue (same as ring) */
+    /* Sidebar colors - Elegant Light Sidebar */
+    --sidebar-background: 210 35% 95%; /* Slightly darker than main background */
+    --sidebar-foreground: 210 25% 25%; /* Darker text */
+    --sidebar-primary: 200 60% 50%; /* Same as main primary */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 200 60% 90%; /* Lighter version of primary for hover */
+    --sidebar-accent-foreground: 200 60% 30%; /* Darker blue for accent text */
+    --sidebar-border: 210 20% 85%; /* Softer border */
+    --sidebar-ring: 200 60% 55%; /* Same as main ring */
   }
 
   .dark {
-    /* Dark, Elegant Theme - Mitra Kurir SPX (Kept for potential toggle) */
-    --background: 224 71% 4%;
-    --foreground: 210 40% 98%;
+    /* Simple & Elegant Dark Theme */
+    --background: 220 20% 12%; /* Very dark, cool slate */
+    --foreground: 210 20% 88%; /* Light gray text */
 
-    --card: 224 71% 9%;
-    --card-foreground: 210 40% 96%;
+    --card: 220 20% 16%; /* Slightly lighter slate for cards */
+    --card-foreground: 210 20% 88%; /* Light gray text */
 
-    --popover: 224 71% 6%;
-    --popover-foreground: 210 40% 96%;
+    --popover: 220 20% 10%; /* Darker slate for popovers */
+    --popover-foreground: 210 20% 88%;
 
-    --primary: 45 100% 50%;
-    --primary-foreground: 30 30% 10%;
+    --primary: 40 80% 60%; /* Muted, elegant gold/amber */
+    --primary-foreground: 40 50% 10%; /* Very dark text on primary */
 
-    --secondary: 210 30% 30%;
-    --secondary-foreground: 210 30% 90%;
+    --secondary: 220 15% 25%; /* Dark gray */
+    --secondary-foreground: 210 15% 75%; /* Lighter gray text for secondary */
 
-    --muted: 215 28% 17%;
-    --muted-foreground: 210 40% 70%;
+    --muted: 220 15% 20%; /* Darker muted gray */
+    --muted-foreground: 210 15% 60%; /* Medium muted text */
 
-    --accent: 50 90% 55%;
-    --accent-foreground: 45 90% 5%;
+    --accent: 190 60% 50%; /* Muted teal/cyan */
+    --accent-foreground: 190 50% 95%; /* Very light text on accent */
 
-    --destructive: 0 70% 50%;
+    --destructive: 0 60% 50%; /* Clear Red */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 215 28% 20%;
-    --input: 215 28% 12%;
-    --ring: 45 100% 55%;
+    --border: 220 15% 30%; /* Subtle dark border */
+    --input: 220 15% 18%; /* Dark input background */
+    --ring: 40 80% 65%; /* Primary gold for Focus Rings */
 
-    /* Chart colors */
-    --chart-1: 210 90% 50%;
-    --chart-2: 45 90% 50%;
-    --chart-3: 160 60% 45%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 0 70% 60%;
+    /* Chart colors - Kept same as light, should contrast well */
+    --chart-1: 200 55% 60%;
+    --chart-2: 170 40% 55%;
+    --chart-3: 30 60% 65%;
+    --chart-4: 260 45% 70%;
+    --chart-5: 0 50% 65%;
 
-    /* Sidebar colors */
-    --sidebar-background: 224 71% 7%;
-    --sidebar-foreground: 210 40% 85%;
-    --sidebar-primary: 45 100% 50%;
-    --sidebar-primary-foreground: 30 30% 10%;
-    --sidebar-accent: 215 28% 22%;
-    --sidebar-accent-foreground: 210 40% 95%;
-    --sidebar-border: 215 28% 15%;
-    --sidebar-ring: 45 100% 55%;
+    /* Sidebar colors - Elegant Dark Sidebar */
+    --sidebar-background: 220 20% 14%; /* Consistent with card bg */
+    --sidebar-foreground: 210 20% 80%;
+    --sidebar-primary: 40 80% 60%; /* Same as main primary (gold) */
+    --sidebar-primary-foreground: 40 50% 10%;
+    --sidebar-accent: 220 15% 30%; /* Darker accent for hover */
+    --sidebar-accent-foreground: 40 80% 70%; /* Lighter gold for text */
+    --sidebar-border: 220 15% 25%;
+    --sidebar-ring: 40 80% 65%;
   }
 }
 
@@ -112,5 +108,6 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+     /* font-family 'Inter' is applied via tailwind.config.ts and src/app/layout.tsx */
   }
 }
