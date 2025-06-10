@@ -1,3 +1,4 @@
+
 "use client";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -7,13 +8,14 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIcon } from 'lucide-react';
+import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIcon, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { DailyPackageInput, PackageItem, CourierProfile } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import Link from 'next/link';
 
 // Mock data (replace with actual data fetching)
 const mockCourier: CourierProfile = {
@@ -36,7 +38,7 @@ const packageInputSchema = z.object({
   nonCodPackages: z.coerce.number().min(0).max(200),
 }).refine(data => data.codPackages + data.nonCodPackages === data.totalPackages, {
   message: "Jumlah paket COD dan Non-COD harus sama dengan Total Paket",
-  path: ["totalPackages"], // or path: ["codPackages"] or path: ["nonCodPackages"]
+  path: ["totalPackages"],
 });
 
 
@@ -55,7 +57,7 @@ export default function DashboardPage() {
   const [pendingReturnPackages, setPendingReturnPackages] = useState<PackageItem[]>([]);
   
   const [currentScannedResi, setCurrentScannedResi] = useState('');
-  const [isScanning, setIsScanning] = useState(false); // For camera modal state
+  const [isScanning, setIsScanning] = useState(false);
   const [deliveryStarted, setDeliveryStarted] = useState(false);
   const [dayFinished, setDayFinished] = useState(false);
   
@@ -65,8 +67,9 @@ export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const photoCanvasRef = useRef<HTMLCanvasElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
-  const [packagePhotoMap, setPackagePhotoMap] = useState<Record<string, string>>({}); // { packageId: dataUrl }
+  const [packagePhotoMap, setPackagePhotoMap] = useState<Record<string, string>>({});
   const [capturingForPackageId, setCapturingForPackageId] = useState<string | null>(null);
+  const [isCourierCheckedIn, setIsCourierCheckedIn] = useState<boolean | null>(null);
 
 
   const { toast } = useToast();
@@ -75,9 +78,12 @@ export default function DashboardPage() {
     resolver: zodResolver(packageInputSchema),
     defaultValues: { totalPackages: 0, codPackages: 0, nonCodPackages: 0 }
   });
-  const totalPackagesWatch = watch("totalPackages");
-  const codPackagesWatch = watch("codPackages");
-  const nonCodPackagesWatch = watch("nonCodPackages");
+
+  useEffect(() => {
+    const checkedInDate = localStorage.getItem('courierCheckedInToday');
+    const today = new Date().toISOString().split('T')[0];
+    setIsCourierCheckedIn(checkedInDate === today);
+  }, []);
 
   useEffect(() => {
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
@@ -85,27 +91,38 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (isScanning || capturingForPackageId) {
-      const getCameraPermission = async () => {
+      const getCameraStream = async () => {
+        let stream;
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          setHasCameraPermission(true);
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
+          // Prefer rear camera
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } });
+        } catch (err) {
+          console.warn("Rear camera not accessible, trying default camera:", err);
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          } catch (error) {
+            console.error('Error accessing any camera:', error);
+            setHasCameraPermission(false);
+            toast({
+              variant: 'destructive',
+              title: 'Akses Kamera Gagal',
+              description: 'Tidak dapat mengakses kamera. Mohon periksa izin kamera di browser Anda.',
+            });
+            setIsScanning(false);
+            setCapturingForPackageId(null);
+            return; 
           }
-        } catch (error) {
-          console.error('Error accessing camera:', error);
-          setHasCameraPermission(false);
-          toast({
-            variant: 'destructive',
-            title: 'Akses Kamera Ditolak',
-            description: 'Mohon izinkan akses kamera di pengaturan browser Anda.',
-          });
-          setIsScanning(false);
-          setCapturingForPackageId(null);
+        }
+
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
         }
       };
-      getCameraPermission();
-      return () => { // Cleanup: stop camera stream when component unmounts or modal closes
+
+      getCameraStream();
+      
+      return () => {
         if (videoRef.current && videoRef.current.srcObject) {
           const stream = videoRef.current.srcObject as MediaStream;
           stream.getTracks().forEach(track => track.stop());
@@ -155,35 +172,36 @@ export default function DashboardPage() {
       return;
     }
     if (dailyInput && managedPackages.length < dailyInput.totalPackages) {
-      const isCOD = managedPackages.filter(p => p.isCOD).length < dailyInput.codPackages; // Simplistic COD assignment
+      const isCOD = managedPackages.filter(p => p.isCOD).length < dailyInput.codPackages;
       setManagedPackages(prev => [...prev, { id: currentScannedResi.trim(), status: 'process', isCOD, lastUpdateTime: new Date().toISOString() }]);
       setCurrentScannedResi('');
       toast({ title: "Resi Ditambahkan", description: `${currentScannedResi} berhasil ditambahkan.` });
        if (managedPackages.length + 1 === dailyInput.totalPackages) {
-        setIsScanning(false); // Auto-close if limit reached
+        setIsScanning(false); 
       }
     } else if (dailyInput) {
         toast({ title: "Batas Paket Tercapai", description: "Jumlah paket yang di-scan sudah sesuai total.", variant: "destructive" });
     }
   };
   
-  const handleSimulateScan = () => {
-    const photoDataUrl = capturePhoto();
+  const handleSimulateScan = () => { // This function now simulates taking a picture for barcode scanning
+    const photoDataUrl = capturePhoto(); // Capture photo
     if (photoDataUrl) {
-        // Simulate barcode scanning from the captured image. For now, use a dummy resi.
+        // In a real app, you'd send this photoDataUrl to a barcode scanning service/library
+        // For simulation, we generate a dummy resi
         const dummyResi = `SPX${Date.now().toString().slice(-8)}`;
         if (dailyInput && managedPackages.length < dailyInput.totalPackages) {
           const isCOD = managedPackages.filter(p => p.isCOD).length < dailyInput.codPackages;
           setManagedPackages(prev => [...prev, { id: dummyResi, status: 'process', isCOD, lastUpdateTime: new Date().toISOString() }]);
-          toast({ title: "Resi Ter-scan (Simulasi)", description: `${dummyResi} berhasil ditambahkan.` });
+          toast({ title: "Resi Ter-scan (Simulasi)", description: `${dummyResi} berhasil ditambahkan setelah mengambil foto.` });
           if (managedPackages.length + 1 === dailyInput.totalPackages) {
-            setIsScanning(false); // Auto-close if limit reached
+            setIsScanning(false);
           }
         } else if (dailyInput) {
             toast({ title: "Batas Paket Tercapai", description: "Jumlah paket yang di-scan sudah sesuai total.", variant: "destructive" });
         }
     } else {
-        toast({ title: "Gagal Mengambil Gambar", description: "Tidak bisa mengambil gambar dari kamera.", variant: "destructive" });
+        toast({ title: "Gagal Mengambil Gambar", description: "Tidak bisa mengambil gambar dari kamera. Pastikan kamera berfungsi.", variant: "destructive" });
     }
   };
 
@@ -212,7 +230,6 @@ export default function DashboardPage() {
     const photoDataUrl = capturePhoto();
     if (photoDataUrl) {
       setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: photoDataUrl }));
-      // Update package status to delivered in a real app
       setInTransitPackages(prev => prev.map(p => 
         p.id === capturingForPackageId ? { ...p, deliveryProofPhotoUrl: photoDataUrl, status: 'delivered', recipientName: `Penerima ${p.id.slice(-4)}` } : p
       ));
@@ -220,7 +237,7 @@ export default function DashboardPage() {
     } else {
       toast({ title: "Gagal Mengambil Foto", variant: "destructive" });
     }
-    setCapturingForPackageId(null); // Close camera modal
+    setCapturingForPackageId(null);
   };
   
   const handleDeletePackagePhoto = (packageId: string) => {
@@ -244,10 +261,9 @@ export default function DashboardPage() {
     }
     
     setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', returnProofPhotoUrl: returnProofPhoto ? URL.createObjectURL(returnProofPhoto) : undefined })));
-    setInTransitPackages(prev => prev.filter(p => p.status === 'delivered')); // Keep only delivered
+    setInTransitPackages(prev => prev.filter(p => p.status === 'delivered'));
     setDayFinished(true);
     toast({ title: "Pengantaran Selesai", description: "Terima kasih untuk kerja keras hari ini!" });
-    // Here you would typically send data to backend
   };
 
   const handleReturnProofUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -268,17 +284,23 @@ export default function DashboardPage() {
     setReturnProofPhoto(null);
     setPackagePhotoMap({});
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
+    localStorage.removeItem('courierCheckedInToday'); // Reset status check-in untuk hari berikutnya
+    setIsCourierCheckedIn(false);
     toast({ title: "Hari Baru Dimulai", description: "Semua data telah direset. Selamat bekerja!" });
   };
 
-  const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length + pendingReturnPackages.filter(p => p.status === 'returned').length; // Assuming returned implies it was processed
+  const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length + pendingReturnPackages.filter(p => p.status === 'returned').length; 
   const pendingCount = pendingReturnPackages.filter(p => p.status === 'pending_return').length;
-  const dailyTotalForChart = (dailyInput?.totalPackages || 0) === 0 ? 1 : (dailyInput?.totalPackages || 0); // Avoid division by zero
+  const dailyTotalForChart = (dailyInput?.totalPackages || 0) === 0 ? 1 : (dailyInput?.totalPackages || 0); 
   
   const performanceData = [
     { name: 'Terkirim', value: deliveredCount, color: 'hsl(var(--chart-1))' },
     { name: 'Pending', value: pendingCount, color: 'hsl(var(--chart-2))' },
   ];
+
+  if (isCourierCheckedIn === null) {
+    return <div className="flex justify-center items-center h-screen"><p>Memeriksa status absensi...</p></div>; // Loading state
+  }
 
   if (dayFinished) {
     return (
@@ -333,7 +355,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Profile Mitra & Lokasi Kerja */}
       <Card className="shadow-lg">
         <CardHeader className="flex flex-row items-center space-x-4">
           <Avatar className="h-16 w-16">
@@ -347,8 +368,18 @@ export default function DashboardPage() {
         </CardHeader>
       </Card>
 
+      {!isCourierCheckedIn && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Anda Belum Melakukan Absen!</AlertTitle>
+          <AlertDescription>
+            Silakan lakukan <Link href="/attendance" className="font-bold underline hover:text-destructive-foreground">Check-In</Link> terlebih dahulu untuk memulai pekerjaan dan menginput data paket.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Data Input Paket Harian */}
-      {!dailyInput && (
+      {!dailyInput && isCourierCheckedIn && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center"><PackagePlus className="mr-2 h-6 w-6 text-primary" /> Data Input Paket Harian</CardTitle>
@@ -380,9 +411,8 @@ export default function DashboardPage() {
         </Card>
       )}
       
-      {dailyInput && !deliveryStarted && (
+      {dailyInput && !deliveryStarted && isCourierCheckedIn && (
         <>
-        {/* Scan & Manage Package */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center"><ScanLine className="mr-2 h-6 w-6 text-primary" /> Scan & Kelola Paket</CardTitle>
@@ -415,7 +445,7 @@ export default function DashboardPage() {
                   <CardContent>
                     <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
                     <canvas ref={photoCanvasRef} style={{display: 'none'}} />
-                    {!hasCameraPermission && hasCameraPermission !== null && (
+                    {hasCameraPermission === false && (
                       <Alert variant="destructive" className="mt-2">
                         <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
                         <AlertDescription>Mohon izinkan akses kamera.</AlertDescription>
@@ -457,8 +487,7 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* Sedang Dalam Pengantaran */}
-      {deliveryStarted && inTransitPackages.length > 0 && (
+      {deliveryStarted && inTransitPackages.length > 0 && isCourierCheckedIn && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center"><PackageCheck className="mr-2 h-6 w-6 text-green-500" /> Sedang Dalam Pengantaran</CardTitle>
@@ -483,7 +512,6 @@ export default function DashboardPage() {
                         className="text-xs h-8" 
                         onChange={(e) => {
                             // In a real app, update state carefully
-                            // For now, just a placeholder to show the field
                         }}
                     />
                     <Button variant="outline" size="sm" onClick={() => handleOpenPackageCamera(pkg.id)}>
@@ -514,7 +542,7 @@ export default function DashboardPage() {
                   <CardContent>
                     <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
                     <canvas ref={photoCanvasRef} style={{display: 'none'}} />
-                     {!hasCameraPermission && hasCameraPermission !== null && (
+                     {hasCameraPermission === false && (
                       <Alert variant="destructive" className="mt-2">
                         <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
                       </Alert>
@@ -537,8 +565,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Paket Pending / Retur */}
-      {deliveryStarted && pendingReturnPackages.length > 0 && !dayFinished && (
+      {deliveryStarted && pendingReturnPackages.length > 0 && !dayFinished && isCourierCheckedIn && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle>
@@ -564,8 +591,7 @@ export default function DashboardPage() {
         </Card>
       )}
       
-      {/* Motivasi */}
-      {!dayFinished && (
+      {!dayFinished && isCourierCheckedIn && (
           <Card className="bg-gradient-to-r from-primary/20 to-accent/20">
             <CardContent className="pt-6">
                 <p className="text-center text-lg italic text-primary-foreground/80">{motivationalQuote}</p>
@@ -576,3 +602,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    

@@ -62,6 +62,7 @@ export default function AttendancePage() {
       }
       return [...prev, newRecord];
     });
+    localStorage.setItem('courierCheckedInToday', now.toISOString().split('T')[0]); // Tandai sudah check-in
     toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Status: ${newRecord.status}.` });
   };
 
@@ -89,6 +90,7 @@ export default function AttendancePage() {
       }
       return [...prev, newRecord]; 
     });
+    // Pertimbangkan untuk menghapus 'courierCheckedInToday' jika logout atau hari berakhir
     toast({ title: "Check-Out Berhasil", description: `Anda check-out pukul ${newRecord.checkOutTime}.` });
   };
 
@@ -105,9 +107,6 @@ export default function AttendancePage() {
     const checkOutDate = new Date(dateRef.getFullYear(), dateRef.getMonth(), dateRef.getDate(), outHours, outMinutes, 0, 0);
 
     if (checkOutDate < checkInDate) {
-      // Assuming check-out on the next day is not a standard scenario for daily attendance.
-      // If it could happen, you might add 24 hours to checkOutDate.
-      // For now, treat as invalid or same-day if earlier.
       return "Durasi tidak valid (check-out sebelum check-in)";
     }
 
@@ -117,7 +116,7 @@ export default function AttendancePage() {
     diffMillis -= hours * (1000 * 60 * 60);
     const minutes = Math.floor(diffMillis / (1000 * 60));
 
-    if (hours < 0 || minutes < 0) return "Durasi tidak valid"; // Should be caught by checkOutDate < checkInDate
+    if (hours < 0 || minutes < 0) return "Durasi tidak valid";
     if (hours === 0 && minutes === 0) return "Kurang dari 1 menit";
     
     let durationString = "";
@@ -139,7 +138,7 @@ export default function AttendancePage() {
   const attendanceRate = totalDaysTracked > 0 ? (presentDays / totalDaysTracked) * 100 : 0;
   
   const last7DaysAttendance = attendanceHistory.slice(-7).map(rec => ({
-    name: format(new Date(rec.date), 'dd/MM', { locale: indonesiaLocale }),
+    name: format(new Date(rec.date), 'dd/MM EEE', { locale: indonesiaLocale }), // Tambah hari (EEE)
     Kehadiran: (rec.status === 'Present' || rec.status === 'Late') ? 1 : 0,
   }));
 
@@ -261,12 +260,12 @@ export default function AttendancePage() {
           <p className="text-sm text-muted-foreground">{presentDays} dari {totalDaysTracked} hari kerja.</p>
           
           <h4 className="font-semibold pt-4">Kehadiran 7 Hari Terakhir:</h4>
-           <div className="h-[200px] mt-2">
+           <div className="h-[250px] mt-2"> {/* Increased height for better label visibility */}
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={last7DaysAttendance} layout="vertical">
+              <BarChart data={last7DaysAttendance} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
                 <XAxis type="number" domain={[0,1]} tickCount={2} tickFormatter={(value) => value === 1 ? 'Hadir' : 'Absen'} />
-                <YAxis dataKey="name" type="category" width={60} />
+                <YAxis dataKey="name" type="category" width={80} /> {/* Increased width for Y-axis labels */}
                 <Tooltip 
                   formatter={(value, name, props) => [(props.payload.Kehadiran === 1 ? 'Hadir' : 'Absen'), 'Status']}
                   contentStyle={{
@@ -285,6 +284,5 @@ export default function AttendancePage() {
     </div>
   );
 }
-
 
     
