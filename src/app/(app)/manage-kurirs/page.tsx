@@ -2,11 +2,19 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users } from 'lucide-react';
+import { Users, FileUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function ManageKurirsPage() {
   // TODO: Fetch current user role and verify access
   // For now, assume access is granted if page is reached
+
+  const handleImportKurirs = () => {
+    // Placeholder for Excel import logic
+    alert("Fitur impor Kurir dari Excel belum diimplementasikan.");
+  };
 
   return (
     <div className="space-y-6">
@@ -38,6 +46,32 @@ export default function ManageKurirsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-xl">
+            <FileUp className="mr-2 h-5 w-5 text-primary" />
+            Impor Kurir dari Excel
+          </CardTitle>
+          <CardDescription>
+            Tambahkan beberapa akun kurir sekaligus menggunakan file Excel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="excel-file-kurir">Pilih File Excel (.xlsx)</Label>
+            <Input id="excel-file-kurir" type="file" accept=".xlsx, .xls" className="mt-1" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Format kolom yang diharapkan: ID Kurir (opsional, akan digenerate jika kosong), Nama Lengkap, Email, Password Awal, Lokasi Kerja, No Telepon, dll.
+          </p>
+          <Button onClick={handleImportKurirs} className="w-full sm:w-auto">
+            <FileUp className="mr-2 h-4 w-4" /> Impor Data Kurir
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
+
+    

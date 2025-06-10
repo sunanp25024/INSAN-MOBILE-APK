@@ -2,11 +2,19 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users } from 'lucide-react';
+import { Users, FileUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function ManageAdminsPage() {
   // TODO: Fetch current user role and verify access
   // For now, assume access is granted if page is reached
+
+  const handleImportAdmins = () => {
+    // Placeholder for Excel import logic
+    alert("Fitur impor Admin dari Excel belum diimplementasikan.");
+  };
 
   return (
     <div className="space-y-6">
@@ -36,6 +44,32 @@ export default function ManageAdminsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-xl">
+            <FileUp className="mr-2 h-5 w-5 text-primary" />
+            Impor Admin dari Excel
+          </CardTitle>
+          <CardDescription>
+            Tambahkan beberapa akun admin sekaligus menggunakan file Excel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="excel-file-admin">Pilih File Excel (.xlsx)</Label>
+            <Input id="excel-file-admin" type="file" accept=".xlsx, .xls" className="mt-1" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Format kolom yang diharapkan: ID Admin (opsional), Nama Lengkap, Email, Password Awal, dll.
+          </p>
+          <Button onClick={handleImportAdmins} className="w-full sm:w-auto">
+            <FileUp className="mr-2 h-4 w-4" /> Impor Data Admin
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
+
+    
