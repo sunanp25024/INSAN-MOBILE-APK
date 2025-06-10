@@ -16,20 +16,19 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
+  // State for Kurir profile (these will be hidden for other roles)
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Mock notification settings, replace with actual user preferences if available
+  // General settings applicable to all
   const [appUpdatesNotif, setAppUpdatesNotif] = useState(true);
   const [perfReportsNotif, setPerfReportsNotif] = useState(false);
-  
-  const [currentTheme, setCurrentTheme] = useState("dark"); // Default for SPX, or load from user preference
+  const [currentTheme, setCurrentTheme] = useState("dark");
 
   useEffect(() => {
     const userDataString = localStorage.getItem('loggedInUser');
@@ -37,20 +36,19 @@ export default function SettingsPage() {
       try {
         const parsedUser = JSON.parse(userDataString) as UserProfile;
         setCurrentUser(parsedUser);
-        setFullName(parsedUser.fullName || '');
-        setEmail(parsedUser.email || '');
-        setAvatarPreview(parsedUser.avatarUrl || null);
-        // Load theme from localStorage if available, or use a default
+        if (parsedUser.role === 'Kurir') {
+          setFullName(parsedUser.fullName || '');
+          setEmail(parsedUser.email || '');
+          setAvatarPreview(parsedUser.avatarUrl || null);
+        }
         const savedTheme = localStorage.getItem('appTheme') || 'dark';
         setCurrentTheme(savedTheme);
         document.documentElement.classList.toggle('dark', savedTheme === 'dark');
-
       } catch (error) {
         console.error("Failed to parse user data for settings", error);
       }
     }
   }, []);
-
 
   const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -62,18 +60,22 @@ export default function SettingsPage() {
 
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate API call to save profile
-    // Update localStorage if necessary
-    if (currentUser) {
+    if (currentUser && currentUser.role === 'Kurir') {
         const updatedUser = { ...currentUser, fullName, email, avatarUrl: avatarPreview || currentUser.avatarUrl };
-        localStorage.setItem('loggedInUser', JSON.stringify(updatedUser));
-        setCurrentUser(updatedUser);
+        localStorage.setItem('loggedInUser', JSON.stringify(updatedUser)); // Update local storage for immediate effect
+        setCurrentUser(updatedUser); // Update local state
+        toast({ title: "Profil Disimpan", description: "Informasi profil Anda telah diperbarui." });
+    } else {
+        toast({ title: "Tidak Diizinkan", description: "Hanya Kurir yang dapat mengubah profil.", variant: "destructive"});
     }
-    toast({ title: "Profil Disimpan", description: "Informasi profil Anda telah diperbarui." });
   };
 
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
+     if (currentUser && currentUser.role !== 'Kurir') {
+        toast({ title: "Tidak Diizinkan", description: "Hanya Kurir yang dapat mengubah password.", variant: "destructive"});
+        return;
+    }
     if (newPassword !== confirmPassword) {
       toast({ title: "Error", description: "Password baru dan konfirmasi password tidak cocok.", variant: "destructive" });
       return;
@@ -90,7 +92,6 @@ export default function SettingsPage() {
   };
 
   const handleNotificationSave = () => {
-     // Simulate saving notification preferences
      toast({ title: "Notifikasi Disimpan", description: "Pengaturan notifikasi Anda telah diperbarui." });
   };
 
@@ -104,8 +105,9 @@ export default function SettingsPage() {
   if (!currentUser) {
     return <div className="flex h-screen items-center justify-center">Loading settings...</div>;
   }
-  
-  const userInitials = fullName.split(" ").map(n => n[0]).join("").toUpperCase() || "XX";
+
+  const userInitials = (currentUser.role === 'Kurir' ? fullName : currentUser.fullName || '').split(" ").map(n => n[0]).join("").toUpperCase() || "XX";
+  const canEditProfile = currentUser.role === 'Kurir';
 
   return (
     <div className="space-y-8">
@@ -116,56 +118,60 @@ export default function SettingsPage() {
         </CardHeader>
       </Card>
 
-      {/* Profile Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center"><Upload className="mr-2 h-5 w-5 text-primary"/> Edit Profil</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleProfileSave} className="space-y-6">
-            <div className="flex flex-col items-center space-y-4">
-              <Avatar className="h-24 w-24">
-                <AvatarImage src={avatarPreview || `https://placehold.co/150x150.png?text=${userInitials}`} alt={fullName} data-ai-hint="man face"/>
-                <AvatarFallback>{userInitials}</AvatarFallback>
-              </Avatar>
-              <Input id="avatarUpload" type="file" accept="image/*" onChange={handleAvatarChange} className="text-sm max-w-xs" />
-            </div>
-            <div>
-              <Label htmlFor="fullName">Nama Lengkap</Label>
-              <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <Button type="submit" className="w-full sm:w-auto"><Save className="mr-2 h-4 w-4"/> Simpan Perubahan Profil</Button>
-          </form>
-        </CardContent>
-      </Card>
+      {canEditProfile && (
+        <>
+          {/* Profile Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center"><Upload className="mr-2 h-5 w-5 text-primary"/> Edit Profil</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleProfileSave} className="space-y-6">
+                <div className="flex flex-col items-center space-y-4">
+                  <Avatar className="h-24 w-24">
+                    <AvatarImage src={avatarPreview || `https://placehold.co/150x150.png?text=${userInitials}`} alt={fullName} data-ai-hint="man face"/>
+                    <AvatarFallback>{userInitials}</AvatarFallback>
+                  </Avatar>
+                  <Input id="avatarUpload" type="file" accept="image/*" onChange={handleAvatarChange} className="text-sm max-w-xs" />
+                </div>
+                <div>
+                  <Label htmlFor="fullName">Nama Lengkap</Label>
+                  <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                </div>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+                <Button type="submit" className="w-full sm:w-auto"><Save className="mr-2 h-4 w-4"/> Simpan Perubahan Profil</Button>
+              </form>
+            </CardContent>
+          </Card>
 
-      {/* Change Password */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center"><Lock className="mr-2 h-5 w-5 text-primary"/> Ganti Password</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <div>
-              <Label htmlFor="currentPassword">Password Saat Ini</Label>
-              <Input id="currentPassword" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Masukkan password lama" />
-            </div>
-            <div>
-              <Label htmlFor="newPassword">Password Baru</Label>
-              <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Masukkan password baru" />
-            </div>
-            <div>
-              <Label htmlFor="confirmPassword">Konfirmasi Password Baru</Label>
-              <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Konfirmasi password baru" />
-            </div>
-            <Button type="submit" className="w-full sm:w-auto"><Save className="mr-2 h-4 w-4"/> Ganti Password</Button>
-          </form>
-        </CardContent>
-      </Card>
+          {/* Change Password */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center"><Lock className="mr-2 h-5 w-5 text-primary"/> Ganti Password</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <Label htmlFor="currentPassword">Password Saat Ini</Label>
+                  <Input id="currentPassword" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Masukkan password lama" />
+                </div>
+                <div>
+                  <Label htmlFor="newPassword">Password Baru</Label>
+                  <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Masukkan password baru" />
+                </div>
+                <div>
+                  <Label htmlFor="confirmPassword">Konfirmasi Password Baru</Label>
+                  <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Konfirmasi password baru" />
+                </div>
+                <Button type="submit" className="w-full sm:w-auto"><Save className="mr-2 h-4 w-4"/> Ganti Password</Button>
+              </form>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* Notification Settings */}
       <Card>
@@ -194,7 +200,7 @@ export default function SettingsPage() {
            <Button onClick={handleNotificationSave} className="w-full sm:w-auto"><Save className="mr-2 h-4 w-4"/> Simpan Notifikasi</Button>
         </CardContent>
       </Card>
-      
+
       {/* Theme Settings */}
       <Card>
         <CardHeader>

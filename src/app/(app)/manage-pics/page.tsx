@@ -2,8 +2,8 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Briefcase, FileUp, UserPlus, Edit, Trash2, EyeOff, Eye } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Briefcase, FileUp, UserPlus, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,20 +14,21 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/types';
+import { Switch } from '@/components/ui/switch';
 
 const picSchema = z.object({
   id: z.string().min(1, "ID PIC tidak boleh kosong").optional(),
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
-  password: z.string().min(6, "Password minimal 6 karakter"),
-  workLocation: z.string().min(3, "Area tanggung jawab minimal 3 karakter"),
+  passwordValue: z.string().min(6, "Password minimal 6 karakter"),
+  workLocation: z.string().min(3, "Area tanggung jawab minimal 3 karakter"), // Represents 'Area' for PIC
 });
 
 type PICFormData = z.infer<typeof picSchema>;
 
 const initialPICData: UserProfile[] = [
-    { id: 'PIC001', fullName: 'PIC Lapangan Satu', email: 'pic001@example.com', role: 'PIC', workLocation: 'Jakarta Pusat', status: 'Aktif' },
-    { id: 'PIC002', fullName: 'PIC Wilayah Dua', email: 'pic002@example.com', role: 'PIC', workLocation: 'Bandung Kota', status: 'Aktif' },
+    { id: 'PIC001', fullName: 'PIC Lapangan Satu', email: 'pic001@example.com', role: 'PIC', workLocation: 'Jakarta Pusat', status: 'Aktif', passwordValue: 'pic123' },
+    { id: 'PIC002', fullName: 'PIC Wilayah Dua', email: 'pic002@example.com', role: 'PIC', workLocation: 'Bandung Kota', status: 'Aktif', passwordValue: 'pic123' },
 ];
 
 export default function ManagePICsPage() {
@@ -41,7 +42,7 @@ export default function ManagePICsPage() {
   });
 
   const handleAddPIC: SubmitHandler<PICFormData> = (data) => {
-    const newPICId = data.id || `PIC${String(pics.length + 1).padStart(3, '0')}`;
+    const newPICId = data.id || `PIC${String(Date.now()).slice(-6)}`;
     const newPIC: UserProfile = {
       ...data,
       id: newPICId,
@@ -49,16 +50,28 @@ export default function ManagePICsPage() {
       status: 'Aktif',
     };
     setPics(prev => [...prev, newPIC]);
-    toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} berhasil ditambahkan.` });
-    reset({id: '', fullName: '', email: '', password: '', workLocation: ''});
+    toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} (ID: ${newPICId}) berhasil ditambahkan.` });
+    reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
     setIsAddPICDialogOpen(false);
   };
-  
+
   const handleImportPICs = () => {
      toast({ title: "Fitur Dalam Pengembangan", description: "Impor PIC dari Excel belum diimplementasikan." });
   };
+  
+  const handleStatusChange = (picId: string, newStatus: boolean) => {
+    setPics(prevPics => 
+      prevPics.map(pic => 
+        pic.id === picId ? { ...pic, status: newStatus ? 'Aktif' : 'Nonaktif' } : pic
+      )
+    );
+    toast({
+      title: "Status PIC Diperbarui",
+      description: `Status PIC ${picId} telah diubah menjadi ${newStatus ? 'Aktif' : 'Nonaktif'}. Akun ${newStatus ? 'dapat' : 'tidak dapat'} digunakan.`,
+    });
+  };
 
-  const filteredPICs = pics.filter(pic => 
+  const filteredPICs = pics.filter(pic =>
     pic.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     pic.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (pic.email && pic.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -92,7 +105,7 @@ export default function ManagePICsPage() {
               <form onSubmit={handleSubmit(handleAddPIC)} className="space-y-4 py-4">
                 <div>
                   <Label htmlFor="picId">ID PIC (Opsional)</Label>
-                  <Input id="picId" {...register("id")} placeholder="Otomatis jika kosong (cth: PIC00X)" />
+                  <Input id="picId" {...register("id")} placeholder="Otomatis jika kosong (cth: PICXXXXX)" />
                 </div>
                 <div>
                   <Label htmlFor="picFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
@@ -106,8 +119,8 @@ export default function ManagePICsPage() {
                 </div>
                 <div>
                   <Label htmlFor="picPassword">Password Awal <span className="text-destructive">*</span></Label>
-                  <Input id="picPassword" type="password" {...register("password")} />
-                  {errors.password && <p className="text-destructive text-sm mt-1">{errors.password.message}</p>}
+                  <Input id="picPassword" type="password" {...register("passwordValue")} />
+                  {errors.passwordValue && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
                 </div>
                 <div>
                   <Label htmlFor="picWorkLocation">Area Tanggung Jawab <span className="text-destructive">*</span></Label>
@@ -115,7 +128,7 @@ export default function ManagePICsPage() {
                   {errors.workLocation && <p className="text-destructive text-sm mt-1">{errors.workLocation.message}</p>}
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { reset({id: '', fullName: '', email: '', password: '', workLocation: ''}); setIsAddPICDialogOpen(false); }}>Batal</Button>
+                  <Button type="button" variant="outline" onClick={() => { reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''}); setIsAddPICDialogOpen(false); }}>Batal</Button>
                   <Button type="submit">Simpan PIC</Button>
                 </DialogFooter>
               </form>
@@ -124,8 +137,8 @@ export default function ManagePICsPage() {
         </CardHeader>
         <CardContent>
            <div className="mb-4">
-            <Input 
-              placeholder="Cari PIC (ID, Nama, Email, Area)..." 
+            <Input
+              placeholder="Cari PIC (ID, Nama, Email, Area)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-sm"
@@ -151,15 +164,17 @@ export default function ManagePICsPage() {
                     <TableCell>{pic.email}</TableCell>
                     <TableCell>{pic.workLocation}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${pic.status === 'Aktif' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                      <Switch
+                        checked={pic.status === 'Aktif'}
+                        onCheckedChange={(newStatus) => handleStatusChange(pic.id, newStatus)}
+                        aria-label={`Status PIC ${pic.fullName}`}
+                      />
+                      <span className={`ml-2 text-xs ${pic.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
                         {pic.status}
                       </span>
                     </TableCell>
                     <TableCell className="text-center space-x-1">
                       <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Edit untuk ${pic.id} belum diimplementasikan.`})}><Edit size={16}/></Button>
-                       <Button variant={pic.status === 'Aktif' ? "outline" : "outline"} size="icon" className={`h-8 w-8 ${pic.status === 'Aktif' ? 'hover:bg-yellow-100 dark:hover:bg-yellow-800' : 'hover:bg-green-100 dark:hover:bg-green-800'}`} onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Ubah status untuk ${pic.id} belum diimplementasikan.`})}>
-                        {pic.status === 'Aktif' ? <EyeOff size={16}/> : <Eye size={16}/>}
-                      </Button>
                       <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${pic.id} belum diimplementasikan.`})}><Trash2 size={16}/></Button>
                     </TableCell>
                   </TableRow>
@@ -203,4 +218,3 @@ export default function ManagePICsPage() {
     </div>
   );
 }
-

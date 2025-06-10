@@ -2,8 +2,8 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Users, FileUp, UserPlus, Edit, Trash2, EyeOff, Eye } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Users, FileUp, UserPlus, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,19 +14,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/types';
+import { Switch } from '@/components/ui/switch';
 
 const adminSchema = z.object({
-  id: z.string().min(1, "ID Admin tidak boleh kosong").optional(), 
+  id: z.string().min(1, "ID Admin tidak boleh kosong").optional(),
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
-  password: z.string().min(6, "Password minimal 6 karakter"),
+  passwordValue: z.string().min(6, "Password minimal 6 karakter"),
 });
 
 type AdminFormData = z.infer<typeof adminSchema>;
 
 const initialAdminData: UserProfile[] = [
-    { id: 'ADMIN001', fullName: 'Admin Staff Satu', email: 'admin001@example.com', role: 'Admin', status: 'Aktif' },
-    { id: 'ADMIN002', fullName: 'Admin Staff Dua', email: 'admin002@example.com', role: 'Admin', status: 'Nonaktif' },
+    { id: 'ADMIN001', fullName: 'Admin Staff Satu', email: 'admin001@example.com', role: 'Admin', status: 'Aktif', passwordValue: 'admin123' },
+    { id: 'ADMIN002', fullName: 'Admin Staff Dua', email: 'admin002@example.com', role: 'Admin', status: 'Nonaktif', passwordValue: 'admin123' },
 ];
 
 export default function ManageAdminsPage() {
@@ -40,7 +41,7 @@ export default function ManageAdminsPage() {
   });
 
   const handleAddAdmin: SubmitHandler<AdminFormData> = (data) => {
-    const newAdminId = data.id || `ADMIN${String(admins.length + 1).padStart(3, '0')}`;
+    const newAdminId = data.id || `ADMIN${String(Date.now()).slice(-6)}`;
     const newAdmin: UserProfile = {
       ...data,
       id: newAdminId,
@@ -48,17 +49,28 @@ export default function ManageAdminsPage() {
       status: 'Aktif', // New users are active by default
     };
     setAdmins(prev => [...prev, newAdmin]);
-    toast({ title: "Admin Ditambahkan", description: `Admin ${data.fullName} berhasil ditambahkan.` });
-    reset({id: '', fullName: '', email: '', password: ''});
+    toast({ title: "Admin Ditambahkan", description: `Admin ${data.fullName} (ID: ${newAdminId}) berhasil ditambahkan.` });
+    reset({id: '', fullName: '', email: '', passwordValue: ''});
     setIsAddAdminDialogOpen(false);
   };
 
   const handleImportAdmins = () => {
-    // Placeholder for Excel import logic
     toast({ title: "Fitur Dalam Pengembangan", description: "Impor Admin dari Excel belum diimplementasikan." });
   };
-  
-  const filteredAdmins = admins.filter(admin => 
+
+  const handleStatusChange = (adminId: string, newStatus: boolean) => {
+    setAdmins(prevAdmins => 
+      prevAdmins.map(admin => 
+        admin.id === adminId ? { ...admin, status: newStatus ? 'Aktif' : 'Nonaktif' } : admin
+      )
+    );
+    toast({
+      title: "Status Admin Diperbarui",
+      description: `Status admin ${adminId} telah diubah menjadi ${newStatus ? 'Aktif' : 'Nonaktif'}. Akun ${newStatus ? 'dapat' : 'tidak dapat'} digunakan.`,
+    });
+  };
+
+  const filteredAdmins = admins.filter(admin =>
     admin.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     admin.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (admin.email && admin.email.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -91,7 +103,7 @@ export default function ManageAdminsPage() {
               <form onSubmit={handleSubmit(handleAddAdmin)} className="space-y-4 py-4">
                 <div>
                   <Label htmlFor="adminId">ID Admin (Opsional)</Label>
-                  <Input id="adminId" {...register("id")} placeholder="Otomatis jika kosong (cth: ADMIN00X)" />
+                  <Input id="adminId" {...register("id")} placeholder="Otomatis jika kosong (cth: ADMINXXXXX)" />
                   {errors.id && <p className="text-destructive text-sm mt-1">{errors.id.message}</p>}
                 </div>
                 <div>
@@ -106,11 +118,11 @@ export default function ManageAdminsPage() {
                 </div>
                 <div>
                   <Label htmlFor="adminPassword">Password Awal <span className="text-destructive">*</span></Label>
-                  <Input id="adminPassword" type="password" {...register("password")} />
-                  {errors.password && <p className="text-destructive text-sm mt-1">{errors.password.message}</p>}
+                  <Input id="adminPassword" type="password" {...register("passwordValue")} />
+                  {errors.passwordValue && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { reset({id: '', fullName: '', email: '', password: ''}); setIsAddAdminDialogOpen(false); }}>Batal</Button>
+                  <Button type="button" variant="outline" onClick={() => { reset({id: '', fullName: '', email: '', passwordValue: ''}); setIsAddAdminDialogOpen(false); }}>Batal</Button>
                   <Button type="submit">Simpan Admin</Button>
                 </DialogFooter>
               </form>
@@ -119,8 +131,8 @@ export default function ManageAdminsPage() {
         </CardHeader>
         <CardContent>
           <div className="mb-4">
-            <Input 
-              placeholder="Cari Admin (ID, Nama, Email)..." 
+            <Input
+              placeholder="Cari Admin (ID, Nama, Email)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-sm"
@@ -144,15 +156,17 @@ export default function ManageAdminsPage() {
                     <TableCell>{admin.fullName}</TableCell>
                     <TableCell>{admin.email}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${admin.status === 'Aktif' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                      <Switch
+                        checked={admin.status === 'Aktif'}
+                        onCheckedChange={(newStatus) => handleStatusChange(admin.id, newStatus)}
+                        aria-label={`Status admin ${admin.fullName}`}
+                      />
+                      <span className={`ml-2 text-xs ${admin.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
                         {admin.status}
                       </span>
                     </TableCell>
                     <TableCell className="text-center space-x-1">
                       <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Edit untuk ${admin.id} belum diimplementasikan.`})}><Edit size={16}/></Button>
-                      <Button variant={admin.status === 'Aktif' ? "outline" : "outline"} size="icon" className={`h-8 w-8 ${admin.status === 'Aktif' ? 'hover:bg-yellow-100 dark:hover:bg-yellow-800' : 'hover:bg-green-100 dark:hover:bg-green-800'}`} onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Ubah status untuk ${admin.id} belum diimplementasikan.`})}>
-                        {admin.status === 'Aktif' ? <EyeOff size={16}/> : <Eye size={16}/>}
-                      </Button>
                       <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${admin.id} belum diimplementasikan.`})}><Trash2 size={16}/></Button>
                     </TableCell>
                   </TableRow>
@@ -196,4 +210,3 @@ export default function ManageAdminsPage() {
     </div>
   );
 }
-
