@@ -193,10 +193,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </Sidebar>
       <SidebarInset>
         <div className="p-4 sm:p-6 lg:p-8">
-          <div className="flex items-center justify-between mb-6">
-             <div className="md:hidden"> 
-                <SidebarTrigger />
-             </div>
+          <div className="mb-6 md:hidden"> {/* Mobile sidebar trigger container */}
+             <SidebarTrigger />
           </div>
           {children}
         </div>
