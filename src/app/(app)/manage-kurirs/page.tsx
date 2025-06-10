@@ -337,7 +337,7 @@ export default function ManageKurirsPage() {
                 <UserPlus className="mr-2 h-4 w-4" /> Tambah Kurir Baru
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Tambah Kurir Baru</DialogTitle>
                 <DialogDescription>Isi detail lengkap untuk Kurir baru.</DialogDescription>
@@ -430,7 +430,7 @@ export default function ManageKurirsPage() {
         }
         setIsEditKurirDialogOpen(open);
       }}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Kurir: {currentEditingKurir?.fullName}</DialogTitle>
             <DialogDescription>Perbarui detail Kurir. ID tidak dapat diubah.</DialogDescription>
@@ -474,4 +474,6 @@ export default function ManageKurirsPage() {
     </div>
   );
 }
+    
+
     
