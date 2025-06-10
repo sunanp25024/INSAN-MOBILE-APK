@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -5,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { ResponsiveContainer, BarChart, LineChart, PieChart, Pie, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
-import { TrendingUp, Package, CheckCircle, AlertTriangle, Percent, Clock, UserCheck, CalendarDays, ChevronsUpDown } from 'lucide-react';
+import { TrendingUp, Package, CheckCircle, AlertTriangle, Percent, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon } from 'lucide-react';
 import type { DailyPerformance, WeeklyPerformancePoint, AttendanceRecord } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
