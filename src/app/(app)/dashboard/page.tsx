@@ -39,7 +39,7 @@ const packageInputSchema = z.object({
   nonCodPackages: z.coerce.number().min(0).max(200),
 }).refine(data => data.codPackages + data.nonCodPackages === data.totalPackages, {
   message: "Jumlah paket COD dan Non-COD harus sama dengan Total Paket",
-  path: ["totalPackages"], 
+  path: ["totalPackages"],
 });
 
 
@@ -56,13 +56,13 @@ export default function DashboardPage() {
   const [managedPackages, setManagedPackages] = useState<PackageItem[]>([]);
   const [inTransitPackages, setInTransitPackages] = useState<PackageItem[]>([]);
   const [pendingReturnPackages, setPendingReturnPackages] = useState<PackageItem[]>([]);
-  
+
   const [currentScannedResi, setCurrentScannedResi] = useState('');
   const [isManualCOD, setIsManualCOD] = useState(false); // State for COD checkbox
   const [isScanning, setIsScanning] = useState(false);
   const [deliveryStarted, setDeliveryStarted] = useState(false);
   const [dayFinished, setDayFinished] = useState(false);
-  
+
   const [motivationalQuote, setMotivationalQuote] = useState('');
   const [returnProofPhoto, setReturnProofPhoto] = useState<File | null>(null);
   const [returnLeadReceiverName, setReturnLeadReceiverName] = useState(''); // State for Lead Receiver Name
@@ -113,7 +113,7 @@ export default function DashboardPage() {
             });
             setIsScanning(false);
             setCapturingForPackageId(null);
-            return; 
+            return;
           }
         }
 
@@ -124,7 +124,7 @@ export default function DashboardPage() {
       };
 
       getCameraStream();
-      
+
       return () => {
         if (videoRef.current && videoRef.current.srcObject) {
           const stream = videoRef.current.srcObject as MediaStream;
@@ -150,7 +150,7 @@ export default function DashboardPage() {
     }
     setIsScanning(true);
   };
-  
+
   const capturePhoto = () => {
     if (videoRef.current && photoCanvasRef.current && hasCameraPermission) {
       const video = videoRef.current;
@@ -182,22 +182,22 @@ export default function DashboardPage() {
       setIsManualCOD(false); // Reset checkbox
       toast({ title: "Resi Ditambahkan", description: `${resiToAdd} (${isManualCOD ? "COD" : "Non-COD"}) berhasil ditambahkan.` });
        if (managedPackages.length + 1 === dailyInput.totalPackages) {
-        setIsScanning(false); 
+        setIsScanning(false);
       }
     } else if (dailyInput) {
         toast({ title: "Batas Paket Tercapai", description: "Jumlah paket yang di-scan sudah sesuai total.", variant: "destructive" });
     }
   };
-  
-  const handleSimulateScan = () => { 
-    const photoDataUrl = capturePhoto(); 
+
+  const handleSimulateScan = () => {
+    const photoDataUrl = capturePhoto();
     if (photoDataUrl) {
         const dummyResi = `SPX${Date.now().toString().slice(-8)}`;
         if (dailyInput && managedPackages.length < dailyInput.totalPackages) {
           // For simulated scan, isCOD is determined by remaining COD quota
           const currentCODPackages = managedPackages.filter(p => p.isCOD).length;
           const isCOD = currentCODPackages < dailyInput.codPackages;
-          
+
           setManagedPackages(prev => [...prev, { id: dummyResi, status: 'process', isCOD, lastUpdateTime: new Date().toISOString() }]);
           toast({ title: "Resi Ter-scan (Simulasi)", description: `${dummyResi} (${isCOD ? "COD" : "Non-COD"}) berhasil ditambahkan.` });
           if (managedPackages.length + 1 === dailyInput.totalPackages) {
@@ -243,7 +243,7 @@ export default function DashboardPage() {
     const photoDataUrl = capturePhoto();
     if (photoDataUrl) {
       setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: photoDataUrl }));
-      setInTransitPackages(prev => prev.map(p => 
+      setInTransitPackages(prev => prev.map(p =>
         p.id === capturingForPackageId ? { ...p, deliveryProofPhotoUrl: photoDataUrl, status: 'delivered', recipientName: photoRecipientName.trim() } : p
       ));
       toast({ title: "Foto Bukti Terkirim", description: `Foto untuk paket ${capturingForPackageId} disimpan. Penerima: ${photoRecipientName.trim()}.` });
@@ -253,14 +253,14 @@ export default function DashboardPage() {
     setCapturingForPackageId(null);
     setPhotoRecipientName(''); // Clear after capture attempt
   };
-  
+
   const handleDeletePackagePhoto = (packageId: string) => {
     setPackagePhotoMap(prev => {
       const newState = {...prev};
       delete newState[packageId];
       return newState;
     });
-    setInTransitPackages(prev => prev.map(p => 
+    setInTransitPackages(prev => prev.map(p =>
         p.id === packageId ? { ...p, deliveryProofPhotoUrl: undefined, status: 'in_transit', recipientName: undefined } : p
     ));
     toast({ title: "Foto Dihapus", description: `Foto untuk paket ${packageId} dihapus.` });
@@ -268,7 +268,7 @@ export default function DashboardPage() {
 
   const handleFinishDay = () => {
     const remainingInTransit = inTransitPackages.filter(p => p.status === 'in_transit');
-    
+
     if (remainingInTransit.length > 0) {
       if (!returnProofPhoto) {
         toast({ title: "Upload Bukti Paket Pending", description: "Harap upload foto bukti pengembalian paket yang tidak terkirim.", variant: "destructive" });
@@ -281,7 +281,7 @@ export default function DashboardPage() {
         return;
       }
     }
-    
+
     setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', returnProofPhotoUrl: returnProofPhoto ? URL.createObjectURL(returnProofPhoto) : undefined, returnLeadReceiverName: returnLeadReceiverName.trim() })));
     setInTransitPackages(prev => prev.filter(p => p.status === 'delivered'));
     setDayFinished(true);
@@ -307,15 +307,15 @@ export default function DashboardPage() {
     setReturnLeadReceiverName('');
     setPackagePhotoMap({});
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
-    localStorage.removeItem('courierCheckedInToday'); 
+    localStorage.removeItem('courierCheckedInToday');
     setIsCourierCheckedIn(false);
     toast({ title: "Hari Baru Dimulai", description: "Semua data telah direset. Selamat bekerja!" });
   };
 
-  const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length + pendingReturnPackages.filter(p => p.status === 'returned').length; 
+  const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length + pendingReturnPackages.filter(p => p.status === 'returned').length;
   const pendingCount = pendingReturnPackages.filter(p => p.status === 'pending_return').length;
-  const dailyTotalForChart = (dailyInput?.totalPackages || 0) === 0 ? 1 : (dailyInput?.totalPackages || 0); 
-  
+  const dailyTotalForChart = (dailyInput?.totalPackages || 0) === 0 ? 1 : (dailyInput?.totalPackages || 0);
+
   const performanceData = [
     { name: 'Terkirim', value: deliveredCount, color: 'hsl(var(--chart-1))' },
     { name: 'Pending', value: pendingCount, color: 'hsl(var(--chart-2))' },
@@ -352,7 +352,7 @@ export default function DashboardPage() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{
                         background: "hsl(var(--background))",
                         borderColor: "hsl(var(--border))",
@@ -367,10 +367,10 @@ export default function DashboardPage() {
             {pendingReturnPackages.length > 0 && returnProofPhoto && (
               <div className="mt-6">
                 <h3 className="font-semibold text-lg mb-2">Bukti Paket Retur:</h3>
-                <img 
-                  src={URL.createObjectURL(returnProofPhoto)} 
-                  alt="Bukti Retur" 
-                  className="max-w-sm w-full md:max-w-xs rounded-lg shadow-md border border-border" 
+                <img
+                  src={URL.createObjectURL(returnProofPhoto)}
+                  alt="Bukti Retur"
+                  className="max-w-sm w-full md:max-w-xs rounded-lg shadow-md border border-border"
                   data-ai-hint="package receipt"
                 />
               </div>
@@ -447,7 +447,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
-      
+
       {dailyInput && !deliveryStarted && isCourierCheckedIn && (
         <>
         <Card>
@@ -463,9 +463,9 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                    <Input 
-                        type="text" 
-                        placeholder="Input manual nomor resi" 
+                    <Input
+                        type="text"
+                        placeholder="Input manual nomor resi"
                         value={currentScannedResi}
                         onChange={(e) => setCurrentScannedResi(e.target.value)}
                         disabled={managedPackages.length >= dailyInput.totalPackages}
@@ -594,10 +594,10 @@ export default function DashboardPage() {
                     )}
                      <div>
                         <Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label>
-                        <Input 
-                            id="photoRecipientName" 
-                            type="text" 
-                            placeholder="Masukkan nama penerima" 
+                        <Input
+                            id="photoRecipientName"
+                            type="text"
+                            placeholder="Masukkan nama penerima"
                             value={photoRecipientName}
                             onChange={(e) => setPhotoRecipientName(e.target.value)}
                         />
@@ -634,10 +634,10 @@ export default function DashboardPage() {
             </div>
             <div>
                 <Label htmlFor="returnLeadReceiverName">Nama Leader Serah Terima <span className="text-destructive">*</span></Label>
-                <Input 
-                    id="returnLeadReceiverName" 
-                    type="text" 
-                    placeholder="Nama Leader/Supervisor" 
+                <Input
+                    id="returnLeadReceiverName"
+                    type="text"
+                    placeholder="Nama Leader/Supervisor"
                     value={returnLeadReceiverName}
                     onChange={(e) => setReturnLeadReceiverName(e.target.value)}
                 />
@@ -656,7 +656,7 @@ export default function DashboardPage() {
            </CardFooter>
         </Card>
       )}
-      
+
       {!dayFinished && isCourierCheckedIn && (
           <Card className="bg-gradient-to-r from-primary/10 to-accent/10 dark:from-primary/20 dark:to-accent/20 border-transparent">
             <CardContent className="pt-6">
@@ -668,6 +668,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-    
-
-    
