@@ -6,8 +6,8 @@ export interface UserProfile {
   id: string;
   fullName: string;
   role: UserRole;
-  email?: string; // Made email consistently optional as ID might be primary
-  passwordValue?: string; // Only for mock, should not be in real profile
+  email?: string; 
+  passwordValue?: string; 
   workLocation?: string;
   joinDate?: string; 
   position?: string; 
@@ -17,12 +17,12 @@ export interface UserProfile {
   bankRecipientName?: string; 
   avatarUrl?: string;
   photoIdUrl?: string; 
-  status?: 'Aktif' | 'Nonaktif'; // For user management tables
+  status?: 'Aktif' | 'Nonaktif'; 
 }
 
 
 export type CourierProfile = UserProfile & {
-  // any Kurir-specific fields can be added here if they don't fit UserProfile
+  
 };
 
 
@@ -72,6 +72,7 @@ export interface AttendanceActivity {
   location?: string; 
 }
 
+// Existing DeliveryActivity, potentially used by other features or Kurir's view
 export interface DeliveryActivity {
   id: string;
   kurirName: string;
@@ -80,7 +81,31 @@ export interface DeliveryActivity {
   action: 'picked-up' | 'in-transit' | 'delivered' | 'delivery-failed' | 'returned-to-hub';
   timestamp: string; 
   details?: string; 
-  location?: string; 
+  location?: string; // Hub location of the courier
+}
+
+// New type for managerial dashboard: Courier Work Completion Summary
+export interface CourierWorkSummaryActivity {
+  id: string; // Unique ID for this summary activity
+  kurirName: string;
+  kurirId: string;
+  hubLocation: string; // Location of the hub they operate from
+  timestamp: string; // Timestamp when they finished/reported
+  totalPackagesAssigned: number;
+  packagesDelivered: number;
+  packagesPendingOrReturned: number;
+  // successRate could be calculated: (packagesDelivered / totalPackagesAssigned) * 100
+}
+
+
+export interface DashboardSummaryData {
+  activeCouriersToday: number;
+  totalPackagesProcessedToday: number;
+  totalPackagesDeliveredToday: number;
+  onTimeDeliveryRateToday: number;
+  dailyShipmentSummary: { date: string; name: string; terkirim: number; pending: number }[];
+  weeklyShipmentSummary: WeeklyShipmentSummary[];
+  monthlyPerformanceSummary: MonthlySummaryData[];
 }
 
 export interface MonthlySummaryData {

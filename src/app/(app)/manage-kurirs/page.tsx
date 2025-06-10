@@ -18,7 +18,7 @@ import type { UserProfile } from '@/types';
 const kurirSchema = z.object({
   id: z.string().min(1, "ID Kurir tidak boleh kosong").optional(),
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
-  email: z.string().email("Format email tidak valid").optional().or(z.literal('')), // Email optional for Kurir
+  email: z.string().email("Format email tidak valid").optional().or(z.literal('')), 
   password: z.string().min(6, "Password minimal 6 karakter"),
   workLocation: z.string().min(3, "Lokasi kerja minimal 3 karakter"),
 });
@@ -42,22 +42,22 @@ export default function ManageKurirsPage() {
   });
 
   const handleAddKurir: SubmitHandler<KurirFormData> = (data) => {
-    const newKurirId = data.id || `KURIR${String(kurirs.length + 3).padStart(3, '0')}`; // Start from 003 if no ID
+    const newKurirId = data.id || `KURIR${String(kurirs.length + 3).padStart(3, '0')}`; 
     const newKurir: UserProfile = {
       ...data,
       id: newKurirId,
-      email: data.email || `${newKurirId.toLowerCase()}@example.com`, // Auto-generate email if empty
+      email: data.email || `${newKurirId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`, // Auto-generate internal email
       role: 'Kurir',
       status: 'Aktif',
     };
     setKurirs(prev => [...prev, newKurir]);
     toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} berhasil ditambahkan.` });
-    reset();
+    reset({id: '', fullName: '', email: '', password: '', workLocation: ''});
     setIsAddKurirDialogOpen(false);
   };
 
   const handleImportKurirs = () => {
-    alert("Fitur impor Kurir dari Excel belum diimplementasikan.");
+    toast({ title: "Fitur Dalam Pengembangan", description: "Impor Kurir dari Excel belum diimplementasikan." });
   };
 
   const filteredKurirs = kurirs.filter(kurir => 
@@ -118,7 +118,7 @@ export default function ManageKurirsPage() {
                   {errors.workLocation && <p className="text-destructive text-sm mt-1">{errors.workLocation.message}</p>}
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { reset(); setIsAddKurirDialogOpen(false); }}>Batal</Button>
+                  <Button type="button" variant="outline" onClick={() => { reset({id: '', fullName: '', email: '', password: '', workLocation: ''}); setIsAddKurirDialogOpen(false); }}>Batal</Button>
                   <Button type="submit">Simpan Kurir</Button>
                 </DialogFooter>
               </form>
@@ -159,16 +159,16 @@ export default function ManageKurirsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-center space-x-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => alert(`Edit ${kurir.id}`)}><Edit size={16}/></Button>
-                      <Button variant={kurir.status === 'Aktif' ? "outline" : "outline"} size="icon" className={`h-8 w-8 ${kurir.status === 'Aktif' ? 'hover:bg-yellow-100 dark:hover:bg-yellow-800' : 'hover:bg-green-100 dark:hover:bg-green-800'}`} onClick={() => alert(`${kurir.status === 'Aktif' ? 'Nonaktifkan' : 'Aktifkan'} ${kurir.id}`)}>
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Edit untuk ${kurir.id} belum diimplementasikan.`})}><Edit size={16}/></Button>
+                      <Button variant={kurir.status === 'Aktif' ? "outline" : "outline"} size="icon" className={`h-8 w-8 ${kurir.status === 'Aktif' ? 'hover:bg-yellow-100 dark:hover:bg-yellow-800' : 'hover:bg-green-100 dark:hover:bg-green-800'}`} onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Ubah status untuk ${kurir.id} belum diimplementasikan.`})}>
                         {kurir.status === 'Aktif' ? <EyeOff size={16}/> : <Eye size={16}/>}
                       </Button>
-                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => alert(`Hapus ${kurir.id}`)}><Trash2 size={16}/></Button>
+                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${kurir.id} belum diimplementasikan.`})}><Trash2 size={16}/></Button>
                     </TableCell>
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">Tidak ada data Kurir.</TableCell>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">Tidak ada data Kurir yang cocok dengan pencarian.</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -206,3 +206,4 @@ export default function ManageKurirsPage() {
     </div>
   );
 }
+

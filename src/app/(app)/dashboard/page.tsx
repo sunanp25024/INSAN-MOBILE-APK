@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight, Filter as FilterIcon, Download as DownloadIcon, Search as SearchIcon, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, DeliveryActivity, DashboardSummaryData, WeeklyShipmentSummary, MonthlySummaryData } from '@/types';
+import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, CourierWorkSummaryActivity, DashboardSummaryData, WeeklyShipmentSummary, MonthlySummaryData } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -83,7 +83,7 @@ export default function DashboardPage() {
   const [isScanningForDeliveryUpdate, setIsScanningForDeliveryUpdate] = useState(false);
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummaryData | null>(null);
   const [attendanceActivities, setAttendanceActivities] = useState<AttendanceActivity[]>([]);
-  const [deliveryActivities, setDeliveryActivities] = useState<DeliveryActivity[]>([]);
+  const [courierWorkSummaries, setCourierWorkSummaries] = useState<CourierWorkSummaryActivity[]>([]);
 
 
   const { toast } = useToast();
@@ -160,14 +160,12 @@ export default function DashboardPage() {
           ].sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
           setAttendanceActivities(mockAttendance);
           
-          const mockDeliveries: DeliveryActivity[] = [
-            { id: 'del1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', packageId: 'SPX001', action: 'delivered', timestamp: subDays(new Date(), 0).setHours(14, 30, 0, 0).valueOf().toString(), details: 'Diterima Bpk. Agus', location: 'Jakarta Pusat Hub' },
-            { id: 'del2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', packageId: 'SPX002', action: 'in-transit', timestamp: subDays(new Date(), 0).setHours(13,0,0,0).valueOf().toString(), location: 'Bandung Kota Hub' },
-            { id: 'del3', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', packageId: 'SPX003', action: 'delivery-failed', timestamp: subDays(new Date(), 0).setHours(11, 45, 0, 0).valueOf().toString(), details: 'Alamat tidak ditemukan', location: 'Jakarta Pusat Hub' },
-            { id: 'del4', kurirName: 'Charlie Van Houten', kurirId: 'KURIR003', packageId: 'SPX004', action: 'picked-up', timestamp: subDays(new Date(), 0).setHours(10,0,0,0).valueOf().toString(), location: 'Surabaya Timur Hub' },
-            { id: 'del5', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', packageId: 'SPX005', action: 'returned-to-hub', timestamp: subDays(new Date(), 0).setHours(17,30,0,0).valueOf().toString(), details: 'Retur dari pengiriman gagal', location: 'Bandung Kota Hub' },
+          const mockCourierWorkSummaries: CourierWorkSummaryActivity[] = [
+            { id: 'sum1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', hubLocation: 'Jakarta Pusat Hub', timestamp: subDays(new Date(), 0).setHours(17, 5, 0, 0).valueOf().toString(), totalPackagesAssigned: 50, packagesDelivered: 48, packagesPendingOrReturned: 2 },
+            { id: 'sum2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', hubLocation: 'Bandung Kota Hub', timestamp: subDays(new Date(), 0).setHours(17, 30, 0, 0).valueOf().toString(), totalPackagesAssigned: 45, packagesDelivered: 40, packagesPendingOrReturned: 5 },
+            { id: 'sum3', kurirName: 'Dewi Persik', kurirId: 'KURIR004', hubLocation: 'Medan Barat Hub', timestamp: subDays(new Date(), 1).setHours(18, 0, 0, 0).valueOf().toString(), totalPackagesAssigned: 55, packagesDelivered: 55, packagesPendingOrReturned: 0 },
           ].sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
-          setDeliveryActivities(mockDeliveries);
+          setCourierWorkSummaries(mockCourierWorkSummaries);
 
         }
 
@@ -506,15 +504,8 @@ export default function DashboardPage() {
     }
   };
 
-  const getDeliveryActionIcon = (action: DeliveryActivity['action']) => {
-    switch(action) {
-      case 'picked-up': return <PackagePlus className="h-5 w-5 text-blue-500" />;
-      case 'in-transit': return <Truck className="h-5 w-5 text-orange-500" />;
-      case 'delivered': return <PackageCheck className="h-5 w-5 text-green-500" />;
-      case 'delivery-failed': return <PackageX className="h-5 w-5 text-red-500" />;
-      case 'returned-to-hub': return <ArrowLeftRight className="h-5 w-5 text-purple-500" />;
-      default: return <PackageIcon className="h-5 w-5 text-muted-foreground" />;
-    }
+  const getCourierWorkSummaryIcon = () => {
+    return <ListChecks className="h-5 w-5 text-blue-500" />;
   };
 
   const handleDashboardFilterApply = () => {
@@ -771,9 +762,9 @@ export default function DashboardPage() {
             <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
               {[...inTransitPackages]
                   .sort((a, b) => {
-                    if (a.status === 'delivered' && b.status !== 'delivered') return 1; 
-                    if (a.status !== 'delivered' && b.status === 'delivered') return -1; 
-                    return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime();
+                    if (a.status === 'delivered' && b.status !== 'delivered') return -1; // Delivered first
+                    if (a.status !== 'delivered' && b.status === 'delivered') return 1;
+                    return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime(); // Then by last update time
                   })
                   .map(pkg => (
                 <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
@@ -1066,7 +1057,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Unified Charts Section */}
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
             <CardHeader>
@@ -1146,7 +1137,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center text-xl text-primary"><ListChecks className="mr-2 h-5 w-5"/>Aktivitas Absensi Terkini</CardTitle>
+            <CardTitle className="flex items-center text-xl text-primary"><Activity className="mr-2 h-5 w-5"/>Aktivitas Absensi Terkini</CardTitle>
             <CardDescription>Update check-in/out kurir. Termasuk lokasi kerja kurir.</CardDescription>
           </CardHeader>
           <CardContent className="max-h-[400px] overflow-y-auto pr-2">
@@ -1178,40 +1169,34 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center text-xl text-primary"><Truck className="mr-2 h-5 w-5"/>Aktivitas Pengiriman Terkini</CardTitle>
-            <CardDescription>Update status pengiriman paket oleh kurir. Termasuk lokasi kerja kurir.</CardDescription>
+            <CardTitle className="flex items-center text-xl text-primary"><ListChecks className="mr-2 h-5 w-5"/>Ringkasan Penyelesaian Kerja Kurir</CardTitle>
+            <CardDescription>Laporan ringkas setelah kurir menyelesaikan tugas harian.</CardDescription>
           </CardHeader>
           <CardContent className="max-h-[400px] overflow-y-auto pr-2">
-            {deliveryActivities.length > 0 ? (
+            {courierWorkSummaries.length > 0 ? (
               <ul className="space-y-3">
-                {deliveryActivities.map(activity => (
-                  <li key={activity.id} className="flex items-start space-x-3 p-3 bg-card-foreground/5 rounded-md">
+                {courierWorkSummaries.map(summary => (
+                  <li key={summary.id} className="flex items-start space-x-3 p-3 bg-card-foreground/5 rounded-md">
                      <div className="flex-shrink-0 mt-0.5">
-                      {getDeliveryActionIcon(activity.action)}
+                      {getCourierWorkSummaryIcon()}
                     </div>
                     <div className="flex-grow">
                       <p className="text-sm font-medium">
-                        {activity.kurirName} <span className="text-xs text-muted-foreground">({activity.kurirId})</span>
+                        {summary.kurirName} <span className="text-xs text-muted-foreground">({summary.kurirId})</span>
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Paket <span className="font-semibold text-foreground">{activity.packageId}</span> - {
-                          activity.action === 'picked-up' ? 'diambil dari hub' :
-                          activity.action === 'in-transit' ? 'sedang diantar' :
-                          activity.action === 'delivered' ? 'berhasil terkirim' :
-                          activity.action === 'delivery-failed' ? 'gagal terkirim' :
-                          activity.action === 'returned-to-hub' ? 'dikembalikan ke hub' :
-                          'status tidak diketahui'
-                        }
-                        {activity.details && <span className="italic">: {activity.details}</span>}
-                        {activity.location && <span className="text-xs"> ({activity.location})</span>}
+                        Dari Hub: <span className="font-semibold">{summary.hubLocation}</span>
                       </p>
-                      <p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(activity.timestamp)}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Menyelesaikan pekerjaan: <strong className="text-foreground">{summary.totalPackagesAssigned}</strong> paket dibawa, <strong className="text-green-500">{summary.packagesDelivered}</strong> terkirim, <strong className="text-red-500">{summary.packagesPendingOrReturned}</strong> retur/pending.
+                      </p>
+                      <p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(summary.timestamp)}</p>
                     </div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-muted-foreground text-center py-4">Belum ada aktivitas pengiriman.</p>
+              <p className="text-muted-foreground text-center py-4">Belum ada ringkasan kerja kurir.</p>
             )}
           </CardContent>
         </Card>

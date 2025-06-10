@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/types';
 
 const adminSchema = z.object({
-  id: z.string().min(1, "ID Admin tidak boleh kosong").optional(), // Optional for auto-generation
+  id: z.string().min(1, "ID Admin tidak boleh kosong").optional(), 
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
   password: z.string().min(6, "Password minimal 6 karakter"),
@@ -45,16 +45,17 @@ export default function ManageAdminsPage() {
       ...data,
       id: newAdminId,
       role: 'Admin',
-      status: 'Aktif',
+      status: 'Aktif', // New users are active by default
     };
     setAdmins(prev => [...prev, newAdmin]);
     toast({ title: "Admin Ditambahkan", description: `Admin ${data.fullName} berhasil ditambahkan.` });
-    reset();
+    reset({id: '', fullName: '', email: '', password: ''});
     setIsAddAdminDialogOpen(false);
   };
 
   const handleImportAdmins = () => {
-    alert("Fitur impor Admin dari Excel belum diimplementasikan.");
+    // Placeholder for Excel import logic
+    toast({ title: "Fitur Dalam Pengembangan", description: "Impor Admin dari Excel belum diimplementasikan." });
   };
   
   const filteredAdmins = admins.filter(admin => 
@@ -90,7 +91,7 @@ export default function ManageAdminsPage() {
               <form onSubmit={handleSubmit(handleAddAdmin)} className="space-y-4 py-4">
                 <div>
                   <Label htmlFor="adminId">ID Admin (Opsional)</Label>
-                  <Input id="adminId" {...register("id")} placeholder="Otomatis jika kosong" />
+                  <Input id="adminId" {...register("id")} placeholder="Otomatis jika kosong (cth: ADMIN00X)" />
                   {errors.id && <p className="text-destructive text-sm mt-1">{errors.id.message}</p>}
                 </div>
                 <div>
@@ -109,7 +110,7 @@ export default function ManageAdminsPage() {
                   {errors.password && <p className="text-destructive text-sm mt-1">{errors.password.message}</p>}
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { reset(); setIsAddAdminDialogOpen(false); }}>Batal</Button>
+                  <Button type="button" variant="outline" onClick={() => { reset({id: '', fullName: '', email: '', password: ''}); setIsAddAdminDialogOpen(false); }}>Batal</Button>
                   <Button type="submit">Simpan Admin</Button>
                 </DialogFooter>
               </form>
@@ -148,16 +149,16 @@ export default function ManageAdminsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-center space-x-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => alert(`Edit ${admin.id}`)}><Edit size={16}/></Button>
-                      <Button variant={admin.status === 'Aktif' ? "outline" : "outline"} size="icon" className={`h-8 w-8 ${admin.status === 'Aktif' ? 'hover:bg-yellow-100 dark:hover:bg-yellow-800' : 'hover:bg-green-100 dark:hover:bg-green-800'}`} onClick={() => alert(`${admin.status === 'Aktif' ? 'Nonaktifkan' : 'Aktifkan'} ${admin.id}`)}>
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Edit untuk ${admin.id} belum diimplementasikan.`})}><Edit size={16}/></Button>
+                      <Button variant={admin.status === 'Aktif' ? "outline" : "outline"} size="icon" className={`h-8 w-8 ${admin.status === 'Aktif' ? 'hover:bg-yellow-100 dark:hover:bg-yellow-800' : 'hover:bg-green-100 dark:hover:bg-green-800'}`} onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Ubah status untuk ${admin.id} belum diimplementasikan.`})}>
                         {admin.status === 'Aktif' ? <EyeOff size={16}/> : <Eye size={16}/>}
                       </Button>
-                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => alert(`Hapus ${admin.id}`)}><Trash2 size={16}/></Button>
+                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${admin.id} belum diimplementasikan.`})}><Trash2 size={16}/></Button>
                     </TableCell>
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">Tidak ada data Admin.</TableCell>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">Tidak ada data Admin yang cocok dengan pencarian.</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -195,3 +196,4 @@ export default function ManageAdminsPage() {
     </div>
   );
 }
+

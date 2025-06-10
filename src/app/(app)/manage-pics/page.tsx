@@ -50,12 +50,12 @@ export default function ManagePICsPage() {
     };
     setPics(prev => [...prev, newPIC]);
     toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} berhasil ditambahkan.` });
-    reset();
+    reset({id: '', fullName: '', email: '', password: '', workLocation: ''});
     setIsAddPICDialogOpen(false);
   };
   
   const handleImportPICs = () => {
-    alert("Fitur impor PIC dari Excel belum diimplementasikan.");
+     toast({ title: "Fitur Dalam Pengembangan", description: "Impor PIC dari Excel belum diimplementasikan." });
   };
 
   const filteredPICs = pics.filter(pic => 
@@ -92,7 +92,7 @@ export default function ManagePICsPage() {
               <form onSubmit={handleSubmit(handleAddPIC)} className="space-y-4 py-4">
                 <div>
                   <Label htmlFor="picId">ID PIC (Opsional)</Label>
-                  <Input id="picId" {...register("id")} placeholder="Otomatis jika kosong" />
+                  <Input id="picId" {...register("id")} placeholder="Otomatis jika kosong (cth: PIC00X)" />
                 </div>
                 <div>
                   <Label htmlFor="picFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
@@ -115,7 +115,7 @@ export default function ManagePICsPage() {
                   {errors.workLocation && <p className="text-destructive text-sm mt-1">{errors.workLocation.message}</p>}
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { reset(); setIsAddPICDialogOpen(false); }}>Batal</Button>
+                  <Button type="button" variant="outline" onClick={() => { reset({id: '', fullName: '', email: '', password: '', workLocation: ''}); setIsAddPICDialogOpen(false); }}>Batal</Button>
                   <Button type="submit">Simpan PIC</Button>
                 </DialogFooter>
               </form>
@@ -156,16 +156,16 @@ export default function ManagePICsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-center space-x-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => alert(`Edit ${pic.id}`)}><Edit size={16}/></Button>
-                       <Button variant={pic.status === 'Aktif' ? "outline" : "outline"} size="icon" className={`h-8 w-8 ${pic.status === 'Aktif' ? 'hover:bg-yellow-100 dark:hover:bg-yellow-800' : 'hover:bg-green-100 dark:hover:bg-green-800'}`} onClick={() => alert(`${pic.status === 'Aktif' ? 'Nonaktifkan' : 'Aktifkan'} ${pic.id}`)}>
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Edit untuk ${pic.id} belum diimplementasikan.`})}><Edit size={16}/></Button>
+                       <Button variant={pic.status === 'Aktif' ? "outline" : "outline"} size="icon" className={`h-8 w-8 ${pic.status === 'Aktif' ? 'hover:bg-yellow-100 dark:hover:bg-yellow-800' : 'hover:bg-green-100 dark:hover:bg-green-800'}`} onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Ubah status untuk ${pic.id} belum diimplementasikan.`})}>
                         {pic.status === 'Aktif' ? <EyeOff size={16}/> : <Eye size={16}/>}
                       </Button>
-                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => alert(`Hapus ${pic.id}`)}><Trash2 size={16}/></Button>
+                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${pic.id} belum diimplementasikan.`})}><Trash2 size={16}/></Button>
                     </TableCell>
                   </TableRow>
                 )) : (
                    <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">Tidak ada data PIC.</TableCell>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">Tidak ada data PIC yang cocok dengan pencarian.</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -203,3 +203,4 @@ export default function ManagePICsPage() {
     </div>
   );
 }
+
