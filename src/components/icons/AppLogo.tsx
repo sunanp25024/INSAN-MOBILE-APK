@@ -17,8 +17,7 @@ export function AppLogo({ className }: { className?: string }) {
       height={LOGO_HEIGHT}
       className={cn(className)} // Apply sizing classes like h-10 w-10 directly
       priority // Marking as priority helps with LCP if the logo is above the fold
-      quality={100} // Request highest quality (though unoptimized overrides this)
-      unoptimized // Serve the image as-is, browser fetches directly
+      quality={100} // Request highest quality
     />
   );
 }
