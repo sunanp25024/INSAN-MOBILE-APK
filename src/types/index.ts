@@ -1,17 +1,31 @@
 
-export interface CourierProfile {
+
+export type UserRole = 'MasterAdmin' | 'Admin' | 'PIC' | 'Kurir';
+
+export interface UserProfile {
   id: string;
   fullName: string;
-  workLocation: string;
-  joinDate: string; // ISO date string
-  position: string;
-  contractStatus: 'Permanent' | 'Contract' | 'Probation';
-  bankAccountNumber: string;
-  bankName: string;
-  bankRecipientName: string;
+  role: UserRole;
+  workLocation?: string; // Optional, as not all roles might have it
+  joinDate?: string; // ISO date string, optional
+  position?: string; // Optional
+  contractStatus?: 'Permanent' | 'Contract' | 'Probation'; // Optional
+  bankAccountNumber?: string; // Optional
+  bankName?: string; // Optional
+  bankRecipientName?: string; // Optional
   avatarUrl?: string;
-  photoIdUrl?: string;
+  photoIdUrl?: string; // Optional
+  email?: string; // Added for settings
 }
+
+
+// CourierProfile can extend or be a specific type of UserProfile if needed later
+// For now, Courier specific data might still be relevant if a Kurir logs in.
+// We'll primarily use UserProfile for general user info.
+export type CourierProfile = UserProfile & {
+  // any Kurir-specific fields can be added here if they don't fit UserProfile
+};
+
 
 export interface PackageItem {
   id: string; // Tracking number
@@ -49,6 +63,3 @@ export interface WeeklyPerformancePoint {
   delivered: number;
   pending: number;
 }
-
-
-    

@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,9 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon } from 'lucide-react';
+import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { DailyPackageInput, PackageItem, CourierProfile } from '@/types';
+import type { DailyPackageInput, PackageItem, UserProfile, UserRole } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,10 +18,11 @@ import * as z from "zod";
 import Link from 'next/link';
 import { Checkbox } from '@/components/ui/checkbox';
 
-// Mock data (replace with actual data fetching)
-const mockCourier: CourierProfile = {
+// Existing mockCourier data structure can be used for Kurir role
+const mockKurirProfileData: UserProfile = {
   id: 'PISTEST2025',
   fullName: 'Budi Santoso',
+  role: 'Kurir',
   workLocation: 'Jakarta Pusat Hub',
   joinDate: new Date().toISOString(),
   position: 'Kurir Senior',
@@ -52,6 +53,7 @@ const MotivationalQuotes = [
 ];
 
 export default function DashboardPage() {
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [dailyInput, setDailyInput] = useState<DailyPackageInput | null>(null);
   const [managedPackages, setManagedPackages] = useState<PackageItem[]>([]);
   const [inTransitPackages, setInTransitPackages] = useState<PackageItem[]>([]);
@@ -85,6 +87,24 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      try {
+        const parsedUser = JSON.parse(userDataString) as UserProfile;
+        setCurrentUser(parsedUser);
+      } catch (error) {
+        console.error("Failed to parse user data from localStorage for dashboard", error);
+        // Handle error, maybe redirect to login
+      }
+    } else {
+        // Redirect to login if no user data
+    }
+  }, []);
+
+
+  useEffect(() => {
+    if (currentUser?.role !== 'Kurir') return; // Only Kurirs need check-in for this page
+
     const updateCheckInStatus = () => {
       const checkedInDate = localStorage.getItem('courierCheckedInToday');
       const today = new Date().toISOString().split('T')[0];
@@ -104,7 +124,7 @@ export default function DashboardPage() {
       window.removeEventListener('focus', updateCheckInStatus);
       document.removeEventListener('visibilitychange', updateCheckInStatus);
     };
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
@@ -329,8 +349,11 @@ export default function DashboardPage() {
     setReturnLeadReceiverName('');
     setPackagePhotoMap({});
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
-    setIsCourierCheckedIn(false); // Reset check-in status for new day
-    localStorage.removeItem('courierCheckedInToday'); 
+    
+    if (currentUser?.role === 'Kurir') {
+        setIsCourierCheckedIn(false); 
+        localStorage.removeItem('courierCheckedInToday'); 
+    }
     toast({ title: "Hari Baru Dimulai", description: "Semua data telah direset. Selamat bekerja!" });
   };
 
@@ -350,14 +373,13 @@ export default function DashboardPage() {
        return;
     }
   
-    // Simulate resi not found (20% chance if there are packages to scan)
     if (inTransitPackages.some(p => p.status === 'in_transit') && Math.random() < 0.2) {
       toast({
         variant: 'destructive',
         title: "Resi Tidak Ditemukan (Simulasi)",
         description: "Nomor resi yang di-scan tidak cocok dengan daftar paket yang sedang diantar.",
       });
-      setIsScanningForDeliveryUpdate(false); // Close scan modal
+      setIsScanningForDeliveryUpdate(false);
       return;
     }
 
@@ -368,7 +390,7 @@ export default function DashboardPage() {
       setInTransitPackages(prevPackages =>
         prevPackages.map(pkg =>
           pkg.id === packageToUpdate.id
-            ? { ...pkg, lastUpdateTime: nowISO }
+            ? { ...pkg, lastUpdateTime: nowISO } 
             : pkg
         )
       );
@@ -382,8 +404,8 @@ export default function DashboardPage() {
   };
 
 
-  const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length + pendingReturnPackages.filter(p => p.status === 'returned').length; // Assuming 'returned' also counts as "handled"
-  const pendingCountOnFinish = pendingReturnPackages.filter(p => p.status === 'pending_return').length; // Use this for the final report
+  const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length + pendingReturnPackages.filter(p => p.status === 'returned').length;
+  const pendingCountOnFinish = pendingReturnPackages.filter(p => p.status === 'pending_return').length; 
   const dailyTotalForChart = (dailyInput?.totalPackages || 0) === 0 ? 1 : (dailyInput?.totalPackages || 0);
 
   const performanceData = [
@@ -391,11 +413,17 @@ export default function DashboardPage() {
     { name: 'Pending/Retur', value: pendingCountOnFinish, color: 'hsl(var(--chart-2))' },
   ];
 
-  if (isCourierCheckedIn === null) {
+  if (!currentUser) {
+    return <div className="flex justify-center items-center h-screen"><p>Memuat data pengguna...</p></div>;
+  }
+  
+  // Kurir Specific Loading for Check-in
+  if (currentUser.role === 'Kurir' && isCourierCheckedIn === null) {
     return <div className="flex justify-center items-center h-screen"><p>Memeriksa status absensi...</p></div>;
   }
 
-  if (dayFinished) {
+  // Kurir Finished Day View
+  if (currentUser.role === 'Kurir' && dayFinished) {
     return (
       <div className="space-y-6">
         <Card className="shadow-xl">
@@ -460,327 +488,346 @@ export default function DashboardPage() {
     );
   }
 
-
-  return (
-    <div className="space-y-8">
-      <Card className="shadow-lg">
-        <CardHeader className="flex flex-row items-center space-x-4">
-          <Avatar className="h-16 w-16">
-            <AvatarImage src={mockCourier.avatarUrl} alt={mockCourier.fullName} data-ai-hint="man face"/>
-            <AvatarFallback>{mockCourier.fullName.split(" ").map(n=>n[0]).join("")}</AvatarFallback>
-          </Avatar>
-          <div>
-            <CardTitle className="text-2xl">{mockCourier.fullName}</CardTitle>
-            <CardDescription>{mockCourier.id} - {mockCourier.workLocation}</CardDescription>
-          </div>
-        </CardHeader>
-      </Card>
-
-      {!isCourierCheckedIn && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Anda Belum Melakukan Absen!</AlertTitle>
-          <AlertDescription>
-            Silakan lakukan <Link href="/attendance" className="font-bold underline hover:text-destructive-foreground">Check-In</Link> terlebih dahulu untuk memulai pekerjaan dan menginput data paket.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {!dailyInput && isCourierCheckedIn && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center"><PackagePlus className="mr-2 h-6 w-6 text-primary" /> Data Input Paket Harian</CardTitle>
-            <CardDescription>Masukkan jumlah total paket yang akan dibawa hari ini.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handlePackageFormSubmit(handleDailyPackageInputSubmit)} className="space-y-4">
-              <div>
-                <Label htmlFor="totalPackages">Total Paket Dibawa</Label>
-                <Input id="totalPackages" type="number" {...register("totalPackages")} placeholder="cth: 50" />
-                {errors.totalPackages && <p className="text-destructive text-sm mt-1">{errors.totalPackages.message}</p>}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="codPackages">Total Paket COD</Label>
-                  <Input id="codPackages" type="number" {...register("codPackages")} placeholder="cth: 20" />
-                   {errors.codPackages && <p className="text-destructive text-sm mt-1">{errors.codPackages.message}</p>}
-                </div>
-                <div>
-                  <Label htmlFor="nonCodPackages">Total Paket Non-COD</Label>
-                  <Input id="nonCodPackages" type="number" {...register("nonCodPackages")} placeholder="cth: 30" />
-                  {errors.nonCodPackages && <p className="text-destructive text-sm mt-1">{errors.nonCodPackages.message}</p>}
-                </div>
-              </div>
-              {errors.totalPackages && errors.totalPackages.type === "refine" && <p className="text-destructive text-sm mt-1">{errors.totalPackages.message}</p>}
-              <Button type="submit" className="w-full">Input Data Paket</Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      {dailyInput && !deliveryStarted && isCourierCheckedIn && (
-        <>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center"><ScanLine className="mr-2 h-6 w-6 text-primary" /> Scan & Kelola Paket</CardTitle>
-            <CardDescription>Scan barcode atau input manual nomor resi. Total {managedPackages.length}/{dailyInput.totalPackages} paket.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-2">
-                 <Button onClick={handleStartScan} disabled={managedPackages.length >= dailyInput.totalPackages} className="flex-1">
-                    <Camera className="mr-2 h-4 w-4" /> Mulai Scan Barcode
-                </Button>
-            </div>
-            <div className="space-y-2">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <Input
-                        type="text"
-                        placeholder="Input manual nomor resi"
-                        value={currentScannedResi}
-                        onChange={(e) => setCurrentScannedResi(e.target.value)}
-                        disabled={managedPackages.length >= dailyInput.totalPackages}
-                        className="flex-grow"
-                    />
-                    <Button onClick={handleManualResiAdd} variant="outline" disabled={managedPackages.length >= dailyInput.totalPackages} className="sm:w-auto w-full">Tambah</Button>
-                </div>
-                <div className="flex items-center space-x-2 pt-1">
-                    <Checkbox
-                        id="isManualCOD"
-                        checked={isManualCOD}
-                        onCheckedChange={(checked) => setIsManualCOD(checked as boolean)}
-                        disabled={managedPackages.length >= dailyInput.totalPackages}
-                    />
-                    <Label htmlFor="isManualCOD" className="text-sm font-normal text-muted-foreground">
-                        Paket COD
-                    </Label>
-                </div>
-            </div>
-
-
-            {isScanning && (
-              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <Card className="w-[calc(100%-2rem)] max-w-md">
-                  <CardHeader>
-                    <CardTitle>Scan Barcode Paket</CardTitle>
-                    <CardDescription>Arahkan kamera ke barcode paket.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
-                    <canvas ref={photoCanvasRef} style={{display: 'none'}} />
-                    {hasCameraPermission === false && (
-                      <Alert variant="destructive" className="mt-2">
-                        <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
-                        <AlertDescription>Mohon izinkan akses kamera.</AlertDescription>
-                      </Alert>
-                    )}
-                    {hasCameraPermission === null && <p>Meminta izin kamera...</p>}
-                  </CardContent>
-                  <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
-                    <Button variant="outline" onClick={() => setIsScanning(false)} className="w-full sm:w-auto">Tutup</Button>
-                    <Button onClick={handleSimulateScan} disabled={!hasCameraPermission} className="w-full sm:w-auto">
-                        <Camera className="mr-2 h-4 w-4" /> Ambil Gambar (Simulasi Scan)
-                    </Button>
-                  </CardFooter>
-                </Card>
-              </div>
-            )}
-
-            {managedPackages.length > 0 && (
-              <div className="space-y-2 max-h-60 overflow-y-auto p-1 border rounded-md">
-                <h3 className="font-semibold text-muted-foreground px-2">Paket Diproses ({managedPackages.length}):</h3>
-                {managedPackages.map(pkg => (
-                  <div key={pkg.id} className="flex items-center justify-between p-2 bg-card-foreground/5 rounded-md">
-                    <span className="text-sm break-all">{pkg.id} ({pkg.isCOD ? 'COD' : 'Non-COD'}) - <span className="italic text-xs text-primary">Proses</span></span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive flex-shrink-0" onClick={() => handleDeleteManagedPackage(pkg.id)}>
-                      <Trash2 size={16} />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <Progress value={(managedPackages.length / dailyInput.totalPackages) * 100} className="w-full h-2.5" />
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleStartDelivery} className="w-full" disabled={managedPackages.length !== dailyInput.totalPackages}>
-              Mulai Pengantaran ({managedPackages.length}/{dailyInput.totalPackages})
-            </Button>
-          </CardFooter>
-        </Card>
-        </>
-      )}
-
-      {deliveryStarted && inTransitPackages.length > 0 && isCourierCheckedIn && (
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                <div className="flex-grow">
-                    <CardTitle className="flex items-center"><PackageCheck className="mr-2 h-6 w-6 text-green-500" /> Sedang Dalam Pengantaran</CardTitle>
-                    <CardDescription>Daftar paket yang sedang diantarkan. {inTransitPackages.filter(p => p.status === 'in_transit').length} paket belum terkirim.</CardDescription>
-                </div>
-                <Button 
-                    onClick={handleOpenDeliveryScan} 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full sm:w-auto"
-                    disabled={!inTransitPackages.some(p => p.status === 'in_transit')}>
-                  <ScanLine className="mr-2 h-4 w-4" /> Scan Update Kirim
-                </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
-            {[...inTransitPackages]
-                .sort((a, b) => {
-                  if (a.status === 'delivered' && b.status !== 'delivered') return -1;
-                  if (a.status !== 'delivered' && b.status === 'delivered') return 1;
-                  return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime();
-                })
-                .map(pkg => (
-              <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-1">
-                  <p className="font-semibold break-all">{pkg.id} <span className={`text-xs px-2 py-0.5 rounded-full ${pkg.isCOD ? 'bg-yellow-400/20 text-yellow-600 dark:text-yellow-300' : 'bg-blue-400/20 text-blue-600 dark:text-blue-300'}`}>{pkg.isCOD ? 'COD' : 'Non-COD'}</span></p>
-                  {pkg.status === 'delivered' ? (
-                     <span className="text-xs text-green-600 dark:text-green-400 flex items-center flex-shrink-0"><CheckCircle size={14} className="mr-1"/> Terkirim</span>
-                  ) : (
-                     <span className="text-xs text-orange-500 dark:text-orange-400 flex-shrink-0">Dalam Perjalanan</span>
-                  )}
-                </div>
-                {pkg.status === 'in_transit' && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <Button variant="outline" size="sm" onClick={() => handleOpenPackageCamera(pkg.id)} className="flex-1">
-                      <Camera size={16} className="mr-1" /> Foto Bukti & Nama Penerima
-                    </Button>
-                  </div>
-                )}
-                {pkg.deliveryProofPhotoUrl && (
-                  <div className="mt-2">
-                    <p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p>
-                    <div className="flex items-end gap-2">
-                        <img src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" data-ai-hint="package at door"/>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}>
-                            <Trash2 size={16} />
-                        </Button>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            ))}
-          </CardContent>
-           {capturingForPackageId && (
-              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <Card className="w-[calc(100%-2rem)] max-w-md">
-                  <CardHeader>
-                    <CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle>
-                    <CardDescription>Ambil foto dan masukkan nama penerima.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
-                    <canvas ref={photoCanvasRef} style={{display: 'none'}} />
-                     {hasCameraPermission === false && (
-                      <Alert variant="destructive" className="mt-2">
-                        <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
-                      </Alert>
-                    )}
-                     <div>
-                        <Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label>
-                        <Input
-                            id="photoRecipientName"
-                            type="text"
-                            placeholder="Masukkan nama penerima"
-                            value={photoRecipientName}
-                            onChange={(e) => setPhotoRecipientName(e.target.value)}
-                        />
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
-                    <Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button>
-                    <Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim()} className="w-full sm:w-auto">
-                        <Camera className="mr-2 h-4 w-4" /> Ambil & Simpan
-                    </Button>
-                  </CardFooter>
-                </Card>
-              </div>
-            )}
-            {isScanningForDeliveryUpdate && (
-              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <Card className="w-[calc(100%-2rem)] max-w-md">
-                  <CardHeader>
-                    <CardTitle>Scan Resi Paket untuk Update Pengiriman</CardTitle>
-                    <CardDescription>Arahkan kamera ke barcode paket yang akan diupdate. (Simulasi)</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
-                    <canvas ref={photoCanvasRef} style={{display: 'none'}} />
-                    {hasCameraPermission === false && (
-                      <Alert variant="destructive" className="mt-2">
-                        <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
-                        <AlertDescription>Mohon izinkan akses kamera.</AlertDescription>
-                      </Alert>
-                    )}
-                    {hasCameraPermission === null && <p>Meminta izin kamera...</p>}
-                  </CardContent>
-                  <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
-                    <Button variant="outline" onClick={() => setIsScanningForDeliveryUpdate(false)} className="w-full sm:w-auto">Tutup</Button>
-                    <Button onClick={handleSimulateDeliveryScanAndIdentify} disabled={!hasCameraPermission} className="w-full sm:w-auto">
-                        <ScanLine className="mr-2 h-4 w-4" /> Identifikasi (Simulasi)
-                    </Button>
-                  </CardFooter>
-                </Card>
-              </div>
-            )}
-          <CardFooter>
-             <Button onClick={handleFinishDay} className="w-full" variant="destructive">
-                Selesaikan Pengantaran Hari Ini
-             </Button>
-          </CardFooter>
-        </Card>
-      )}
-
-      {deliveryStarted && pendingReturnPackages.length > 0 && !dayFinished && isCourierCheckedIn && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle>
-            <CardDescription>{pendingReturnPackages.length} paket belum terkirim dan perlu di-retur.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+  // Kurir Main Dashboard View
+  if (currentUser.role === 'Kurir') {
+    return (
+      <div className="space-y-8">
+        <Card className="shadow-lg">
+          <CardHeader className="flex flex-row items-center space-x-4">
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={currentUser.avatarUrl || mockKurirProfileData.avatarUrl} alt={currentUser.fullName} data-ai-hint="man face"/>
+              <AvatarFallback>{currentUser.fullName.split(" ").map(n=>n[0]).join("")}</AvatarFallback>
+            </Avatar>
             <div>
-                <Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label>
-                <Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />
-                {returnProofPhoto && <p className="text-xs text-green-500 dark:text-green-400 mt-1">{returnProofPhoto.name} dipilih.</p>}
+              <CardTitle className="text-2xl">{currentUser.fullName}</CardTitle>
+              <CardDescription>{currentUser.id} - {mockKurirProfileData.workLocation}</CardDescription>
             </div>
-            <div>
-                <Label htmlFor="returnLeadReceiverName">Nama Leader Serah Terima <span className="text-destructive">*</span></Label>
-                <Input
-                    id="returnLeadReceiverName"
-                    type="text"
-                    placeholder="Nama Leader/Supervisor"
-                    value={returnLeadReceiverName}
-                    onChange={(e) => setReturnLeadReceiverName(e.target.value)}
-                />
-            </div>
-            <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
-                <h4 className="text-sm font-medium text-muted-foreground">Daftar Resi Pending:</h4>
-                {pendingReturnPackages.map(pkg => (
-                    <p key={pkg.id} className="text-sm text-muted-foreground break-all">{pkg.id} - <span className="italic">Pending Retur</span></p>
-                ))}
-            </div>
-          </CardContent>
-           <CardFooter>
-             <Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={!returnProofPhoto || !returnLeadReceiverName.trim()}>
-                Konfirmasi Selesai dengan Paket Pending
-             </Button>
-           </CardFooter>
+          </CardHeader>
         </Card>
-      )}
 
-      {!dayFinished && isCourierCheckedIn && (
-          <Card className="bg-gradient-to-r from-primary/10 to-accent/10 dark:from-primary/20 dark:to-accent/20 border-transparent">
-            <CardContent className="pt-6">
-                <p className="text-center text-lg italic text-foreground/70 dark:text-primary-foreground/80">{motivationalQuote}</p>
+        {!isCourierCheckedIn && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Anda Belum Melakukan Absen!</AlertTitle>
+            <AlertDescription>
+              Silakan lakukan <Link href="/attendance" className="font-bold underline hover:text-destructive-foreground">Check-In</Link> terlebih dahulu untuk memulai pekerjaan dan menginput data paket.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!dailyInput && isCourierCheckedIn && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center"><PackagePlus className="mr-2 h-6 w-6 text-primary" /> Data Input Paket Harian</CardTitle>
+              <CardDescription>Masukkan jumlah total paket yang akan dibawa hari ini.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handlePackageFormSubmit(handleDailyPackageInputSubmit)} className="space-y-4">
+                <div>
+                  <Label htmlFor="totalPackages">Total Paket Dibawa</Label>
+                  <Input id="totalPackages" type="number" {...register("totalPackages")} placeholder="cth: 50" />
+                  {errors.totalPackages && <p className="text-destructive text-sm mt-1">{errors.totalPackages.message}</p>}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="codPackages">Total Paket COD</Label>
+                    <Input id="codPackages" type="number" {...register("codPackages")} placeholder="cth: 20" />
+                    {errors.codPackages && <p className="text-destructive text-sm mt-1">{errors.codPackages.message}</p>}
+                  </div>
+                  <div>
+                    <Label htmlFor="nonCodPackages">Total Paket Non-COD</Label>
+                    <Input id="nonCodPackages" type="number" {...register("nonCodPackages")} placeholder="cth: 30" />
+                    {errors.nonCodPackages && <p className="text-destructive text-sm mt-1">{errors.nonCodPackages.message}</p>}
+                  </div>
+                </div>
+                {errors.totalPackages && errors.totalPackages.type === "refine" && <p className="text-destructive text-sm mt-1">{errors.totalPackages.message}</p>}
+                <Button type="submit" className="w-full">Input Data Paket</Button>
+              </form>
             </CardContent>
           </Card>
-      )}
+        )}
 
+        {dailyInput && !deliveryStarted && isCourierCheckedIn && (
+          <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center"><ScanLine className="mr-2 h-6 w-6 text-primary" /> Scan & Kelola Paket</CardTitle>
+              <CardDescription>Scan barcode atau input manual nomor resi. Total {managedPackages.length}/{dailyInput.totalPackages} paket.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-2">
+                  <Button onClick={handleStartScan} disabled={managedPackages.length >= dailyInput.totalPackages} className="flex-1">
+                      <Camera className="mr-2 h-4 w-4" /> Mulai Scan Barcode
+                  </Button>
+              </div>
+              <div className="space-y-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <Input
+                          type="text"
+                          placeholder="Input manual nomor resi"
+                          value={currentScannedResi}
+                          onChange={(e) => setCurrentScannedResi(e.target.value)}
+                          disabled={managedPackages.length >= dailyInput.totalPackages}
+                          className="flex-grow"
+                      />
+                      <Button onClick={handleManualResiAdd} variant="outline" disabled={managedPackages.length >= dailyInput.totalPackages} className="sm:w-auto w-full">Tambah</Button>
+                  </div>
+                  <div className="flex items-center space-x-2 pt-1">
+                      <Checkbox
+                          id="isManualCOD"
+                          checked={isManualCOD}
+                          onCheckedChange={(checked) => setIsManualCOD(checked as boolean)}
+                          disabled={managedPackages.length >= dailyInput.totalPackages}
+                      />
+                      <Label htmlFor="isManualCOD" className="text-sm font-normal text-muted-foreground">
+                          Paket COD
+                      </Label>
+                  </div>
+              </div>
+
+
+              {isScanning && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                  <Card className="w-[calc(100%-2rem)] max-w-xl">
+                    <CardHeader>
+                      <CardTitle>Scan Barcode Paket</CardTitle>
+                      <CardDescription>Arahkan kamera ke barcode paket.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+                      <canvas ref={photoCanvasRef} style={{display: 'none'}} />
+                      {hasCameraPermission === false && (
+                        <Alert variant="destructive" className="mt-2">
+                          <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
+                          <AlertDescription>Mohon izinkan akses kamera.</AlertDescription>
+                        </Alert>
+                      )}
+                      {hasCameraPermission === null && <p>Meminta izin kamera...</p>}
+                    </CardContent>
+                    <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
+                      <Button variant="outline" onClick={() => setIsScanning(false)} className="w-full sm:w-auto">Tutup</Button>
+                      <Button onClick={handleSimulateScan} disabled={!hasCameraPermission} className="w-full sm:w-auto">
+                          <Camera className="mr-2 h-4 w-4" /> Ambil Gambar (Simulasi Scan)
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                </div>
+              )}
+
+              {managedPackages.length > 0 && (
+                <div className="space-y-2 max-h-60 overflow-y-auto p-1 border rounded-md">
+                  <h3 className="font-semibold text-muted-foreground px-2">Paket Diproses ({managedPackages.length}):</h3>
+                  {managedPackages.map(pkg => (
+                    <div key={pkg.id} className="flex items-center justify-between p-2 bg-card-foreground/5 rounded-md">
+                      <span className="text-sm break-all">{pkg.id} ({pkg.isCOD ? 'COD' : 'Non-COD'}) - <span className="italic text-xs text-primary">Proses</span></span>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive flex-shrink-0" onClick={() => handleDeleteManagedPackage(pkg.id)}>
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Progress value={(managedPackages.length / dailyInput.totalPackages) * 100} className="w-full h-2.5" />
+            </CardContent>
+            <CardFooter>
+              <Button onClick={handleStartDelivery} className="w-full" disabled={managedPackages.length !== dailyInput.totalPackages}>
+                Mulai Pengantaran ({managedPackages.length}/{dailyInput.totalPackages})
+              </Button>
+            </CardFooter>
+          </Card>
+          </>
+        )}
+
+        {deliveryStarted && inTransitPackages.length > 0 && isCourierCheckedIn && (
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <div className="flex-grow">
+                      <CardTitle className="flex items-center"><PackageCheck className="mr-2 h-6 w-6 text-green-500" /> Sedang Dalam Pengantaran</CardTitle>
+                      <CardDescription>Daftar paket yang sedang diantarkan. {inTransitPackages.filter(p => p.status === 'in_transit').length} paket belum terkirim.</CardDescription>
+                  </div>
+                  <Button 
+                      onClick={handleOpenDeliveryScan} 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full sm:w-auto"
+                      disabled={!inTransitPackages.some(p => p.status === 'in_transit')}>
+                    <ScanLine className="mr-2 h-4 w-4" /> Scan Update Kirim
+                  </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
+              {[...inTransitPackages]
+                  .sort((a, b) => {
+                    if (a.status === 'delivered' && b.status !== 'delivered') return -1;
+                    if (a.status !== 'delivered' && b.status === 'delivered') return 1;
+                    return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime();
+                  })
+                  .map(pkg => (
+                <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-1">
+                    <p className="font-semibold break-all">{pkg.id} <span className={`text-xs px-2 py-0.5 rounded-full ${pkg.isCOD ? 'bg-yellow-400/20 text-yellow-600 dark:text-yellow-300' : 'bg-blue-400/20 text-blue-600 dark:text-blue-300'}`}>{pkg.isCOD ? 'COD' : 'Non-COD'}</span></p>
+                    {pkg.status === 'delivered' ? (
+                      <span className="text-xs text-green-600 dark:text-green-400 flex items-center flex-shrink-0"><CheckCircle size={14} className="mr-1"/> Terkirim</span>
+                    ) : (
+                      <span className="text-xs text-orange-500 dark:text-orange-400 flex-shrink-0">Dalam Perjalanan</span>
+                    )}
+                  </div>
+                  {pkg.status === 'in_transit' && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <Button variant="outline" size="sm" onClick={() => handleOpenPackageCamera(pkg.id)} className="flex-1">
+                        <Camera size={16} className="mr-1" /> Foto Bukti & Nama Penerima
+                      </Button>
+                    </div>
+                  )}
+                  {pkg.deliveryProofPhotoUrl && (
+                    <div className="mt-2">
+                      <p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p>
+                      <div className="flex items-end gap-2">
+                          <img src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" data-ai-hint="package at door"/>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}>
+                              <Trash2 size={16} />
+                          </Button>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </CardContent>
+            {capturingForPackageId && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                  <Card className="w-[calc(100%-2rem)] max-w-xl">
+                    <CardHeader>
+                      <CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle>
+                      <CardDescription>Ambil foto dan masukkan nama penerima.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+                      <canvas ref={photoCanvasRef} style={{display: 'none'}} />
+                      {hasCameraPermission === false && (
+                        <Alert variant="destructive" className="mt-2">
+                          <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
+                        </Alert>
+                      )}
+                      <div>
+                          <Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label>
+                          <Input
+                              id="photoRecipientName"
+                              type="text"
+                              placeholder="Masukkan nama penerima"
+                              value={photoRecipientName}
+                              onChange={(e) => setPhotoRecipientName(e.target.value)}
+                          />
+                      </div>
+                    </CardContent>
+                    <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
+                      <Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button>
+                      <Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim()} className="w-full sm:w-auto">
+                          <Camera className="mr-2 h-4 w-4" /> Ambil & Simpan
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                </div>
+              )}
+              {isScanningForDeliveryUpdate && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                  <Card className="w-[calc(100%-2rem)] max-w-xl">
+                    <CardHeader>
+                      <CardTitle>Scan Resi Paket untuk Update Pengiriman</CardTitle>
+                      <CardDescription>Arahkan kamera ke barcode paket yang akan diupdate. (Simulasi)</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+                      <canvas ref={photoCanvasRef} style={{display: 'none'}} />
+                      {hasCameraPermission === false && (
+                        <Alert variant="destructive" className="mt-2">
+                          <AlertTitle>Akses Kamera Dibutuhkan</AlertTitle>
+                          <AlertDescription>Mohon izinkan akses kamera.</AlertDescription>
+                        </Alert>
+                      )}
+                      {hasCameraPermission === null && <p>Meminta izin kamera...</p>}
+                    </CardContent>
+                    <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
+                      <Button variant="outline" onClick={() => setIsScanningForDeliveryUpdate(false)} className="w-full sm:w-auto">Tutup</Button>
+                      <Button onClick={handleSimulateDeliveryScanAndIdentify} disabled={!hasCameraPermission} className="w-full sm:w-auto">
+                          <ScanLine className="mr-2 h-4 w-4" /> Identifikasi (Simulasi)
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                </div>
+              )}
+            <CardFooter>
+              <Button onClick={handleFinishDay} className="w-full" variant="destructive">
+                  Selesaikan Pengantaran Hari Ini
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+
+        {deliveryStarted && pendingReturnPackages.length > 0 && !dayFinished && isCourierCheckedIn && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle>
+              <CardDescription>{pendingReturnPackages.length} paket belum terkirim dan perlu di-retur.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                  <Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label>
+                  <Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />
+                  {returnProofPhoto && <p className="text-xs text-green-500 dark:text-green-400 mt-1">{returnProofPhoto.name} dipilih.</p>}
+              </div>
+              <div>
+                  <Label htmlFor="returnLeadReceiverName">Nama Leader Serah Terima <span className="text-destructive">*</span></Label>
+                  <Input
+                      id="returnLeadReceiverName"
+                      type="text"
+                      placeholder="Nama Leader/Supervisor"
+                      value={returnLeadReceiverName}
+                      onChange={(e) => setReturnLeadReceiverName(e.target.value)}
+                  />
+              </div>
+              <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
+                  <h4 className="text-sm font-medium text-muted-foreground">Daftar Resi Pending:</h4>
+                  {pendingReturnPackages.map(pkg => (
+                      <p key={pkg.id} className="text-sm text-muted-foreground break-all">{pkg.id} - <span className="italic">Pending Retur</span></p>
+                  ))}
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={!returnProofPhoto || !returnLeadReceiverName.trim()}>
+                  Konfirmasi Selesai dengan Paket Pending
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+
+        {!dayFinished && isCourierCheckedIn && (
+            <Card className="bg-gradient-to-r from-primary/10 to-accent/10 dark:from-primary/20 dark:to-accent/20 border-transparent">
+              <CardContent className="pt-6">
+                  <p className="text-center text-lg italic text-foreground/70 dark:text-primary-foreground/80">{motivationalQuote}</p>
+              </CardContent>
+            </Card>
+        )}
+
+      </div>
+    );
+  }
+
+  // Fallback for non-Kurir roles or if Kurir hasn't reached specific states
+  return (
+    <div className="space-y-6">
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-2xl text-primary flex items-center">
+            <UserCog className="mr-2 h-7 w-7" /> Selamat Datang, {currentUser.fullName}!
+          </CardTitle>
+          <CardDescription>Anda login sebagai {currentUser.role}.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p>Konten dashboard spesifik untuk peran Anda akan ditampilkan di sini.</p>
+          {/* Add role-specific summary widgets or links here in the future */}
+        </CardContent>
+      </Card>
     </div>
   );
 }
-

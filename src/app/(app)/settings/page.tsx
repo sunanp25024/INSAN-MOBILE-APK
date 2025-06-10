@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,36 +10,47 @@ import { Switch } from '@/components/ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, Lock, Bell, Palette, Save } from 'lucide-react';
-
-// Mock user settings data
-const mockUserSettings = {
-  fullName: "Ahmad Subagja",
-  email: "ahmad.s@example.com",
-  avatarUrl: "https://placehold.co/150x150.png",
-  notifications: {
-    appUpdates: true,
-    performanceReports: false,
-  },
-  theme: "dark", // 'dark' or 'light'
-};
+import type { UserProfile } from '@/types';
 
 export default function SettingsPage() {
   const { toast } = useToast();
-  const [fullName, setFullName] = useState(mockUserSettings.fullName);
-  const [email, setEmail] = useState(mockUserSettings.email);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(mockUserSettings.avatarUrl);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  const [appUpdatesNotif, setAppUpdatesNotif] = useState(mockUserSettings.notifications.appUpdates);
-  const [perfReportsNotif, setPerfReportsNotif] = useState(mockUserSettings.notifications.performanceReports);
+  // Mock notification settings, replace with actual user preferences if available
+  const [appUpdatesNotif, setAppUpdatesNotif] = useState(true);
+  const [perfReportsNotif, setPerfReportsNotif] = useState(false);
   
-  // Theme switching is typically handled at a higher level (e.g., context or root layout)
-  // This is a placeholder for UI representation
-  const [currentTheme, setCurrentTheme] = useState(mockUserSettings.theme);
+  const [currentTheme, setCurrentTheme] = useState("dark"); // Default for SPX, or load from user preference
+
+  useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      try {
+        const parsedUser = JSON.parse(userDataString) as UserProfile;
+        setCurrentUser(parsedUser);
+        setFullName(parsedUser.fullName || '');
+        setEmail(parsedUser.email || '');
+        setAvatarPreview(parsedUser.avatarUrl || null);
+        // Load theme from localStorage if available, or use a default
+        const savedTheme = localStorage.getItem('appTheme') || 'dark';
+        setCurrentTheme(savedTheme);
+        document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+
+      } catch (error) {
+        console.error("Failed to parse user data for settings", error);
+      }
+    }
+  }, []);
+
 
   const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -50,7 +62,13 @@ export default function SettingsPage() {
 
   const handleProfileSave = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate API call
+    // Simulate API call to save profile
+    // Update localStorage if necessary
+    if (currentUser) {
+        const updatedUser = { ...currentUser, fullName, email, avatarUrl: avatarPreview || currentUser.avatarUrl };
+        localStorage.setItem('loggedInUser', JSON.stringify(updatedUser));
+        setCurrentUser(updatedUser);
+    }
     toast({ title: "Profil Disimpan", description: "Informasi profil Anda telah diperbarui." });
   };
 
@@ -64,7 +82,7 @@ export default function SettingsPage() {
        toast({ title: "Error", description: "Password minimal 6 karakter.", variant: "destructive" });
       return;
     }
-    // Simulate API call
+    // Simulate API call to change password
     toast({ title: "Password Diganti", description: "Password Anda telah berhasil diubah." });
     setCurrentPassword('');
     setNewPassword('');
@@ -72,9 +90,22 @@ export default function SettingsPage() {
   };
 
   const handleNotificationSave = () => {
+     // Simulate saving notification preferences
      toast({ title: "Notifikasi Disimpan", description: "Pengaturan notifikasi Anda telah diperbarui." });
   };
 
+  const toggleTheme = (theme: 'light' | 'dark') => {
+    setCurrentTheme(theme);
+    localStorage.setItem('appTheme', theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    toast({ title: "Tema Diubah", description: `Tema aplikasi diubah ke mode ${theme === 'dark' ? 'Gelap' : 'Terang'}.`})
+  }
+
+  if (!currentUser) {
+    return <div className="flex h-screen items-center justify-center">Loading settings...</div>;
+  }
+  
+  const userInitials = fullName.split(" ").map(n => n[0]).join("").toUpperCase() || "XX";
 
   return (
     <div className="space-y-8">
@@ -94,8 +125,8 @@ export default function SettingsPage() {
           <form onSubmit={handleProfileSave} className="space-y-6">
             <div className="flex flex-col items-center space-y-4">
               <Avatar className="h-24 w-24">
-                <AvatarImage src={avatarPreview || undefined} alt={fullName} data-ai-hint="man face"/>
-                <AvatarFallback>{fullName.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                <AvatarImage src={avatarPreview || `https://placehold.co/150x150.png?text=${userInitials}`} alt={fullName} data-ai-hint="man face"/>
+                <AvatarFallback>{userInitials}</AvatarFallback>
               </Avatar>
               <Input id="avatarUpload" type="file" accept="image/*" onChange={handleAvatarChange} className="text-sm max-w-xs" />
             </div>
@@ -121,15 +152,15 @@ export default function SettingsPage() {
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
               <Label htmlFor="currentPassword">Password Saat Ini</Label>
-              <Input id="currentPassword" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+              <Input id="currentPassword" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Masukkan password lama" />
             </div>
             <div>
               <Label htmlFor="newPassword">Password Baru</Label>
-              <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Masukkan password baru" />
             </div>
             <div>
               <Label htmlFor="confirmPassword">Konfirmasi Password Baru</Label>
-              <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+              <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Konfirmasi password baru" />
             </div>
             <Button type="submit" className="w-full sm:w-auto"><Save className="mr-2 h-4 w-4"/> Ganti Password</Button>
           </form>
@@ -155,7 +186,7 @@ export default function SettingsPage() {
             <Label htmlFor="perfReports" className="flex flex-col space-y-1">
               <span>Laporan Performa Mingguan</span>
               <span className="font-normal leading-snug text-muted-foreground">
-                Dapatkan ringkasan performa Anda setiap minggu.
+                Dapatkan ringkasan performa Anda setiap minggu (jika relevan).
               </span>
             </Label>
             <Switch id="perfReports" checked={perfReportsNotif} onCheckedChange={setPerfReportsNotif} />
@@ -164,18 +195,17 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
       
-      {/* Theme Settings (Placeholder) */}
+      {/* Theme Settings */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary"/> Pengaturan Tema</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-           <p className="text-muted-foreground text-sm">Pengaturan tema aplikasi (Terang/Gelap) biasanya dikelola secara global. Fitur ini adalah placeholder.</p>
+           <p className="text-muted-foreground text-sm">Pilih tema tampilan aplikasi.</p>
            <div className="flex items-center space-x-2">
-             <Button variant={currentTheme === 'light' ? 'default' : 'outline'} onClick={() => setCurrentTheme('light')}>Terang</Button>
-             <Button variant={currentTheme === 'dark' ? 'default' : 'outline'} onClick={() => setCurrentTheme('dark')}>Gelap</Button>
+             <Button variant={currentTheme === 'light' ? 'default' : 'outline'} onClick={() => toggleTheme('light')}>Terang</Button>
+             <Button variant={currentTheme === 'dark' ? 'default' : 'outline'} onClick={() => toggleTheme('dark')}>Gelap</Button>
            </div>
-           <p className="text-xs text-muted-foreground">Tema saat ini: {currentTheme === 'dark' ? 'Gelap (Default untuk Mitra Kurir SPX)' : 'Terang'}</p>
         </CardContent>
       </Card>
 

@@ -1,27 +1,25 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
-import { CheckCircle, XCircle, Clock, CalendarDays, BarChartHorizontalBig, CalendarIcon as LucideCalendarIcon, ChevronsUpDown, BarChart as BarChartIcon, TrendingUp } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, CalendarDays, BarChartHorizontalBig, CalendarIcon as LucideCalendarIcon, ChevronsUpDown, BarChart as BarChartIcon, TrendingUp, AlertCircle } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import type { AttendanceRecord } from '@/types';
+import type { AttendanceRecord, UserProfile } from '@/types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate as getDayOfMonthDateFns } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import type { Locale } from "date-fns";
 
-// Mock data
 const mockPastAttendance: AttendanceRecord[] = [
   { date: new Date(Date.now() - 86400000 * 3).toISOString(), checkInTime: '08:05', checkOutTime: '17:02', status: 'Present' },
   { date: new Date(Date.now() - 86400000 * 2).toISOString(), status: 'Absent' },
   { date: new Date(Date.now() - 86400000 * 1).toISOString(), checkInTime: '07:58', checkOutTime: '17:10', status: 'Present' },
-  // Add more mock data for the current month for better chart testing
   { date: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(), checkInTime: '08:00', checkOutTime: '17:00', status: 'Present' },
   { date: new Date(new Date().getFullYear(), new Date().getMonth(), 2).toISOString(), checkInTime: '08:00', checkOutTime: '17:00', status: 'Present' },
   { date: new Date(new Date().getFullYear(), new Date().getMonth(), 3).toISOString(), status: 'Absent' },
@@ -64,6 +62,7 @@ const generateMonthlyAttendanceData = (
 
 
 export default function AttendancePage() {
+  const [currentUser, setCurrentUser] = React.useState<UserProfile | null>(null);
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>(mockPastAttendance);
@@ -73,13 +72,24 @@ export default function AttendancePage() {
   const todayISO = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      try {
+        setCurrentUser(JSON.parse(userDataString) as UserProfile);
+      } catch (error) { console.error("Error parsing user data for attendance page", error); }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (currentUser?.role !== 'Kurir') return;
+
     const existingRecord = attendanceHistory.find(rec => rec.date.startsWith(todayISO));
     if (existingRecord) {
       setTodayRecord(existingRecord);
     } else {
       setTodayRecord({ date: new Date().toISOString(), status: 'Absent' }); 
     }
-  }, [attendanceHistory, todayISO]);
+  }, [attendanceHistory, todayISO, currentUser]);
 
   const handleCheckIn = () => {
     if (todayRecord?.checkInTime) {
@@ -88,7 +98,7 @@ export default function AttendancePage() {
     }
     const now = new Date();
     const newRecord: AttendanceRecord = {
-      ...todayRecord!,
+      ...(todayRecord || { date: now.toISOString(), status: 'Absent' }), // Ensure todayRecord is not null
       date: now.toISOString(),
       checkInTime: now.toTimeString().slice(0, 5),
       status: now.getHours() < 9 ? 'Present' : 'Late', 
@@ -129,6 +139,7 @@ export default function AttendancePage() {
         updatedHistory[existingIndex] = newRecord;
         return updatedHistory;
       }
+      // This case should ideally not happen if check-in is required first
       return [...prev, newRecord]; 
     });
     toast({ title: "Check-Out Berhasil", description: `Anda check-out pukul ${newRecord.checkOutTime}.` });
@@ -189,6 +200,22 @@ export default function AttendancePage() {
   const { chartData: firstHalfMonthAttendance, presentDays: presentDaysFirstHalf } = generateMonthlyAttendanceData(firstDayCurrentMonth, fifteenthCurrentMonth, attendanceHistory, indonesiaLocale);
   const { chartData: secondHalfMonthAttendance, presentDays: presentDaysSecondHalf } = generateMonthlyAttendanceData(sixteenthCurrentMonth, lastDayCurrentMonth, attendanceHistory, indonesiaLocale);
 
+  if (!currentUser) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  }
+
+  if (currentUser.role !== 'Kurir') {
+    return (
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-2xl text-primary flex items-center"><AlertCircle className="mr-2 h-6 w-6"/>Akses Terbatas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>Halaman absensi hanya tersedia untuk peran Kurir.</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -265,7 +292,7 @@ export default function AttendancePage() {
                   setIsCalendarOpen(false);
                 }}
                 className="rounded-md border"
-                disabled={(date) => date > new Date() || date < new Date(new Date().setFullYear(new Date().getFullYear() -1 ))} // Limit to 1 year back for performance
+                disabled={(date) => date > new Date() || date < new Date(new Date().setFullYear(new Date().getFullYear() -1 ))} 
                 initialFocus
                 locale={indonesiaLocale}
               />

@@ -1,30 +1,29 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { ResponsiveContainer, BarChart, LineChart, PieChart, Pie, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
-import { TrendingUp, Package, CheckCircle, AlertTriangle, Percent, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon } from 'lucide-react';
-import type { DailyPerformance, WeeklyPerformancePoint, AttendanceRecord } from '@/types';
+import { TrendingUp, Package, CheckCircle, AlertTriangle, Percent, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon, AlertCircle } from 'lucide-react';
+import type { DailyPerformance, WeeklyPerformancePoint, UserProfile } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
 
-// Mock data
 const mockDailyPerformance: DailyPerformance[] = Array.from({ length: 30 }, (_, i) => {
   const date = new Date();
   date.setDate(date.getDate() - i);
-  const delivered = Math.floor(Math.random() * 50) + 20; // 20-69
-  const pending = Math.floor(Math.random() * 10);       // 0-9
+  const delivered = Math.floor(Math.random() * 50) + 20; 
+  const pending = Math.floor(Math.random() * 10);       
   return {
     date: date.toISOString(),
     totalDelivered: delivered,
     totalPending: pending,
     successRate: (delivered / (delivered + pending)) * 100,
   };
-}).reverse(); // ensure ascending date
+}).reverse(); 
 
 const mockWeeklyPerformance: WeeklyPerformancePoint[] = [
   { weekLabel: "Minggu-1", delivered: 250, pending: 30 },
@@ -36,20 +35,30 @@ const mockWeeklyPerformance: WeeklyPerformancePoint[] = [
 const mockAttendanceSummary = {
   totalAttendanceDays: 20,
   totalWorkingDays: 22,
-  attendanceRate: (20/22) * 100, // %
+  attendanceRate: (20/22) * 100, 
 };
 
 const mockOverallStats = {
     totalPackagesEver: 5890,
     totalSuccessfulDeliveriesEver: 5500,
-    avgDeliveryTime: "3 jam 15 mnt", // string for simplicity
+    avgDeliveryTime: "3 jam 15 mnt", 
 };
 
 
 export default function PerformancePage() {
+  const [currentUser, setCurrentUser] = React.useState<UserProfile | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [dateRange, setDateRange] = useState<{ from: Date | undefined, to: Date | undefined }>({ from: new Date(Date.now() - 7 * 86400000), to: new Date() });
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      try {
+        setCurrentUser(JSON.parse(userDataString) as UserProfile);
+      } catch (error) { console.error("Error parsing user data for performance page", error); }
+    }
+  }, []);
 
   const filteredDailyPerformance = mockDailyPerformance.filter(item => {
     const itemDate = new Date(item.date);
@@ -70,6 +79,23 @@ export default function PerformancePage() {
     { name: 'Pending', value: selectedDayPerformance.totalPending, color: 'hsl(var(--chart-2))' },
   ] : [];
 
+  if (!currentUser) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  }
+
+  if (currentUser.role !== 'Kurir') {
+    return (
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-2xl text-primary flex items-center"><AlertCircle className="mr-2 h-6 w-6"/>Akses Terbatas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>Halaman performa pengiriman hanya tersedia untuk peran Kurir.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <Card className="shadow-xl">
@@ -79,7 +105,6 @@ export default function PerformancePage() {
         </CardHeader>
       </Card>
 
-      {/* Overall Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -125,7 +150,6 @@ export default function PerformancePage() {
         </Card>
       </div>
       
-      {/* Performance Harian dengan Kalender */}
       <Card>
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
@@ -151,7 +175,7 @@ export default function PerformancePage() {
                         onSelect={(date) => {setSelectedDate(date); setIsCalendarOpen(false);}}
                         initialFocus
                         locale={id}
-                        disabled={(date) => date > new Date() || date < new Date(Date.now() - 30 * 86400000)} // Max 30 hari kebelakang
+                        disabled={(date) => date > new Date() || date < new Date(Date.now() - 30 * 86400000)} 
                     />
                     </PopoverContent>
                 </Popover>
@@ -187,18 +211,16 @@ export default function PerformancePage() {
       </Card>
 
 
-      {/* Grafik Pengiriman Harian (Range) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><BarChart className="mr-2 h-5 w-5 text-primary"/> Grafik Pengiriman (Rentang Tanggal)</CardTitle>
           <CardDescription>Default: 7 hari terakhir. Pilih rentang untuk kustomisasi.</CardDescription>
-          {/* TODO: Add date range picker for filteredDailyPerformance */}
         </CardHeader>
         <CardContent className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={filteredDailyPerformance}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-              <XAxis dataKey="name" tick={{fontSize: '0.75rem'}} interval="preserveStartEnd" />
+              <XAxis dataKey="name" tick={{fontSize: '0.65rem'}} interval="preserveStartEnd" height={50} angle={-30} textAnchor="end" />
               <YAxis tick={{fontSize: '0.75rem'}} />
               <Tooltip
                 contentStyle={{
@@ -217,7 +239,6 @@ export default function PerformancePage() {
         </CardContent>
       </Card>
 
-      {/* Grafik Pengiriman Mingguan */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><LineChart className="mr-2 h-5 w-5 text-primary"/> Grafik Pengiriman Mingguan</CardTitle>

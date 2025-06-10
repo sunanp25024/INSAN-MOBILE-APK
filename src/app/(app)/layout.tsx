@@ -27,7 +27,13 @@ import {
   Settings,
   LogOut,
   ChevronDown,
-  Package,
+  Users,
+  Briefcase,
+  Bell,
+  MailCheck,
+  FileText,
+  ShieldCheck,
+  ClipboardList
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -39,42 +45,87 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/toaster";
+import type { UserRole, UserProfile } from "@/types";
 
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/profile", icon: User, label: "Profil" },
-  { href: "/attendance", icon: ClipboardCheck, label: "Absen" },
-  { href: "/performance", icon: BarChart3, label: "Performa" },
-  { href: "/settings", icon: Settings, label: "Pengaturan" },
+interface NavItem {
+  href: string;
+  icon: React.ElementType;
+  label: string;
+  roles: UserRole[];
+}
+
+const allNavItems: NavItem[] = [
+  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
+  { href: "/profile", icon: User, label: "Profil Saya", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
+  
+  // MasterAdmin specific
+  { href: "/manage-admins", icon: Users, label: "Manage Admin", roles: ['MasterAdmin'] },
+  { href: "/manage-pics", icon: Briefcase, label: "Manage PIC", roles: ['MasterAdmin', 'Admin'] },
+  { href: "/manage-kurirs", icon: Users, label: "Manage Kurir", roles: ['MasterAdmin', 'Admin'] },
+  { href: "/approvals", icon: ShieldCheck, label: "Persetujuan", roles: ['MasterAdmin'] },
+  { href: "/notifications", icon: Bell, label: "Notifikasi Sistem", roles: ['MasterAdmin'] },
+
+  // Admin specific
+  // Manage PICs and Manage Kurirs are shared with MasterAdmin
+
+  { href: "/pending-approvals", icon: MailCheck, label: "Status Persetujuan", roles: ['Admin'] },
+  
+  // PIC specific
+  { href: "/courier-management", icon: ClipboardList, label: "Manajemen Kurir", roles: ['PIC'] },
+  { href: "/reports", icon: FileText, label: "Laporan", roles: ['PIC'] },
+  { href: "/courier-updates", icon: Bell, label: "Update Kurir", roles: ['PIC'] },
+
+  // Kurir specific
+  { href: "/attendance", icon: ClipboardCheck, label: "Absen", roles: ['Kurir'] },
+  { href: "/performance", icon: BarChart3, label: "Performa", roles: ['Kurir'] },
+  
+  { href: "/settings", icon: Settings, label: "Pengaturan Akun", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
 ];
 
-// Mock user data
-const mockUser = {
-  id: "PISTEST2025",
-  name: "Budi Santoso",
-  avatarUrl: "https://placehold.co/100x100.png",
-  initials: "BS",
-};
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [currentUser, setCurrentUser] = React.useState<UserProfile | null>(null);
+  const [navItems, setNavItems] = React.useState<NavItem[]>([]);
 
   React.useEffect(() => {
-    // Mock authentication check
     const isAuthenticated = localStorage.getItem('isAuthenticated');
-    if (!isAuthenticated) {
-      router.replace('/'); // Redirect to login if not authenticated
+    const userDataString = localStorage.getItem('loggedInUser');
+
+    if (!isAuthenticated || !userDataString) {
+      router.replace('/'); 
+      return;
+    }
+    
+    try {
+      const parsedUser = JSON.parse(userDataString) as UserProfile;
+      setCurrentUser(parsedUser);
+      if (parsedUser && parsedUser.role) {
+        setNavItems(allNavItems.filter(item => item.roles.includes(parsedUser.role)));
+      } else {
+        // Fallback or error if role is not defined
+        router.replace('/');
+      }
+    } catch (error) {
+      console.error("Failed to parse user data from localStorage", error);
+      router.replace('/');
     }
   }, [router]);
 
 
   const handleLogout = () => {
-    // Clear auth state
     localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('courierCheckedInToday'); // Clear attendance status on logout
+    localStorage.removeItem('loggedInUser');
+    localStorage.removeItem('courierCheckedInToday');
     router.push('/');
   };
+
+  if (!currentUser) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>; // Or a proper loader
+  }
+  
+  const userInitials = currentUser.fullName?.split(" ").map(n => n[0]).join("").toUpperCase() || "XX";
 
   return (
     <SidebarProvider defaultOpen>
@@ -110,18 +161,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="w-full justify-start items-center p-2 h-auto">
                 <Avatar className="h-9 w-9 mr-3">
-                  <AvatarImage src={mockUser.avatarUrl} alt={mockUser.name} data-ai-hint="man face"/>
-                  <AvatarFallback>{mockUser.initials}</AvatarFallback>
+                  <AvatarImage src={currentUser.avatarUrl || `https://placehold.co/100x100.png?text=${userInitials}`} alt={currentUser.fullName || "User"} data-ai-hint="man face"/>
+                  <AvatarFallback>{userInitials}</AvatarFallback>
                 </Avatar>
                 <div className="text-left flex-grow">
-                  <p className="text-sm font-medium text-sidebar-foreground">{mockUser.name}</p>
-                  <p className="text-xs text-muted-foreground">{mockUser.id}</p>
+                  <p className="text-sm font-medium text-sidebar-foreground">{currentUser.fullName || "User"}</p>
+                  <p className="text-xs text-muted-foreground">{currentUser.id}</p>
                 </div>
                 <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" className="w-56 mb-2">
-              <DropdownMenuLabel>Akun Saya</DropdownMenuLabel>
+              <DropdownMenuLabel>Akun Saya ({currentUser.role})</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => router.push('/profile')}>
                 <User className="mr-2 h-4 w-4" />
@@ -143,7 +194,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <SidebarInset>
         <div className="p-4 sm:p-6 lg:p-8">
           <div className="flex items-center justify-between mb-6">
-             <div className="md:hidden"> {/* Only show trigger on mobile */}
+             <div className="md:hidden"> 
                 <SidebarTrigger />
              </div>
           </div>
