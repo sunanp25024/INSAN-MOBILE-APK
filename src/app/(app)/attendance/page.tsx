@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
-import { CheckCircle, XCircle, Clock, CalendarDays, BarChartHorizontalBig, CalendarIcon as LucideCalendarIcon, ChevronsUpDown, BarChart as BarChartIcon } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, CalendarDays, BarChartHorizontalBig, CalendarIcon as LucideCalendarIcon, ChevronsUpDown, BarChart as BarChartIcon, TrendingUp } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
@@ -22,11 +22,17 @@ const mockPastAttendance: AttendanceRecord[] = [
   { date: new Date(Date.now() - 86400000 * 2).toISOString(), status: 'Absent' },
   { date: new Date(Date.now() - 86400000 * 1).toISOString(), checkInTime: '07:58', checkOutTime: '17:10', status: 'Present' },
   // Add more mock data for the current month for better chart testing
+  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(), checkInTime: '08:00', checkOutTime: '17:00', status: 'Present' },
   { date: new Date(new Date().getFullYear(), new Date().getMonth(), 2).toISOString(), checkInTime: '08:00', checkOutTime: '17:00', status: 'Present' },
+  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 3).toISOString(), status: 'Absent' },
+  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 4).toISOString(), checkInTime: '07:50', checkOutTime: '17:00', status: 'Present' },
   { date: new Date(new Date().getFullYear(), new Date().getMonth(), 5).toISOString(), status: 'Absent' },
   { date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString(), checkInTime: '08:30', checkOutTime: '17:30', status: 'Late' },
+  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 12).toISOString(), checkInTime: '08:00', checkOutTime: '17:00', status: 'Present' },
+  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 15).toISOString(), checkInTime: '07:58', checkOutTime: '17:00', status: 'Present' },
   { date: new Date(new Date().getFullYear(), new Date().getMonth(), 17).toISOString(), checkInTime: '07:55', checkOutTime: '16:55', status: 'Present' },
   { date: new Date(new Date().getFullYear(), new Date().getMonth(), 20).toISOString(), status: 'Absent' },
+  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 22).toISOString(), checkInTime: '08:10', checkOutTime: '17:15', status: 'Late' },
 ];
 
 const generateMonthlyAttendanceData = (
@@ -34,20 +40,26 @@ const generateMonthlyAttendanceData = (
   endDate: Date,
   history: AttendanceRecord[],
   locale: Locale
-): { name: string; Kehadiran: number }[] => {
-  if (startDate > endDate) return [];
+): { chartData: { name: string; Kehadiran: number }[], presentDays: number } => {
+  if (startDate > endDate) return { chartData: [], presentDays: 0 };
 
   const daysInInterval = eachDayOfInterval({ start: startDate, end: endDate });
+  let presentCount = 0;
 
-  return daysInInterval.map(day => {
-    const dayOfMonthStr = format(day, 'd', { locale }); // 'd' for day of month
+  const chartData = daysInInterval.map(day => {
+    const dayOfMonthStr = format(day, 'd', { locale }); 
     const isoDateString = format(day, 'yyyy-MM-dd');
     const record = history.find(rec => rec.date.startsWith(isoDateString));
+    const isPresent = record && (record.status === 'Present' || record.status === 'Late');
+    if (isPresent) {
+      presentCount++;
+    }
     return {
       name: dayOfMonthStr,
-      Kehadiran: (record && (record.status === 'Present' || record.status === 'Late')) ? 1 : 0,
+      Kehadiran: isPresent ? 1 : 0,
     };
   });
+  return { chartData, presentDays: presentCount };
 };
 
 
@@ -162,8 +174,8 @@ export default function AttendancePage() {
   const workDuration = selectedRecord ? calculateWorkDuration(selectedRecord.checkInTime, selectedRecord.checkOutTime) : null;
 
   const totalDaysTracked = attendanceHistory.length;
-  const presentDays = attendanceHistory.filter(r => r.status === 'Present' || r.status === 'Late').length;
-  const attendanceRate = totalDaysTracked > 0 ? (presentDays / totalDaysTracked) * 100 : 0;
+  const presentDaysOverall = attendanceHistory.filter(r => r.status === 'Present' || r.status === 'Late').length;
+  const attendanceRate = totalDaysTracked > 0 ? (presentDaysOverall / totalDaysTracked) * 100 : 0;
   
   const today = new Date();
   const currentMonth = today.getMonth();
@@ -174,13 +186,13 @@ export default function AttendancePage() {
   const sixteenthCurrentMonth = new Date(currentYear, currentMonth, 16);
   const lastDayCurrentMonth = endOfMonth(today);
 
-  const firstHalfMonthAttendance = generateMonthlyAttendanceData(firstDayCurrentMonth, fifteenthCurrentMonth, attendanceHistory, indonesiaLocale);
-  const secondHalfMonthAttendance = generateMonthlyAttendanceData(sixteenthCurrentMonth, lastDayCurrentMonth, attendanceHistory, indonesiaLocale);
+  const { chartData: firstHalfMonthAttendance, presentDays: presentDaysFirstHalf } = generateMonthlyAttendanceData(firstDayCurrentMonth, fifteenthCurrentMonth, attendanceHistory, indonesiaLocale);
+  const { chartData: secondHalfMonthAttendance, presentDays: presentDaysSecondHalf } = generateMonthlyAttendanceData(sixteenthCurrentMonth, lastDayCurrentMonth, attendanceHistory, indonesiaLocale);
 
 
   return (
     <div className="space-y-6">
-      <Card className="shadow-xl">
+      <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl text-primary flex items-center"><Clock className="mr-2 h-6 w-6"/>Absensi Hari Ini</CardTitle>
           <CardDescription>Tanggal: {format(new Date(), "eeee, dd MMMM yyyy", { locale: indonesiaLocale })}</CardDescription>
@@ -212,14 +224,14 @@ export default function AttendancePage() {
             <Button 
               onClick={handleCheckIn} 
               disabled={!!todayRecord?.checkInTime}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white dark:bg-green-500 dark:hover:bg-green-600 dark:text-gray-900"
             >
               <CheckCircle className="mr-2 h-4 w-4" /> Check In
             </Button>
             <Button 
               onClick={handleCheckOut} 
               disabled={!todayRecord?.checkInTime || !!todayRecord?.checkOutTime}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white dark:bg-red-500 dark:hover:bg-red-600 dark:text-gray-900"
             >
               <XCircle className="mr-2 h-4 w-4" /> Check Out
             </Button>
@@ -227,12 +239,12 @@ export default function AttendancePage() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-xl">
+      <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-xl text-primary flex items-center"><CalendarDays className="mr-2 h-5 w-5"/>Riwayat Absensi</CardTitle>
           <CardDescription>Pilih tanggal untuk melihat detail absensi.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col md:flex-row gap-6">
           <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -264,9 +276,10 @@ export default function AttendancePage() {
             {selectedDate && selectedRecord ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>Detail Absensi: {format(selectedDate, "eeee, dd MMMM yyyy", { locale: indonesiaLocale })}</CardTitle>
+                  <CardTitle className="text-lg">Detail Absensi:</CardTitle>
+                  <CardDescription>{format(selectedDate, "eeee, dd MMMM yyyy", { locale: indonesiaLocale })}</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-1">
+                <CardContent className="space-y-1 text-sm">
                   <p>Status: <span className={`font-semibold ${selectedRecord.status === 'Present' ? 'text-green-600 dark:text-green-400' : selectedRecord.status === 'Late' ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>{selectedRecord.status}</span></p>
                   {selectedRecord.checkInTime && <p>Check-In: {selectedRecord.checkInTime}</p>}
                   {selectedRecord.checkOutTime && <p>Check-Out: {selectedRecord.checkOutTime}</p>}
@@ -282,40 +295,46 @@ export default function AttendancePage() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-xl">
+      <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="text-xl text-primary flex items-center"><BarChartIcon className="mr-2 h-5 w-5"/>Performa Absensi Keseluruhan</CardTitle>
+          <CardTitle className="text-xl text-primary flex items-center"><TrendingUp className="mr-2 h-5 w-5"/>Performa Absensi Keseluruhan</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span>Tingkat Kehadiran (Total)</span>
-              <span className="font-bold text-primary">{attendanceRate.toFixed(1)}%</span>
+              <span>Tingkat Kehadiran (Total Keseluruhan)</span>
+              <span className="font-bold text-lg text-primary">{attendanceRate.toFixed(1)}%</span>
             </div>
             <Progress value={attendanceRate} className="h-3" />
-            <p className="text-sm text-muted-foreground">{presentDays} dari {totalDaysTracked} hari kerja terlacak.</p>
+            <p className="text-sm text-muted-foreground">{presentDaysOverall} dari {totalDaysTracked} hari kerja terlacak.</p>
           </div>
           
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div>
-              <h4 className="font-semibold mb-2">Kehadiran Bulan Ini (Tanggal 1-15): {format(firstDayCurrentMonth, "MMMM yyyy", { locale: indonesiaLocale })}</h4>
+              <div className="flex justify-between items-baseline mb-2">
+                <h4 className="font-semibold text-md">Kehadiran: Tgl 1 - 15 {format(firstDayCurrentMonth, "MMMM yyyy", { locale: indonesiaLocale })}</h4>
+                <p className="text-sm text-primary font-semibold">Total Masuk: {presentDaysFirstHalf} hari</p>
+              </div>
               {firstHalfMonthAttendance.length > 0 ? (
-                <div className="h-[280px] mt-2 pr-4">
+                <div className="h-[280px] mt-2 pr-2">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={firstHalfMonthAttendance} margin={{ top: 5, right: 0, left: -20, bottom: 20 }}>
+                    <BarChart data={firstHalfMonthAttendance} margin={{ top: 5, right: 0, left: -25, bottom: 35 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={50} interval={0} tick={{fontSize: '0.75rem'}}/>
-                      <YAxis type="number" domain={[0,1]} tickCount={2} tickFormatter={(value) => value === 1 ? 'Hadir' : 'Absen'} allowDecimals={false} />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={50} interval={0} tick={{fontSize: '0.7rem'}}/>
+                      <YAxis type="number" domain={[0,1]} tickCount={2} tickFormatter={(value) => value === 1 ? 'Hadir' : 'Absen'} allowDecimals={false} tick={{fontSize: '0.75rem'}} />
                       <Tooltip 
                         formatter={(value: number, name: string, props: any) => [props.payload.Kehadiran === 1 ? 'Hadir' : 'Absen', `Tgl ${props.payload.name}`]}
                         contentStyle={{
                           background: "hsl(var(--background))",
                           borderColor: "hsl(var(--border))",
                           borderRadius: "var(--radius)",
+                          fontSize: "0.8rem",
+                          padding: "0.5rem"
                         }}
+                        cursor={{ fill: "hsl(var(--accent)/0.2)" }}
                       />
-                      <Legend formatter={(value) => value === 'Kehadiran' ? 'Status Kehadiran' : value} />
-                      <Bar dataKey="Kehadiran" fill="hsl(var(--chart-1))" barSize={15} name="Status Kehadiran" radius={[4, 4, 0, 0]}/>
+                      <Legend formatter={(value) => value === 'Kehadiran' ? 'Status Kehadiran' : value} wrapperStyle={{fontSize: "0.8rem"}} />
+                      <Bar dataKey="Kehadiran" fill="hsl(var(--chart-1))" barSize={12} name="Status Kehadiran" radius={[4, 4, 0, 0]}/>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -325,24 +344,30 @@ export default function AttendancePage() {
             </div>
 
             <div>
-              <h4 className="font-semibold mb-2">Kehadiran Bulan Ini (Tanggal 16-{getDayOfMonthDateFns(lastDayCurrentMonth)}): {format(firstDayCurrentMonth, "MMMM yyyy", { locale: indonesiaLocale })}</h4>
+              <div className="flex justify-between items-baseline mb-2">
+                <h4 className="font-semibold text-md">Kehadiran: Tgl 16 - {getDayOfMonthDateFns(lastDayCurrentMonth)} {format(firstDayCurrentMonth, "MMMM yyyy", { locale: indonesiaLocale })}</h4>
+                <p className="text-sm text-primary font-semibold">Total Masuk: {presentDaysSecondHalf} hari</p>
+              </div>
                {secondHalfMonthAttendance.length > 0 ? (
-                <div className="h-[280px] mt-2 pr-4">
+                <div className="h-[280px] mt-2 pr-2">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={secondHalfMonthAttendance} margin={{ top: 5, right: 0, left: -20, bottom: 20 }}>
+                    <BarChart data={secondHalfMonthAttendance} margin={{ top: 5, right: 0, left: -25, bottom: 35 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-                       <XAxis dataKey="name" angle={-45} textAnchor="end" height={50} interval={0} tick={{fontSize: '0.75rem'}}/>
-                      <YAxis type="number" domain={[0,1]} tickCount={2} tickFormatter={(value) => value === 1 ? 'Hadir' : 'Absen'} allowDecimals={false}/>
+                       <XAxis dataKey="name" angle={-45} textAnchor="end" height={50} interval={0} tick={{fontSize: '0.7rem'}}/>
+                      <YAxis type="number" domain={[0,1]} tickCount={2} tickFormatter={(value) => value === 1 ? 'Hadir' : 'Absen'} allowDecimals={false} tick={{fontSize: '0.75rem'}}/>
                       <Tooltip 
                         formatter={(value: number, name: string, props: any) => [props.payload.Kehadiran === 1 ? 'Hadir' : 'Absen', `Tgl ${props.payload.name}`]}
                         contentStyle={{
                           background: "hsl(var(--background))",
                           borderColor: "hsl(var(--border))",
                           borderRadius: "var(--radius)",
+                          fontSize: "0.8rem",
+                          padding: "0.5rem"
                         }}
+                        cursor={{ fill: "hsl(var(--accent)/0.2)" }}
                       />
-                      <Legend formatter={(value) => value === 'Kehadiran' ? 'Status Kehadiran' : value} />
-                      <Bar dataKey="Kehadiran" fill="hsl(var(--chart-2))" barSize={15} name="Status Kehadiran" radius={[4, 4, 0, 0]}/>
+                      <Legend formatter={(value) => value === 'Kehadiran' ? 'Status Kehadiran' : value} wrapperStyle={{fontSize: "0.8rem"}} />
+                      <Bar dataKey="Kehadiran" fill="hsl(var(--chart-2))" barSize={12} name="Status Kehadiran" radius={[4, 4, 0, 0]}/>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -356,7 +381,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-
-    
-
-    
