@@ -6,36 +6,35 @@ export interface UserProfile {
   id: string;
   fullName: string;
   role: UserRole;
-  workLocation?: string; // Optional, as not all roles might have it
-  joinDate?: string; // ISO date string, optional
-  position?: string; // Optional
-  contractStatus?: 'Permanent' | 'Contract' | 'Probation'; // Optional
-  bankAccountNumber?: string; // Optional
-  bankName?: string; // Optional
-  bankRecipientName?: string; // Optional
+  email?: string; // Made email consistently optional as ID might be primary
+  passwordValue?: string; // Only for mock, should not be in real profile
+  workLocation?: string;
+  joinDate?: string; 
+  position?: string; 
+  contractStatus?: 'Permanent' | 'Contract' | 'Probation';
+  bankAccountNumber?: string; 
+  bankName?: string; 
+  bankRecipientName?: string; 
   avatarUrl?: string;
-  photoIdUrl?: string; // Optional
-  email?: string; // Added for settings
+  photoIdUrl?: string; 
+  status?: 'Aktif' | 'Nonaktif'; // For user management tables
 }
 
 
-// CourierProfile can extend or be a specific type of UserProfile if needed later
-// For now, Courier specific data might still be relevant if a Kurir logs in.
-// We'll primarily use UserProfile for general user info.
 export type CourierProfile = UserProfile & {
   // any Kurir-specific fields can be added here if they don't fit UserProfile
 };
 
 
 export interface PackageItem {
-  id: string; // Tracking number
+  id: string; 
   status: 'process' | 'in_transit' | 'delivered' | 'pending_return' | 'returned';
   isCOD: boolean;
   recipientName?: string;
-  deliveryProofPhotoUrl?: string; // URL of the photo
-  returnProofPhotoUrl?: string; // URL of the return photo for a batch of pending items
-  returnLeadReceiverName?: string; // Name of the lead/supervisor who received the returned packages
-  lastUpdateTime: string; // ISO date string
+  deliveryProofPhotoUrl?: string; 
+  returnProofPhotoUrl?: string; 
+  returnLeadReceiverName?: string; 
+  lastUpdateTime: string; 
 }
 
 export interface DailyPackageInput {
@@ -45,21 +44,21 @@ export interface DailyPackageInput {
 }
 
 export interface AttendanceRecord {
-  date: string; // ISO date string
-  checkInTime?: string; // ISO time string
-  checkOutTime?: string; // ISO time string
+  date: string; 
+  checkInTime?: string; 
+  checkOutTime?: string; 
   status: 'Present' | 'Absent' | 'Late';
 }
 
 export interface DailyPerformance {
-  date: string; // ISO date string
+  date: string; 
   totalDelivered: number;
   totalPending: number;
-  successRate: number; // Percentage
+  successRate: number; 
 }
 
 export interface WeeklyPerformancePoint {
-  weekLabel: string; // e.g., "W1", "W2"
+  weekLabel: string; 
   delivered: number;
   pending: number;
 }
@@ -69,8 +68,8 @@ export interface AttendanceActivity {
   kurirName: string;
   kurirId: string;
   action: 'check-in' | 'check-out' | 'reported-late';
-  timestamp: string; // ISO date string
-  location?: string; // Added location
+  timestamp: string; 
+  location?: string; 
 }
 
 export interface DeliveryActivity {
@@ -79,8 +78,21 @@ export interface DeliveryActivity {
   kurirId: string;
   packageId: string;
   action: 'picked-up' | 'in-transit' | 'delivered' | 'delivery-failed' | 'returned-to-hub';
-  timestamp: string; // ISO date string
-  details?: string; // e.g., "Recipient not home", "Package damaged"
-  location?: string; // Added location
+  timestamp: string; 
+  details?: string; 
+  location?: string; 
+}
+
+export interface MonthlySummaryData {
+  month: string;
+  totalDelivered: number;
+  totalPending: number;
+  successRate: number;
+}
+
+export interface WeeklyShipmentSummary {
+  week: string;
+  terkirim: number;
+  pending: number;
 }
 

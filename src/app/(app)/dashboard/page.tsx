@@ -7,22 +7,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight, Filter as FilterIcon, Download as DownloadIcon, Search as SearchIcon } from 'lucide-react';
+import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight, Filter as FilterIcon, Download as DownloadIcon, Search as SearchIcon, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { DailyPackageInput, PackageItem, UserProfile, UserRole, AttendanceActivity, DeliveryActivity } from '@/types';
+import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, DeliveryActivity, MonthlySummaryData, WeeklyShipmentSummary } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from 'next/link';
 import { Checkbox } from '@/components/ui/checkbox';
-import { format, subDays, formatDistanceToNow } from 'date-fns';
+import { format, subDays, formatDistanceToNow, startOfWeek, endOfWeek, eachWeekOfInterval, getMonth, getYear } from 'date-fns';
 import { id as indonesiaLocale } from 'date-fns/locale';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-// Existing mockCourier data structure can be used for Kurir role
 const mockKurirProfileData: UserProfile = {
   id: 'PISTEST2025',
   fullName: 'Budi Santoso',
@@ -60,8 +59,10 @@ interface DashboardSummaryData {
   activeCouriersToday: number;
   totalPackagesProcessedToday: number;
   totalPackagesDeliveredToday: number;
-  onTimeDeliveryRateToday: number; // percentage
+  onTimeDeliveryRateToday: number; 
   dailyShipmentSummary: { date: string; name: string; terkirim: number; pending: number }[];
+  weeklyShipmentSummary: WeeklyShipmentSummary[];
+  monthlyPerformanceSummary: MonthlySummaryData[];
 }
 
 
@@ -110,24 +111,54 @@ export default function DashboardPage() {
         setCurrentUser(parsedUser);
 
         if (parsedUser.role !== 'Kurir') {
-          // Generate mock summary data for Admin/PIC/MasterAdmin
           const today = new Date();
+          const dailySummary = Array.from({ length: 7 }).map((_, i) => {
+            const day = subDays(today, 6 - i);
+            const delivered = Math.floor(Math.random() * 100) + 50;
+            const pending = Math.floor(Math.random() * 20) + 5;
+            return {
+              date: day.toISOString(),
+              name: format(day, 'dd/MM', { locale: indonesiaLocale }),
+              terkirim: delivered,
+              pending: pending,
+            };
+          });
+
+          const weeklySummary: WeeklyShipmentSummary[] = [];
+          const currentMonthWeeks = eachWeekOfInterval({
+            start: startOfWeek(new Date(getYear(today), getMonth(today), 1), { weekStartsOn: 1 }),
+            end: endOfWeek(new Date(getYear(today), getMonth(today) +1, 0), { weekStartsOn: 1 })
+          }, { weekStartsOn: 1 });
+          
+          currentMonthWeeks.slice(-4).forEach((weekStart, index) => { // Take last 4 weeks
+            weeklySummary.push({
+              week: `Minggu ${index + 1}`,
+              terkirim: Math.floor(Math.random() * 300) + 200,
+              pending: Math.floor(Math.random() * 50) + 10,
+            });
+          });
+
+          const monthlySummary: MonthlySummaryData[] = Array.from({length: 3}).map((_, i) => {
+            const monthDate = new Date(today.getFullYear(), today.getMonth() - (2-i), 1);
+            const delivered = Math.floor(Math.random() * 1200) + 800;
+            const pending = Math.floor(Math.random() * 200) + 50;
+            return {
+              month: format(monthDate, 'MMM yyyy', {locale: indonesiaLocale}),
+              totalDelivered: delivered,
+              totalPending: pending,
+              successRate: (delivered / (delivered + pending)) * 100,
+            };
+          });
+
+
           const summaryData: DashboardSummaryData = {
-            activeCouriersToday: Math.floor(Math.random() * 15) + 5, // 5-20 active couriers
-            totalPackagesProcessedToday: Math.floor(Math.random() * 200) + 100, // 100-300 packages
-            totalPackagesDeliveredToday: Math.floor(Math.random() * 150) + 80,   // 80-230 delivered
-            onTimeDeliveryRateToday: Math.floor(Math.random() * 15) + 85,      // 85-100% on time
-            dailyShipmentSummary: Array.from({ length: 7 }).map((_, i) => {
-              const day = subDays(today, 6 - i); // Last 7 days including today
-              const delivered = Math.floor(Math.random() * 100) + 50;
-              const pending = Math.floor(Math.random() * 20) + 5;
-              return {
-                date: day.toISOString(),
-                name: format(day, 'dd/MM', { locale: indonesiaLocale }),
-                terkirim: delivered,
-                pending: pending,
-              };
-            }),
+            activeCouriersToday: Math.floor(Math.random() * 15) + 5,
+            totalPackagesProcessedToday: Math.floor(Math.random() * 200) + 100,
+            totalPackagesDeliveredToday: Math.floor(Math.random() * 150) + 80,
+            onTimeDeliveryRateToday: Math.floor(Math.random() * 15) + 85,
+            dailyShipmentSummary: dailySummary,
+            weeklyShipmentSummary: weeklySummary,
+            monthlyPerformanceSummary: monthlySummary,
           };
           setDashboardSummary(summaryData);
 
@@ -271,7 +302,7 @@ export default function DashboardPage() {
     if (dailyInput && managedPackages.length < dailyInput.totalPackages) {
       setManagedPackages(prev => [...prev, { id: resiToAdd, status: 'process', isCOD: isManualCOD, lastUpdateTime: new Date().toISOString() }]);
       setCurrentScannedResi('');
-      setIsManualCOD(false); // Reset checkbox after adding
+      setIsManualCOD(false); 
       toast({ title: "Resi Ditambahkan", description: `${resiToAdd} (${isManualCOD ? "COD" : "Non-COD"}) berhasil ditambahkan.` });
        if (managedPackages.length + 1 === dailyInput.totalPackages) {
         setIsScanning(false);
@@ -580,7 +611,6 @@ export default function DashboardPage() {
     );
   }
 
-  // Kurir Dashboard - Active Day
   if (currentUser.role === 'Kurir') {
     return (
       <div className="space-y-8">
@@ -905,7 +935,6 @@ export default function DashboardPage() {
     );
   }
 
-  // Fallback for non-Kurir roles (Admin, PIC, MasterAdmin)
   if (!dashboardSummary) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -914,19 +943,18 @@ export default function DashboardPage() {
     );
   }
 
-  // Managerial Dashboard (MasterAdmin, Admin, PIC)
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl text-primary flex items-center">
-            <UserCog className="mr-2 h-7 w-7" /> Selamat Datang, {currentUser.fullName}!
+            {currentUser.role === 'MasterAdmin' ? <UserCog className="mr-2 h-7 w-7" /> : currentUser.role === 'Admin' ? <Users className="mr-2 h-7 w-7" /> : <Briefcase className="mr-2 h-7 w-7" />}
+             Selamat Datang, {currentUser.fullName}!
           </CardTitle>
-          <CardDescription>Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir hari ini.</CardDescription>
+          <CardDescription>Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir.</CardDescription>
         </CardHeader>
       </Card>
 
-      {/* Filter and Quick Actions Card - Only for Managerial Roles */}
       {currentUser.role !== 'Kurir' && (
         <Card>
           <CardHeader>
@@ -1048,34 +1076,83 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+            <CardHeader>
+            <CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5"/>Ringkasan Pengiriman (7 Hari Terakhir)</CardTitle>
+            <CardDescription>Visualisasi jumlah paket terkirim dan pending/retur.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[300px] pt-4">
+            <ResponsiveContainer width="100%" height="100%">
+                <RechartsBarChart data={dashboardSummary.dailyShipmentSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
+                <XAxis dataKey="name" tick={{fontSize: '0.75rem'}}/>
+                <YAxis tick={{fontSize: '0.75rem'}}/>
+                <Tooltip
+                    contentStyle={{
+                        background: "hsl(var(--background))",
+                        borderColor: "hsl(var(--border))",
+                        borderRadius: "var(--radius)",
+                        fontSize: "0.8rem",
+                        padding: "0.5rem"
+                    }}
+                    cursor={{ fill: "hsl(var(--accent)/0.2)" }}
+                />
+                <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
+                <Bar dataKey="terkirim" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={20}/>
+                <Bar dataKey="pending" name="Pending/Retur" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={20}/>
+                </RechartsBarChart>
+            </ResponsiveContainer>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center text-xl text-primary"><TrendingUp className="mr-2 h-5 w-5" />Tren Pengiriman Mingguan (4 Minggu)</CardTitle>
+                <CardDescription>Performa pengiriman paket terkirim dan pending per minggu.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[300px] pt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dashboardSummary.weeklyShipmentSummary} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
+                        <XAxis dataKey="week" tick={{fontSize: '0.75rem'}} />
+                        <YAxis tick={{fontSize: '0.75rem'}} />
+                        <Tooltip
+                            contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }}
+                            cursor={{ fill: "hsl(var(--accent)/0.2)" }}
+                        />
+                        <Legend wrapperStyle={{fontSize: "0.8rem"}} />
+                        <Line type="monotone" dataKey="terkirim" name="Terkirim" stroke="hsl(var(--chart-1))" strokeWidth={2} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="pending" name="Pending/Retur" stroke="hsl(var(--chart-2))" strokeWidth={2} activeDot={{ r: 6 }} />
+                    </LineChart>
+                </ResponsiveContainer>
+            </CardContent>
+        </Card>
+      </div>
+      
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5"/>Ringkasan Pengiriman (7 Hari Terakhir)</CardTitle>
-          <CardDescription>Visualisasi jumlah paket terkirim dan pending/retur.</CardDescription>
+            <CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5" />Ringkasan Performa Bulanan (3 Bulan Terakhir)</CardTitle>
+            <CardDescription>Perbandingan total paket terkirim dan pending.</CardDescription>
         </CardHeader>
-        <CardContent className="h-[350px] pt-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <RechartsBarChart data={dashboardSummary.dailyShipmentSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-              <XAxis dataKey="name" tick={{fontSize: '0.75rem'}}/>
-              <YAxis tick={{fontSize: '0.75rem'}}/>
-              <Tooltip
-                contentStyle={{
-                    background: "hsl(var(--background))",
-                    borderColor: "hsl(var(--border))",
-                    borderRadius: "var(--radius)",
-                    fontSize: "0.8rem",
-                    padding: "0.5rem"
-                }}
-                cursor={{ fill: "hsl(var(--accent)/0.2)" }}
-              />
-              <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
-              <Bar dataKey="terkirim" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={20}/>
-              <Bar dataKey="pending" name="Pending/Retur" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={20}/>
-            </RechartsBarChart>
-          </ResponsiveContainer>
+        <CardContent className="h-[320px] pt-4">
+             <ResponsiveContainer width="100%" height="100%">
+                <RechartsBarChart data={dashboardSummary.monthlyPerformanceSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
+                    <XAxis dataKey="month" tick={{fontSize: '0.75rem'}} />
+                    <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--chart-1))" tick={{fontSize: '0.75rem'}} />
+                    <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-2))" tick={{fontSize: '0.75rem'}} />
+                    <Tooltip
+                        contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }}
+                        cursor={{ fill: "hsl(var(--accent)/0.2)" }}
+                    />
+                    <Legend wrapperStyle={{fontSize: "0.8rem"}} />
+                    <Bar yAxisId="left" dataKey="totalDelivered" name="Total Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={25} />
+                    <Bar yAxisId="left" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={25} />
+                </RechartsBarChart>
+            </ResponsiveContainer>
         </CardContent>
       </Card>
+
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -1154,3 +1231,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
