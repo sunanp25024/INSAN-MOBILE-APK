@@ -14,8 +14,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/types';
-// mockLocationsData might not be directly used in the form anymore but kept for reference
-// import { mockLocationsData } from '@/types'; 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO, isValid } from "date-fns";
@@ -53,7 +51,17 @@ export default function ManageKurirsPage() {
   const [isEditKurirDialogOpen, setIsEditKurirDialogOpen] = useState(false);
   const [currentEditingKurir, setCurrentEditingKurir] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   
+  useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      try {
+        setCurrentUser(JSON.parse(userDataString) as UserProfile);
+      } catch (error) { console.error("Error parsing user data for manage kurirs page", error); }
+    }
+  }, []);
+
   const { register, handleSubmit, reset, control, formState: { errors }, setValue } = useForm<KurirFormData>({
     resolver: zodResolver(kurirSchema),
     defaultValues: {
@@ -64,22 +72,30 @@ export default function ManageKurirsPage() {
 
   const handleAddKurirSubmit: SubmitHandler<KurirFormData> = (data) => {
     const newKurirId = data.id && data.id.trim() !== '' ? data.id : `K${String(Date.now()).slice(-7)}`;
-    if (kurirs.find(k => k.id === newKurirId)) {
-        toast({ title: "Gagal Menambahkan", description: `ID Kurir ${newKurirId} sudah ada.`, variant: "destructive"});
+    
+    if (currentUser?.role === 'Admin') {
+      if (kurirs.find(k => k.id === newKurirId)) { // Still check for ID conflict locally for Admin for immediate feedback
+        toast({ title: "Gagal Mengajukan", description: `ID Kurir ${newKurirId} sudah ada atau sedang diajukan.`, variant: "destructive"});
         return;
+      }
+      toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan Kurir ${data.fullName} (ID: ${newKurirId}) telah dikirim ke MasterAdmin untuk persetujuan.` });
+    } else { // MasterAdmin or other direct roles
+      if (kurirs.find(k => k.id === newKurirId)) {
+          toast({ title: "Gagal Menambahkan", description: `ID Kurir ${newKurirId} sudah ada.`, variant: "destructive"});
+          return;
+      }
+      const newKurir: UserProfile = {
+        ...data, 
+        id: newKurirId,
+        email: data.email || `${newKurirId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`,
+        role: 'Kurir',
+        status: 'Aktif',
+        joinDate: data.joinDate.toISOString(),
+        passwordValue: data.passwordValue || 'defaultPassword123',
+      };
+      setKurirs(prev => [...prev, newKurir]);
+      toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} (ID: ${newKurirId}) berhasil ditambahkan.` });
     }
-
-    const newKurir: UserProfile = {
-      ...data, // spread validated form data
-      id: newKurirId,
-      email: data.email || `${newKurirId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`,
-      role: 'Kurir',
-      status: 'Aktif',
-      joinDate: data.joinDate.toISOString(),
-      passwordValue: data.passwordValue || 'defaultPassword123',
-    };
-    setKurirs(prev => [...prev, newKurir]);
-    toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} (ID: ${newKurirId}) berhasil ditambahkan.` });
     reset();
     setIsAddKurirDialogOpen(false);
   };
@@ -89,16 +105,13 @@ export default function ManageKurirsPage() {
     setValue('id', kurir.id);
     setValue('fullName', kurir.fullName);
     setValue('nik', kurir.nik || '');
-    setValue('passwordValue', ''); // Clear password for edit
+    setValue('passwordValue', ''); 
     setValue('jabatan', kurir.jabatan || '');
-    
     setValue('wilayah', kurir.wilayah || '');
     setValue('area', kurir.area || '');
     setValue('workLocation', kurir.workLocation || '');
-    
     const joinDateObj = kurir.joinDate ? parseISO(kurir.joinDate) : new Date();
     setValue('joinDate', isValid(joinDateObj) ? joinDateObj : new Date());
-    
     setValue('bankName', kurir.bankName || '');
     setValue('bankAccountNumber', kurir.bankAccountNumber || '');
     setValue('bankRecipientName', kurir.bankRecipientName || '');
@@ -109,19 +122,23 @@ export default function ManageKurirsPage() {
   const handleEditKurirSubmit: SubmitHandler<KurirFormData> = (data) => {
     if (!currentEditingKurir) return;
 
-    setKurirs(prevKurirs =>
-      prevKurirs.map(k =>
-        k.id === currentEditingKurir.id
-          ? {
-              ...k,
-              ...data, // spread validated form data
-              joinDate: data.joinDate.toISOString(),
-              passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : k.passwordValue,
-            }
-          : k
-      )
-    );
-    toast({ title: "Kurir Diperbarui", description: `Data Kurir ${data.fullName} berhasil diperbarui.` });
+    if (currentUser?.role === 'Admin') {
+      toast({ title: "Permintaan Diajukan", description: `Permintaan perubahan data Kurir ${data.fullName} (ID: ${currentEditingKurir.id}) telah dikirim ke MasterAdmin untuk persetujuan.` });
+    } else { // MasterAdmin or other direct roles
+      setKurirs(prevKurirs =>
+        prevKurirs.map(k =>
+          k.id === currentEditingKurir.id
+            ? {
+                ...k,
+                ...data, 
+                joinDate: data.joinDate.toISOString(),
+                passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : k.passwordValue,
+              }
+            : k
+        )
+      );
+      toast({ title: "Kurir Diperbarui", description: `Data Kurir ${data.fullName} berhasil diperbarui.` });
+    }
     reset();
     setIsEditKurirDialogOpen(false);
     setCurrentEditingKurir(null);
@@ -132,15 +149,27 @@ export default function ManageKurirsPage() {
   };
   
   const handleStatusChange = (kurirId: string, newStatus: boolean) => {
-    setKurirs(prevKurirs => 
-      prevKurirs.map(kurir => 
-        kurir.id === kurirId ? { ...kurir, status: newStatus ? 'Aktif' : 'Nonaktif' } : kurir
-      )
-    );
-    toast({
-      title: "Status Kurir Diperbarui",
-      description: `Status kurir ${kurirId} telah diubah menjadi ${newStatus ? 'Aktif' : 'Nonaktif'}. Akun ${newStatus ? 'dapat' : 'tidak dapat'} digunakan.`,
-    });
+    if (currentUser?.role === 'Admin') {
+      const kurir = kurirs.find(k => k.id === kurirId);
+      toast({
+        title: "Permintaan Diajukan",
+        description: `Permintaan perubahan status Kurir ${kurir?.fullName || kurirId} menjadi ${newStatus ? 'Aktif' : 'Nonaktif'} telah dikirim ke MasterAdmin.`,
+      });
+      // For Admin, do not change the state visually immediately on the switch
+      // The switch will revert to its original state unless we prevent default or manage its checked state carefully.
+      // For simplicity, we'll let the toast be the primary feedback. The MasterAdmin would approve to make the change permanent.
+      // To prevent visual update of the switch for Admin, we don't call setKurirs here for Admin role.
+    } else { // MasterAdmin or other direct roles
+      setKurirs(prevKurirs => 
+        prevKurirs.map(kurir => 
+          kurir.id === kurirId ? { ...kurir, status: newStatus ? 'Aktif' : 'Nonaktif' } : kurir
+        )
+      );
+      toast({
+        title: "Status Kurir Diperbarui",
+        description: `Status kurir ${kurirId} telah diubah menjadi ${newStatus ? 'Aktif' : 'Nonaktif'}. Akun ${newStatus ? 'dapat' : 'tidak dapat'} digunakan.`,
+      });
+    }
   };
 
   const filteredKurirs = kurirs.filter(kurir =>
@@ -152,7 +181,6 @@ export default function ManageKurirsPage() {
     (kurir.wilayah && kurir.wilayah.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (kurir.area && kurir.area.toLowerCase().includes(searchTerm.toLowerCase()))
   );
-
 
   const KurirFormFields = ({ isEdit = false }: { isEdit?: boolean }) => (
     <>
@@ -185,7 +213,7 @@ export default function ManageKurirsPage() {
             {isEdit ? "Password Baru (Opsional)" : "Password Awal *"}
           </Label>
           <Input id={isEdit ? "editKurirPassword" : "addKurirPassword"} type="password" {...register("passwordValue")} placeholder={isEdit ? "Kosongkan jika tidak diubah" : ""} />
-          {errors.passwordValue && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
+          {errors.passwordValue && errors.passwordValue.message && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirJabatan" : "addKurirJabatan"}>Jabatan <span className="text-destructive">*</span></Label>
@@ -255,22 +283,25 @@ export default function ManageKurirsPage() {
         <div>
           <Label htmlFor={isEdit ? "editKurirBankName" : "addKurirBankName"}>Nama Bank</Label>
           <Input id={isEdit ? "editKurirBankName" : "addKurirBankName"} {...register("bankName")} />
-          {errors.bankName && <p className="text-destructive text-sm mt-1">{errors.bankName.message}</p>}
+          {errors.bankName && errors.bankName.message && <p className="text-destructive text-sm mt-1">{errors.bankName.message}</p>}
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirBankAccountNumber" : "addKurirBankAccountNumber"}>Nomor Rekening</Label>
           <Input id={isEdit ? "editKurirBankAccountNumber" : "addKurirBankAccountNumber"} {...register("bankAccountNumber")} />
-            {errors.bankAccountNumber && <p className="text-destructive text-sm mt-1">{errors.bankAccountNumber.message}</p>}
+            {errors.bankAccountNumber && errors.bankAccountNumber.message && <p className="text-destructive text-sm mt-1">{errors.bankAccountNumber.message}</p>}
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirBankRecipientName" : "addKurirBankRecipientName"}>Nama Pemilik Rekening</Label>
           <Input id={isEdit ? "editKurirBankRecipientName" : "addKurirBankRecipientName"} {...register("bankRecipientName")} />
-          {errors.bankRecipientName && <p className="text-destructive text-sm mt-1">{errors.bankRecipientName.message}</p>}
+          {errors.bankRecipientName && errors.bankRecipientName.message && <p className="text-destructive text-sm mt-1">{errors.bankRecipientName.message}</p>}
         </div>
       </div>
     </>
   );
 
+  if (!currentUser) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -282,7 +313,9 @@ export default function ManageKurirsPage() {
               Manajemen Akun Kurir
             </CardTitle>
             <CardDescription>
-              Kelola akun Kurir. Perubahan mungkin memerlukan persetujuan MasterAdmin.
+              {currentUser.role === 'Admin' 
+                ? "Kelola akun Kurir. Penambahan atau perubahan data memerlukan persetujuan MasterAdmin."
+                : "Kelola akun Kurir."}
             </CardDescription>
           </div>
           <Dialog open={isAddKurirDialogOpen} onOpenChange={setIsAddKurirDialogOpen}>
@@ -306,7 +339,9 @@ export default function ManageKurirsPage() {
                 <KurirFormFields />
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => { reset(); setIsAddKurirDialogOpen(false); }}>Batal</Button>
-                  <Button type="submit">Simpan Kurir</Button>
+                  <Button type="submit">
+                    {currentUser.role === 'Admin' ? 'Ajukan Penambahan' : 'Simpan Kurir'}
+                  </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -343,6 +378,14 @@ export default function ManageKurirsPage() {
                         checked={kurir.status === 'Aktif'}
                         onCheckedChange={(newStatus) => handleStatusChange(kurir.id, newStatus)}
                         aria-label={`Status kurir ${kurir.fullName}`}
+                        // If Admin, the switch interaction is handled by handleStatusChange to not update state directly
+                        disabled={currentUser.role === 'Admin' && kurir.status === 'Aktif' && kurir.status !== (kurirs.find(k=>k.id === kurir.id)?.status || 'Nonaktif')} // A bit tricky to manage switch state without full backend
+                        onClick={(e) => {
+                          if (currentUser.role === 'Admin') {
+                            e.preventDefault(); // Prevent default switch toggle for admin if we are just sending request
+                            handleStatusChange(kurir.id, !(kurir.status === 'Aktif'));
+                          }
+                        }}
                       />
                       <span className={`ml-2 text-xs ${kurir.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
                         {kurir.status}
@@ -350,7 +393,13 @@ export default function ManageKurirsPage() {
                     </TableCell>
                     <TableCell className="text-center space-x-1">
                       <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(kurir)}><Edit size={16}/></Button>
-                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${kurir.id} belum diimplementasikan.`})}><Trash2 size={16}/></Button>
+                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => {
+                        if (currentUser.role === 'Admin') {
+                            toast({title: "Permintaan Diajukan", description: `Penghapusan kurir ${kurir.id} memerlukan persetujuan MasterAdmin.`});
+                        } else {
+                            toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${kurir.id} belum diimplementasikan.`});
+                        }
+                      }}><Trash2 size={16}/></Button>
                     </TableCell>
                   </TableRow>
                 )) : (
@@ -368,7 +417,13 @@ export default function ManageKurirsPage() {
       </Card>
 
       {/* Edit Kurir Dialog */}
-      <Dialog open={isEditKurirDialogOpen} onOpenChange={setIsEditKurirDialogOpen}>
+      <Dialog open={isEditKurirDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setCurrentEditingKurir(null);
+          reset();
+        }
+        setIsEditKurirDialogOpen(open);
+      }}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Kurir: {currentEditingKurir?.fullName}</DialogTitle>
@@ -378,7 +433,9 @@ export default function ManageKurirsPage() {
             <KurirFormFields isEdit={true}/>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => { reset(); setIsEditKurirDialogOpen(false); setCurrentEditingKurir(null);}}>Batal</Button>
-              <Button type="submit">Simpan Perubahan</Button>
+              <Button type="submit">
+                 {currentUser.role === 'Admin' ? 'Ajukan Perubahan' : 'Simpan Perubahan'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -411,6 +468,4 @@ export default function ManageKurirsPage() {
     </div>
   );
 }
-
-
     

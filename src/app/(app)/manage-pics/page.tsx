@@ -38,6 +38,16 @@ export default function ManagePICsPage() {
   const [isEditPICDialogOpen, setIsEditPICDialogOpen] = useState(false);
   const [currentEditingPIC, setCurrentEditingPIC] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      try {
+        setCurrentUser(JSON.parse(userDataString) as UserProfile);
+      } catch (error) { console.error("Error parsing user data for manage pics page", error); }
+    }
+  }, []);
 
   const { register, handleSubmit, reset, formState: { errors }, setValue } = useForm<PICFormData>({
     resolver: zodResolver(picSchema),
@@ -45,19 +55,28 @@ export default function ManagePICsPage() {
 
   const handleAddPIC: SubmitHandler<PICFormData> = (data) => {
     const newPICId = data.id && data.id.trim() !== '' ? data.id : `PIC${String(Date.now()).slice(-6)}`;
-    if (pics.find(pic => pic.id === newPICId)) {
-      toast({ title: "Gagal Menambahkan", description: `ID PIC ${newPICId} sudah ada.`, variant: "destructive"});
-      return;
+    
+    if (currentUser?.role === 'Admin') {
+      if (pics.find(pic => pic.id === newPICId)) {
+        toast({ title: "Gagal Mengajukan", description: `ID PIC ${newPICId} sudah ada atau sedang diajukan.`, variant: "destructive"});
+        return;
+      }
+      toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan PIC ${data.fullName} (ID: ${newPICId}) telah dikirim ke MasterAdmin untuk persetujuan.` });
+    } else { // MasterAdmin or other direct roles
+      if (pics.find(pic => pic.id === newPICId)) {
+        toast({ title: "Gagal Menambahkan", description: `ID PIC ${newPICId} sudah ada.`, variant: "destructive"});
+        return;
+      }
+      const newPIC: UserProfile = {
+        ...data,
+        id: newPICId,
+        role: 'PIC',
+        status: 'Aktif',
+        passwordValue: data.passwordValue || 'defaultPassword',
+      };
+      setPics(prev => [...prev, newPIC]);
+      toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} (ID: ${newPICId}) berhasil ditambahkan.` });
     }
-    const newPIC: UserProfile = {
-      ...data,
-      id: newPICId,
-      role: 'PIC',
-      status: 'Aktif',
-      passwordValue: data.passwordValue || 'defaultPassword',
-    };
-    setPics(prev => [...prev, newPIC]);
-    toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} (ID: ${newPICId}) berhasil ditambahkan.` });
     reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
     setIsAddPICDialogOpen(false);
   };
@@ -75,20 +94,24 @@ export default function ManagePICsPage() {
   const handleEditPIC: SubmitHandler<PICFormData> = (data) => {
     if (!currentEditingPIC) return;
 
-    setPics(prevPics =>
-      prevPics.map(pic =>
-        pic.id === currentEditingPIC.id
-          ? {
-              ...pic,
-              fullName: data.fullName,
-              email: data.email,
-              workLocation: data.workLocation,
-              passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : pic.passwordValue,
-            }
-          : pic
-      )
-    );
-    toast({ title: "PIC Diperbarui", description: `Data PIC ${data.fullName} berhasil diperbarui.` });
+    if (currentUser?.role === 'Admin') {
+      toast({ title: "Permintaan Diajukan", description: `Permintaan perubahan data PIC ${data.fullName} (ID: ${currentEditingPIC.id}) telah dikirim ke MasterAdmin untuk persetujuan.` });
+    } else { // MasterAdmin or other direct roles
+      setPics(prevPics =>
+        prevPics.map(pic =>
+          pic.id === currentEditingPIC.id
+            ? {
+                ...pic,
+                fullName: data.fullName,
+                email: data.email,
+                workLocation: data.workLocation,
+                passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : pic.passwordValue,
+              }
+            : pic
+        )
+      );
+      toast({ title: "PIC Diperbarui", description: `Data PIC ${data.fullName} berhasil diperbarui.` });
+    }
     reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
     setIsEditPICDialogOpen(false);
     setCurrentEditingPIC(null);
@@ -100,15 +123,23 @@ export default function ManagePICsPage() {
   };
   
   const handleStatusChange = (picId: string, newStatus: boolean) => {
-    setPics(prevPics => 
-      prevPics.map(pic => 
-        pic.id === picId ? { ...pic, status: newStatus ? 'Aktif' : 'Nonaktif' } : pic
-      )
-    );
-    toast({
-      title: "Status PIC Diperbarui",
-      description: `Status PIC ${picId} telah diubah menjadi ${newStatus ? 'Aktif' : 'Nonaktif'}. Akun ${newStatus ? 'dapat' : 'tidak dapat'} digunakan.`,
-    });
+    if (currentUser?.role === 'Admin') {
+      const pic = pics.find(p => p.id === picId);
+      toast({
+        title: "Permintaan Diajukan",
+        description: `Permintaan perubahan status PIC ${pic?.fullName || picId} menjadi ${newStatus ? 'Aktif' : 'Nonaktif'} telah dikirim ke MasterAdmin.`,
+      });
+    } else { // MasterAdmin or other direct roles
+      setPics(prevPics => 
+        prevPics.map(pic => 
+          pic.id === picId ? { ...pic, status: newStatus ? 'Aktif' : 'Nonaktif' } : pic
+        )
+      );
+      toast({
+        title: "Status PIC Diperbarui",
+        description: `Status PIC ${picId} telah diubah menjadi ${newStatus ? 'Aktif' : 'Nonaktif'}. Akun ${newStatus ? 'dapat' : 'tidak dapat'} digunakan.`,
+      });
+    }
   };
 
   const filteredPICs = pics.filter(pic =>
@@ -117,6 +148,10 @@ export default function ManagePICsPage() {
     (pic.email && pic.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (pic.workLocation && pic.workLocation.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+  
+  if (!currentUser) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -128,7 +163,9 @@ export default function ManagePICsPage() {
               Manajemen Akun PIC
             </CardTitle>
             <CardDescription>
-              Kelola akun pengguna dengan peran PIC (Person In Charge).
+              {currentUser.role === 'Admin' 
+                ? "Kelola akun PIC. Penambahan atau perubahan data memerlukan persetujuan MasterAdmin."
+                : "Kelola akun pengguna dengan peran PIC (Person In Charge)."}
             </CardDescription>
           </div>
           <Dialog open={isAddPICDialogOpen} onOpenChange={setIsAddPICDialogOpen}>
@@ -160,7 +197,7 @@ export default function ManagePICsPage() {
                 <div>
                   <Label htmlFor="addPicPassword">Password Awal <span className="text-destructive">*</span></Label>
                   <Input id="addPicPassword" type="password" {...register("passwordValue")} />
-                  {errors.passwordValue && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
+                  {errors.passwordValue && errors.passwordValue.message && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
                 </div>
                 <div>
                   <Label htmlFor="addPicWorkLocation">Area Tanggung Jawab <span className="text-destructive">*</span></Label>
@@ -169,7 +206,9 @@ export default function ManagePICsPage() {
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => { reset(); setIsAddPICDialogOpen(false); }}>Batal</Button>
-                  <Button type="submit">Simpan PIC</Button>
+                  <Button type="submit">
+                    {currentUser.role === 'Admin' ? 'Ajukan Penambahan' : 'Simpan PIC'}
+                  </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -208,6 +247,12 @@ export default function ManagePICsPage() {
                         checked={pic.status === 'Aktif'}
                         onCheckedChange={(newStatus) => handleStatusChange(pic.id, newStatus)}
                         aria-label={`Status PIC ${pic.fullName}`}
+                        onClick={(e) => {
+                          if (currentUser.role === 'Admin') {
+                            e.preventDefault(); 
+                            handleStatusChange(pic.id, !(pic.status === 'Aktif'));
+                          }
+                        }}
                       />
                       <span className={`ml-2 text-xs ${pic.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
                         {pic.status}
@@ -215,7 +260,13 @@ export default function ManagePICsPage() {
                     </TableCell>
                     <TableCell className="text-center space-x-1">
                       <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(pic)}><Edit size={16}/></Button>
-                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${pic.id} belum diimplementasikan.`})}><Trash2 size={16}/></Button>
+                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => {
+                        if (currentUser.role === 'Admin') {
+                            toast({title: "Permintaan Diajukan", description: `Penghapusan PIC ${pic.id} memerlukan persetujuan MasterAdmin.`});
+                        } else {
+                            toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${pic.id} belum diimplementasikan.`});
+                        }
+                      }}><Trash2 size={16}/></Button>
                     </TableCell>
                   </TableRow>
                 )) : (
@@ -233,10 +284,16 @@ export default function ManagePICsPage() {
       </Card>
       
       {/* Edit PIC Dialog */}
-      <Dialog open={isEditPICDialogOpen} onOpenChange={setIsEditPICDialogOpen}>
+      <Dialog open={isEditPICDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setCurrentEditingPIC(null);
+          reset();
+        }
+        setIsEditPICDialogOpen(open);
+      }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Edit PIC</DialogTitle>
+            <DialogTitle>Edit PIC: {currentEditingPIC?.fullName}</DialogTitle>
             <DialogDescription>Perbarui detail PIC. ID tidak dapat diubah.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(handleEditPIC)} className="space-y-4 py-4">
@@ -262,11 +319,13 @@ export default function ManagePICsPage() {
             <div>
               <Label htmlFor="editPicPassword">Password Baru (Opsional)</Label>
               <Input id="editPicPassword" type="password" {...register("passwordValue")} placeholder="Kosongkan jika tidak ingin diubah"/>
-              {errors.passwordValue && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
+              {errors.passwordValue && errors.passwordValue.message && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => { reset(); setIsEditPICDialogOpen(false); setCurrentEditingPIC(null);}}>Batal</Button>
-              <Button type="submit">Simpan Perubahan</Button>
+              <Button type="submit">
+                 {currentUser.role === 'Admin' ? 'Ajukan Perubahan' : 'Simpan Perubahan'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -299,3 +358,4 @@ export default function ManagePICsPage() {
     </div>
   );
 }
+
