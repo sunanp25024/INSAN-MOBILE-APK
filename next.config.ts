@@ -1,3 +1,4 @@
+
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
@@ -16,12 +17,7 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      {
-        protocol: 'https',
-        hostname: 'i.ibb.co', // Added for the new logo
-        port: '',
-        pathname: '/**',
-      }
+      // i.ibb.co is removed as the logo is now local
     ],
   },
 };
