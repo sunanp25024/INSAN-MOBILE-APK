@@ -8,19 +8,51 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 export default function ReportsPage() {
-  // TODO: Fetch current user role and verify access (PIC)
-  // For now, assume access is granted if page is reached
+  const { toast } = useToast(); // Initialize useToast
 
   const handleDownloadReport = (reportType: string) => {
-    // Placeholder for download logic
-    alert(`Mendownload laporan ${reportType}... (Fitur ini belum diimplementasikan)`);
+    let description = "Data akan disesuaikan dengan filter yang aktif di atas (Wilayah, Area, Hub, Kurir).";
+    let title = `Simulasi Unduh ${reportType} (Excel)`;
+
+    switch (reportType) {
+      case 'Kehadiran Kurir':
+        description = `File Excel akan berisi: Tanggal, ID Kurir, Nama Kurir, Lokasi Kerja, Waktu Check-In, Waktu Check-Out, Status Kehadiran. ${description}`;
+        break;
+      case 'Performa Pengiriman':
+        description = `File Excel akan berisi: Periode, ID Kurir, Nama Kurir, Lokasi Kerja, Total Paket Dibawa, Terkirim, Pending/Retur, Rate Sukses. ${description}`;
+        break;
+      case 'Aktivitas Harian':
+        description = `File Excel akan berisi: Tanggal, ID Kurir, Nama Kurir, Lokasi Hub, Total Paket Dibawa, Terkirim, Pending/Retur. ${description}`;
+        break;
+      case 'Ringkasan Mingguan':
+        description = `File Excel akan berisi: Periode Minggu, Agregat data pengiriman, kehadiran, dan performa. ${description}`;
+        break;
+      case 'Ringkasan Bulanan':
+        description = `File Excel akan berisi: Periode Bulan, Agregat data pengiriman, kehadiran, dan performa. ${description}`;
+        break;
+      case 'Paket COD':
+        description = `File Excel akan berisi: Detail transaksi COD, status pembayaran, dan rekapitulasi. ${description}`;
+        break;
+      default:
+        title = "Simulasi Unduh Laporan (Excel)";
+    }
+    
+    toast({ 
+      title: title, 
+      description: description,
+      duration: 7000 // Longer duration for more detailed toast
+    });
   };
 
   const handleApplyFilters = () => {
     // Placeholder for filter logic
-    alert("Menerapkan filter... (Fitur ini belum diimplementasikan)");
+    toast({ 
+        title: "Filter Diterapkan (Simulasi)", 
+        description: "Laporan akan disesuaikan berdasarkan filter Wilayah, Area, Hub, dan Kurir yang Anda pilih." 
+    });
   }
 
   return (
@@ -56,7 +88,8 @@ export default function ReportsPage() {
                   <SelectValue placeholder="Pilih Wilayah" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="jabodetabek">Jabodetabek</SelectItem>
+                  <SelectItem value="all-wilayah">Semua Wilayah</SelectItem>
+                  <SelectItem value="jabodetabek">Jabodetabek-Banten</SelectItem>
                   <SelectItem value="jawa-barat">Jawa Barat</SelectItem>
                   <SelectItem value="jawa-tengah">Jawa Tengah</SelectItem>
                 </SelectContent>
@@ -69,6 +102,7 @@ export default function ReportsPage() {
                   <SelectValue placeholder="Pilih Area" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all-area">Semua Area</SelectItem>
                   <SelectItem value="jakarta-pusat">Jakarta Pusat</SelectItem>
                   <SelectItem value="bandung-kota">Bandung Kota</SelectItem>
                   <SelectItem value="surabaya-timur">Surabaya Timur</SelectItem>
@@ -82,9 +116,10 @@ export default function ReportsPage() {
                   <SelectValue placeholder="Pilih Lokasi Kerja" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="hub-a">Hub A (Jakarta)</SelectItem>
-                  <SelectItem value="hub-b">Hub B (Bandung)</SelectItem>
-                  <SelectItem value="hub-c">Hub C (Surabaya)</SelectItem>
+                  <SelectItem value="all-hub">Semua Hub</SelectItem>
+                  <SelectItem value="jp-hub-thamrin">Hub Thamrin (Jakarta Pusat)</SelectItem>
+                  <SelectItem value="bdg-hub-kota">Hub Bandung Kota</SelectItem>
+                  <SelectItem value="jt-hub-cawang">Hub Cawang (Jakarta Timur)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -140,7 +175,7 @@ export default function ReportsPage() {
               <CardTitle className="flex items-center text-lg"><CalendarCheck className="mr-2 h-5 w-5 text-primary"/>Laporan Aktivitas Harian</CardTitle>
             </CardHeader>
             <CardContent className="flex-grow">
-              <p className="text-sm text-muted-foreground mb-3">Ringkasan aktivitas dan penyelesaian pekerjaan kurir per hari.</p>
+              <p className="text-sm text-muted-foreground mb-3">Ringkasan aktivitas dan penyelesaian pekerjaan kurir per hari (total paket, terkirim, retur).</p>
             </CardContent>
             <CardFooter>
               <Button onClick={() => handleDownloadReport('Aktivitas Harian')} className="w-full sm:w-auto">

@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight, Filter as FilterIcon, Download as DownloadIcon, Search as SearchIcon, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, CourierWorkSummaryActivity, DashboardSummaryData, WeeklyShipmentSummary, MonthlySummaryData } from '@/types';
+import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, CourierWorkSummaryActivity, DashboardSummaryData, WeeklyShipmentSummary, MonthlySummaryData, Wilayah, Area, Hub } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -56,26 +56,9 @@ const MotivationalQuotes = [
 ];
 
 // Mock location data for filters
-interface Hub {
-  id: string;
-  name: string;
-}
-
-interface Area {
-  id: string;
-  name: string;
-  hubs: Hub[];
-}
-
-interface Wilayah {
-  id: string;
-  name: string;
-  areas: Area[];
-}
-
 const mockLocations: Wilayah[] = [
   {
-    id: 'all-wilayah', name: 'Semua Wilayah', areas: [] // Special case for "all"
+    id: 'all-wilayah', name: 'Semua Wilayah', areas: []
   },
   {
     id: 'jabodetabek-banten',
@@ -83,7 +66,7 @@ const mockLocations: Wilayah[] = [
     areas: [
       { id: 'all-area-jb', name: 'Semua Area (Jabodetabek-Banten)', hubs: []},
       {
-        id: 'jakarta-pusat',
+        id: 'jakarta-pusat-jb',
         name: 'Jakarta Pusat',
         hubs: [
           { id: 'all-hub-jp', name: 'Semua Hub (Jakarta Pusat)'},
@@ -92,7 +75,7 @@ const mockLocations: Wilayah[] = [
         ],
       },
       {
-        id: 'jakarta-timur',
+        id: 'jakarta-timur-jb',
         name: 'Jakarta Timur',
         hubs: [
           { id: 'all-hub-jt', name: 'Semua Hub (Jakarta Timur)'},
@@ -108,7 +91,7 @@ const mockLocations: Wilayah[] = [
     areas: [
       { id: 'all-area-jabar', name: 'Semua Area (Jawa Barat)', hubs: []},
       {
-        id: 'bandung-kota',
+        id: 'bandung-kota-jabar',
         name: 'Bandung Kota',
         hubs: [
           { id: 'all-hub-bdg', name: 'Semua Hub (Bandung Kota)'},
@@ -173,11 +156,11 @@ export default function DashboardPage() {
     let basePackagesProcessed = Math.floor(Math.random() * 200) + 100;
     let basePackagesDelivered = Math.floor(Math.random() * (basePackagesProcessed - 20)) + (basePackagesProcessed > 100 ? 80 : 30);
     
-    if (isFiltered) { // Simulate data reduction when filtered
-        baseActiveCouriers = Math.floor(baseActiveCouriers * (Math.random() * 0.5 + 0.3)); // 30-80% of original
+    if (isFiltered) { 
+        baseActiveCouriers = Math.floor(baseActiveCouriers * (Math.random() * 0.5 + 0.3)); 
         basePackagesProcessed = Math.floor(basePackagesProcessed * (Math.random() * 0.5 + 0.3));
         basePackagesDelivered = Math.floor(basePackagesDelivered * (Math.random() * 0.5 + 0.3));
-        basePackagesDelivered = Math.min(basePackagesDelivered, basePackagesProcessed - Math.floor(basePackagesProcessed*0.1)); // ensure delivered <= processed
+        basePackagesDelivered = Math.min(basePackagesDelivered, basePackagesProcessed - Math.floor(basePackagesProcessed*0.1)); 
     }
     baseActiveCouriers = Math.max(1, baseActiveCouriers);
     basePackagesProcessed = Math.max(5, basePackagesProcessed);
@@ -246,7 +229,7 @@ export default function DashboardPage() {
           const mockAttendance: AttendanceActivity[] = [
             { id: 'att1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(7, 55, 0, 0).valueOf().toString(), location: 'Jakarta Pusat Hub (Thamrin)' },
             { id: 'att2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(8, 5, 0, 0).valueOf().toString(), location: 'Bandung Kota Hub (Kota)' },
-            { id: 'att3', kurirName: 'Charlie Van Houten', kurirId: 'KURIR003', action: 'reported-late', timestamp: subDays(new Date(), 0).setHours(9, 15, 0, 0).valueOf().toString(), location: 'Surabaya Timur Hub (Cawang)' }, // Example: mismatch location for demo
+            { id: 'att3', kurirName: 'Charlie Van Houten', kurirId: 'KURIR003', action: 'reported-late', timestamp: subDays(new Date(), 0).setHours(9, 15, 0, 0).valueOf().toString(), location: 'Surabaya Timur Hub (Cawang)' }, 
             { id: 'att4', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-out', timestamp: subDays(new Date(), 0).setHours(17, 2, 0, 0).valueOf().toString(), location: 'Jakarta Pusat Hub (Thamrin)' },
           ].sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
           setAttendanceActivities(mockAttendance);
@@ -258,31 +241,30 @@ export default function DashboardPage() {
           ].sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
           setCourierWorkSummaries(mockCourierWorkSummariesData);
           
-          // Initialize Area options
-          const defaultWilayah = mockLocations.find(w => w.id === 'all-wilayah');
-          let initialAreas: Area[] = [];
-          mockLocations.forEach(w => {
-            if (w.id !== 'all-wilayah') initialAreas = initialAreas.concat(w.areas);
-          });
-           // Add "Semua Area" option that encompasses all areas from all wilayah
+          
           const allAreasOption: Area = { id: 'all-area', name: 'Semua Area', hubs: [] };
+          let initialAreas: Area[] = [allAreasOption];
           mockLocations.forEach(w => {
             if (w.id !== 'all-wilayah') {
-                w.areas.forEach(ar => {
-                    if(ar.id.startsWith('all-area-')) return; // skip combined "semua area" for a wilayah
-                    allAreasOption.hubs = allAreasOption.hubs.concat(ar.hubs.filter(h => !h.id.startsWith('all-hub-')));
-                });
+              w.areas.forEach(area => {
+                if(!area.id.startsWith('all-area-')){ // Don't add specific "Semua Area (Wilayah X)" to global list
+                    initialAreas.push(area);
+                    area.hubs.forEach(hub => {
+                        if(!hub.id.startsWith('all-hub-') && !allAreasOption.hubs.find(h => h.id === hub.id)) {
+                           allAreasOption.hubs.push(hub); // Add unique hubs to "Semua Area"
+                        }
+                    })
+                }
+              });
             }
           });
-          setAreaOptions([allAreasOption, ...initialAreas.filter(a => !a.id.startsWith('all-area-'))]); // Filter out specific "Semua Area (Wilayah X)"
+          setAreaOptions(initialAreas);
 
-          // Initialize Hub options
-          let initialHubs: Hub[] = [];
-          initialAreas.forEach(a => {
-            if (!a.id.startsWith('all-area-')) initialHubs = initialHubs.concat(a.hubs);
-          });
           const allHubsOption: Hub = { id: 'all-hub', name: 'Semua Hub' };
-          setHubOptions([allHubsOption, ...initialHubs.filter(h => !h.id.startsWith('all-hub-'))]);
+          let initialHubs: Hub[] = [allHubsOption];
+           allAreasOption.hubs.forEach(hub => initialHubs.push(hub)); // Start with hubs from "Semua Area"
+          setHubOptions(initialHubs);
+
         }
       } catch (error) {
         console.error("Failed to parse user data from localStorage for dashboard", error);
@@ -623,7 +605,7 @@ export default function DashboardPage() {
   };
 
   const triggerFilterSimulation = () => {
-    setDashboardSummary(generateInitialDashboardSummary(true)); // Pass true to get "filtered" data
+    setDashboardSummary(generateInitialDashboardSummary(true)); 
     
     const wilayahName = mockLocations.find(w => w.id === selectedWilayah)?.name || 'Semua Wilayah';
     const areaName = areaOptions.find(a => a.id === selectedArea)?.name || 'Semua Area';
@@ -639,71 +621,91 @@ export default function DashboardPage() {
   const handleWilayahChange = (wilayahId: string) => {
     setSelectedWilayah(wilayahId);
     const currentWilayah = mockLocations.find(w => w.id === wilayahId);
-    let newAreaOptions: Area[] = [];
+    
+    let newAreaOptions: Area[] = [{ id: 'all-area', name: 'Semua Area', hubs: [] }];
+    let allHubsForCurrentWilayah: Hub[] = [{id: 'all-hub', name: 'Semua Hub'}];
+
     if (wilayahId === 'all-wilayah') {
         mockLocations.forEach(w => {
-            if (w.id !== 'all-wilayah') newAreaOptions = newAreaOptions.concat(w.areas);
-        });
-        newAreaOptions = newAreaOptions.filter(a => !a.id.startsWith('all-area-')); // Remove specific "Semua Area (Wilayah X)"
-        newAreaOptions.unshift({id: 'all-area', name: 'Semua Area', hubs: []}); // Add the global "Semua Area"
-    } else {
-        newAreaOptions = currentWilayah?.areas || [];
-    }
-    setAreaOptions(newAreaOptions);
-    setSelectedArea(newAreaOptions.length > 0 ? newAreaOptions[0].id : 'all-area'); // Default to first or "all"
-    
-    // Reset Hubs based on new Area default
-    const defaultAreaForHubs = newAreaOptions.find(a => a.id === (newAreaOptions.length > 0 ? newAreaOptions[0].id : 'all-area'));
-    let newHubOptions: Hub[] = [];
-     if (defaultAreaForHubs && defaultAreaForHubs.id !== 'all-area' && !defaultAreaForHubs.id.startsWith('all-area-')) {
-        newHubOptions = defaultAreaForHubs.hubs || [];
-    } else { // if "Semua Area" is selected or no specific area
-        areaOptions.forEach(ar => {
-            if (!ar.id.startsWith('all-area-')) { // Exclude "Semua Area (Wilayah X)"
-                 newHubOptions = newHubOptions.concat(ar.hubs.filter(h => !h.id.startsWith('all-hub-')));
+            if (w.id !== 'all-wilayah') {
+                w.areas.forEach(area => {
+                    if(!area.id.startsWith('all-area-')){
+                        newAreaOptions.push(area);
+                        area.hubs.forEach(hub => {
+                            if(!hub.id.startsWith('all-hub-') && !allHubsForCurrentWilayah.find(h => h.id === hub.id)) {
+                               allHubsForCurrentWilayah.push(hub);
+                            }
+                        });
+                    }
+                });
             }
         });
-        newHubOptions = Array.from(new Set(newHubOptions.map(h => h.id))).map(id => newHubOptions.find(h => h.id === id)!); // Deduplicate
-        newHubOptions.unshift({id: 'all-hub', name: 'Semua Hub'});
+    } else if (currentWilayah) {
+        newAreaOptions = [
+            { id: `all-area-${currentWilayah.id}`, name: `Semua Area (${currentWilayah.name})`, hubs: [] },
+            ...currentWilayah.areas.filter(a => !a.id.startsWith('all-area-'))
+        ];
+        currentWilayah.areas.forEach(area => {
+            if(!area.id.startsWith('all-area-')){
+                area.hubs.forEach(hub => {
+                     if(!hub.id.startsWith('all-hub-') && !allHubsForCurrentWilayah.find(h => h.id === hub.id)) {
+                        allHubsForCurrentWilayah.push(hub);
+                    }
+                });
+            }
+        });
     }
-    setHubOptions(newHubOptions);
-    setSelectedHub(newHubOptions.length > 0 ? newHubOptions[0].id : 'all-hub');
+    
+    setAreaOptions(newAreaOptions);
+    setSelectedArea(newAreaOptions[0].id); 
+    
+    setHubOptions(allHubsForCurrentWilayah);
+    setSelectedHub(allHubsForCurrentWilayah[0].id);
     triggerFilterSimulation();
   };
 
   const handleAreaChange = (areaId: string) => {
     setSelectedArea(areaId);
-    const currentArea = areaOptions.find(a => a.id === areaId);
-    let newHubOptions: Hub[] = [];
+    const currentWilayah = mockLocations.find(w => w.id === selectedWilayah);
+    let newHubOptions: Hub[] = [{ id: 'all-hub', name: 'Semua Hub' }];
 
-    if (areaId === 'all-area' || areaId.startsWith('all-area-')) { // If "Semua Area" (global or wilayah-specific)
+    if (areaId.startsWith('all-area-')) { // "Semua Area (Wilayah X)" or global "Semua Area"
         if (selectedWilayah === 'all-wilayah' || areaId === 'all-area') { // Global "Semua Area"
-            let allHubsFromAllAreas: Hub[] = [];
-            mockLocations.forEach(w => {
+             mockLocations.forEach(w => {
                 if (w.id !== 'all-wilayah') {
                     w.areas.forEach(ar => {
-                        if (!ar.id.startsWith('all-area-')) { // Exclude "Semua Area (Wilayah X)"
-                            allHubsFromAllAreas = allHubsFromAllAreas.concat(ar.hubs.filter(h => !h.id.startsWith('all-hub-')));
+                        if (!ar.id.startsWith('all-area-')) { 
+                            ar.hubs.forEach(hub => {
+                                if(!hub.id.startsWith('all-hub-') && !newHubOptions.find(h => h.id === hub.id)) {
+                                   newHubOptions.push(hub);
+                                }
+                            });
                         }
                     });
                 }
             });
-            newHubOptions = Array.from(new Set(allHubsFromAllAreas.map(h => h.id))).map(id => allHubsFromAllAreas.find(h => h.id === id)!); // Deduplicate
-        } else { // "Semua Area (Wilayah X)"
-             const currentWilayah = mockLocations.find(w => w.id === selectedWilayah);
-             currentWilayah?.areas.forEach(ar => {
-                 if (!ar.id.startsWith('all-area-')) { // Exclude "Semua Area (Wilayah X)" itself
-                    newHubOptions = newHubOptions.concat(ar.hubs.filter(h => !h.id.startsWith('all-hub-')));
+        } else if (currentWilayah) { // "Semua Area (Wilayah X)"
+             currentWilayah.areas.forEach(ar => {
+                 if (!ar.id.startsWith('all-area-')) { 
+                    ar.hubs.forEach(hub => {
+                        if(!hub.id.startsWith('all-hub-') && !newHubOptions.find(h => h.id === hub.id)) {
+                           newHubOptions.push(hub);
+                        }
+                    });
                  }
              });
-             newHubOptions = Array.from(new Set(newHubOptions.map(h => h.id))).map(id => newHubOptions.find(h => h.id === id)!); // Deduplicate
         }
-        newHubOptions.unshift({id: 'all-hub', name: 'Semua Hub'});
-    } else { // Specific Area
-        newHubOptions = currentArea?.hubs || [];
+    } else { // Specific Area selected
+        const areaData = areaOptions.find(a => a.id === areaId);
+        if (areaData) {
+             newHubOptions = [
+                 { id: `all-hub-${areaData.id}`, name: `Semua Hub (${areaData.name})`, },
+                 ...areaData.hubs.filter(h => !h.id.startsWith('all-hub-'))
+             ];
+        }
     }
     setHubOptions(newHubOptions);
-    setSelectedHub(newHubOptions.length > 0 ? newHubOptions[0].id : 'all-hub');
+    setSelectedHub(newHubOptions[0].id);
     triggerFilterSimulation();
   };
 
@@ -714,11 +716,11 @@ export default function DashboardPage() {
   
   const handleSearchKurirChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchKurir(event.target.value);
-    triggerFilterSimulation(); // Or debounce this for performance
+    triggerFilterSimulation(); 
   };
 
   const handleDashboardFilterApply = () => {
-    triggerFilterSimulation(); // Re-trigger with current state
+    triggerFilterSimulation(); 
   };
   
   const handleDownloadDashboardSummary = () => {
@@ -726,11 +728,8 @@ export default function DashboardPage() {
     const areaName = areaOptions.find(a => a.id === selectedArea)?.name || 'Semua Area';
     const hubName = hubOptions.find(h => h.id === selectedHub)?.name || 'Semua Hub';
     
-    let filterMessage = `Wilayah: ${wilayahName}, Area: ${areaName}, Hub: ${hubName}`;
-    if (searchKurir) {
-      filterMessage += `, Kurir: ${searchKurir}`;
-    }
-    toast({ title: "Unduh Ringkasan (Simulasi)", description: `Data akan diunduh berdasarkan filter: ${filterMessage}` });
+    const description = `File Excel akan berisi: Statistik Utama (Kurir Aktif, Paket Diproses, dll.), Ringkasan Pengiriman Harian, Mingguan, Bulanan, dan daftar Aktivitas Absensi serta Ringkasan Penyelesaian Kerja Kurir terbaru. Filter aktif: Wilayah (${wilayahName}), Area (${areaName}), Hub (${hubName}), Kurir (${searchKurir || 'Semua'}).`;
+    toast({ title: "Simulasi Unduh Ringkasan Dashboard (Excel)", description: description, duration: 7000 });
   };
 
 
@@ -980,8 +979,8 @@ export default function DashboardPage() {
             <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
               {[...inTransitPackages]
                   .sort((a, b) => {
-                    if (a.status === 'delivered' && b.status !== 'delivered') return -1; 
-                    if (a.status !== 'delivered' && b.status === 'delivered') return 1;
+                    if (a.status === 'delivered' && b.status !== 'delivered') return 1; 
+                    if (a.status !== 'delivered' && b.status === 'delivered') return -1;
                     return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime(); 
                   })
                   .map(pkg => (
@@ -1182,7 +1181,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <Label htmlFor="dashboard-area">Area Operasional</Label>
-                <Select value={selectedArea} onValueChange={handleAreaChange} disabled={areaOptions.length === 0 || selectedWilayah === 'all-wilayah' && areaOptions.length <=1}>
+                <Select value={selectedArea} onValueChange={handleAreaChange} disabled={areaOptions.length === 0 || (selectedWilayah === 'all-wilayah' && areaOptions.length <=1)}>
                   <SelectTrigger id="dashboard-area">
                     <SelectValue placeholder="Pilih Area" />
                   </SelectTrigger>
@@ -1195,7 +1194,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <Label htmlFor="dashboard-lokasi-kerja">Lokasi Kerja (Hub)</Label>
-                 <Select value={selectedHub} onValueChange={handleHubChange} disabled={hubOptions.length === 0 || selectedArea === 'all-area' && hubOptions.length <= 1 || selectedArea.startsWith('all-area-') && hubOptions.length <=1}>
+                 <Select value={selectedHub} onValueChange={handleHubChange} disabled={hubOptions.length === 0 || (selectedArea === 'all-area' && hubOptions.length <= 1) || (selectedArea.startsWith('all-area-') && hubOptions.length <=1)}>
                   <SelectTrigger id="dashboard-lokasi-kerja">
                     <SelectValue placeholder="Pilih Hub" />
                   </SelectTrigger>
