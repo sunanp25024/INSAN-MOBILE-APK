@@ -311,11 +311,11 @@ export default function DashboardPage() {
             <CardDescription>Ringkasan pengantaran paket hari ini.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+              <div className="space-y-1">
                 <p>Total Paket Dibawa: <strong>{dailyInput?.totalPackages || 0}</strong></p>
-                <p>Total Paket Terkirim: <strong className="text-green-400">{deliveredCount}</strong></p>
-                <p>Total Paket Pending/Retur: <strong className="text-red-400">{pendingCount}</strong></p>
+                <p>Total Paket Terkirim: <strong className="text-green-500 dark:text-green-400">{deliveredCount}</strong></p>
+                <p>Total Paket Pending/Retur: <strong className="text-red-500 dark:text-red-400">{pendingCount}</strong></p>
                 <p>Tingkat Keberhasilan: <strong className="text-primary">{((deliveredCount / dailyTotalForChart) * 100).toFixed(1)}%</strong></p>
               </div>
               <div className="h-60">
@@ -326,26 +326,39 @@ export default function DashboardPage() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip 
+                      contentStyle={{
+                        background: "hsl(var(--background))",
+                        borderColor: "hsl(var(--border))",
+                        borderRadius: "var(--radius)",
+                      }}
+                    />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             </div>
             {pendingReturnPackages.length > 0 && (
-              <div>
-                <h3 className="font-semibold mt-4 mb-2">Bukti Paket Retur:</h3>
+              <div className="mt-6">
+                <h3 className="font-semibold text-lg mb-2">Bukti Paket Retur:</h3>
                 {returnProofPhoto ? (
-                  <img src={URL.createObjectURL(returnProofPhoto)} alt="Bukti Retur" className="max-w-xs rounded-md shadow-md" data-ai-hint="package receipt"/>
+                  <img 
+                    src={URL.createObjectURL(returnProofPhoto)} 
+                    alt="Bukti Retur" 
+                    className="max-w-sm w-full md:max-w-xs rounded-lg shadow-md border border-border" 
+                    data-ai-hint="package receipt"
+                  />
                 ) : (
-                  <p className="text-muted-foreground">Tidak ada foto bukti retur.</p>
+                  <p className="text-muted-foreground">Tidak ada foto bukti retur yang diupload.</p>
                 )}
               </div>
             )}
           </CardContent>
-          <CardFooter className="flex flex-col items-center space-y-4">
-             <p className="text-lg italic text-accent text-center">{motivationalQuote}</p>
-            <Button onClick={resetDay} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground">Mulai Hari Baru</Button>
+          <CardFooter className="flex flex-col items-center space-y-4 pt-6">
+             <p className="text-lg italic text-muted-foreground text-center">{motivationalQuote}</p>
+            <Button onClick={resetDay} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto">
+              Mulai Hari Baru
+            </Button>
           </CardFooter>
         </Card>
       </div>
@@ -495,13 +508,13 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
             {inTransitPackages.map(pkg => (
-              <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-900/30 border-green-500/50' : ''}`}>
+              <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold">{pkg.id} <span className={`text-xs px-2 py-0.5 rounded-full ${pkg.isCOD ? 'bg-yellow-500/20 text-yellow-300' : 'bg-blue-500/20 text-blue-300'}`}>{pkg.isCOD ? 'COD' : 'Non-COD'}</span></p>
+                  <p className="font-semibold">{pkg.id} <span className={`text-xs px-2 py-0.5 rounded-full ${pkg.isCOD ? 'bg-yellow-400/20 text-yellow-600 dark:text-yellow-300' : 'bg-blue-400/20 text-blue-600 dark:text-blue-300'}`}>{pkg.isCOD ? 'COD' : 'Non-COD'}</span></p>
                   {pkg.status === 'delivered' ? (
-                     <span className="text-xs text-green-400 flex items-center"><CheckCircle size={14} className="mr-1"/> Terkirim</span>
+                     <span className="text-xs text-green-600 dark:text-green-400 flex items-center"><CheckCircle size={14} className="mr-1"/> Terkirim</span>
                   ) : (
-                     <span className="text-xs text-orange-400">Dalam Perjalanan</span>
+                     <span className="text-xs text-orange-500 dark:text-orange-400">Dalam Perjalanan</span>
                   )}
                 </div>
                 {pkg.status === 'in_transit' && (
@@ -575,7 +588,7 @@ export default function DashboardPage() {
             <div>
                 <Label htmlFor="returnProof" className="mb-2 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang</Label>
                 <Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />
-                {returnProofPhoto && <p className="text-xs text-green-400 mt-1">{returnProofPhoto.name} dipilih.</p>}
+                {returnProofPhoto && <p className="text-xs text-green-500 dark:text-green-400 mt-1">{returnProofPhoto.name} dipilih.</p>}
             </div>
             <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1">
                 {pendingReturnPackages.map(pkg => (
@@ -587,14 +600,14 @@ export default function DashboardPage() {
              <Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={!returnProofPhoto}>
                 Konfirmasi Selesai dengan Paket Pending
              </Button>
-          </CardFooter>
+           </CardFooter>
         </Card>
       )}
       
       {!dayFinished && isCourierCheckedIn && (
-          <Card className="bg-gradient-to-r from-primary/20 to-accent/20">
+          <Card className="bg-gradient-to-r from-primary/10 to-accent/10 dark:from-primary/20 dark:to-accent/20 border-transparent">
             <CardContent className="pt-6">
-                <p className="text-center text-lg italic text-primary-foreground/80">{motivationalQuote}</p>
+                <p className="text-center text-lg italic text-foreground/70 dark:text-primary-foreground/80">{motivationalQuote}</p>
             </CardContent>
           </Card>
       )}
