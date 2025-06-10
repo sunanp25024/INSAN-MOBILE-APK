@@ -12,6 +12,7 @@ export function AppLogo({ className }: { className?: string }) {
         layout="fill"
         objectFit="contain"
         priority // Marking as priority helps with LCP if the logo is above the fold
+        quality={100} // Request highest quality
       />
     </div>
   );
