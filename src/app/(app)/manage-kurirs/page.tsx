@@ -13,12 +13,12 @@ import { useForm, SubmitHandler, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile, Wilayah, Area, Hub } from '@/types';
-import { mockLocationsData } from '@/types'; 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { UserProfile } from '@/types';
+// mockLocationsData might not be directly used in the form anymore but kept for reference
+// import { mockLocationsData } from '@/types'; 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import { Switch } from '@/components/ui/switch';
 
@@ -28,9 +28,9 @@ const kurirSchema = z.object({
   nik: z.string().length(16, "NIK harus 16 digit").regex(/^\d+$/, "NIK hanya boleh berisi angka"),
   passwordValue: z.string().min(6, "Password minimal 6 karakter").optional().or(z.literal('')),
   jabatan: z.string().min(3, "Jabatan minimal 3 karakter"),
-  wilayah: z.string().min(1, "Wilayah wajib dipilih"), // Stores Wilayah ID
-  area: z.string().min(1, "Area wajib dipilih"), // Stores Area ID
-  workLocation: z.string().min(1, "Lokasi kerja (Hub) wajib dipilih"), // Stores Hub ID
+  wilayah: z.string().min(1, "Wilayah wajib diisi"),
+  area: z.string().min(1, "Area wajib diisi"),
+  workLocation: z.string().min(1, "Lokasi kerja (Hub) wajib diisi"),
   joinDate: z.date({ required_error: "Tanggal join wajib diisi" }),
   bankName: z.string().min(3, "Nama bank minimal 3 karakter").optional().or(z.literal('')),
   bankAccountNumber: z.string().min(5, "Nomor rekening minimal 5 digit").regex(/^\d+$/, "Nomor rekening hanya boleh berisi angka").optional().or(z.literal('')),
@@ -40,18 +40,10 @@ const kurirSchema = z.object({
 
 type KurirFormData = z.infer<typeof kurirSchema>;
 
-// UserProfile stores names for Wilayah, Area, WorkLocation for easier display in table
-// But the form and schema will handle IDs for selection.
 const initialKurirData: UserProfile[] = [
-    { id: 'PISTEST2025', fullName: 'Budi Santoso', nik: '3273201009900001', jabatan: 'Kurir Senior', email: 'budi.s@example.com', role: 'Kurir', wilayah: 'jabodetabek-banten', area: 'jakarta-pusat-jb', workLocation: 'jp-hub-thamrin', joinDate: new Date(2023, 4, 15).toISOString(), bankName: 'Bank Central Asia', bankAccountNumber: '1234567890', bankRecipientName: 'Budi Santoso', status: 'Aktif', passwordValue: '123456',
-      wilayahId: 'jabodetabek-banten', areaId: 'jakarta-pusat-jb', hubId: 'jp-hub-thamrin' // Store IDs for edit form population
-    },
-    { id: 'KURIR002', fullName: 'Ani Yudhoyono', nik: '3273201009900002', jabatan: 'Kurir', email: 'ani.y@example.com', role: 'Kurir', wilayah: 'jawa-barat', area: 'bandung-kota-jabar', workLocation: 'bdg-hub-kota', joinDate: new Date(2023, 7, 1).toISOString(), bankName: 'Bank Mandiri', bankAccountNumber: '0987654321', bankRecipientName: 'Ani Yudhoyono', status: 'Aktif', passwordValue: '123456',
-      wilayahId: 'jawa-barat', areaId: 'bandung-kota-jabar', hubId: 'bdg-hub-kota'
-    },
-    { id: 'KURIR003', fullName: 'Charlie Van Houten', nik: '3273201009900003', jabatan: 'Kurir', email: 'charlie.vh@example.com', role: 'Kurir', wilayah: 'jabodetabek-banten', area: 'jakarta-timur-jb', workLocation: 'jt-hub-cawang', joinDate: new Date(2024, 0, 10).toISOString(), bankName: 'Bank BRI', bankAccountNumber: '1122334455', bankRecipientName: 'Charlie Van Houten', status: 'Nonaktif', passwordValue: '123456',
-      wilayahId: 'jabodetabek-banten', areaId: 'jakarta-timur-jb', hubId: 'jt-hub-cawang'
-    },
+    { id: 'PISTEST2025', fullName: 'Budi Santoso', nik: '3273201009900001', jabatan: 'Kurir Senior', email: 'budi.s@example.com', role: 'Kurir', wilayah: 'Jabodetabek-Banten', area: 'Jakarta Pusat', workLocation: 'Hub Thamrin', joinDate: new Date(2023, 4, 15).toISOString(), bankName: 'Bank Central Asia', bankAccountNumber: '1234567890', bankRecipientName: 'Budi Santoso', status: 'Aktif', passwordValue: '123456' },
+    { id: 'KURIR002', fullName: 'Ani Yudhoyono', nik: '3273201009900002', jabatan: 'Kurir', email: 'ani.y@example.com', role: 'Kurir', wilayah: 'Jawa Barat', area: 'Bandung Kota', workLocation: 'Hub Bandung Kota', joinDate: new Date(2023, 7, 1).toISOString(), bankName: 'Bank Mandiri', bankAccountNumber: '0987654321', bankRecipientName: 'Ani Yudhoyono', status: 'Aktif', passwordValue: '123456' },
+    { id: 'KURIR003', fullName: 'Charlie Van Houten', nik: '3273201009900003', jabatan: 'Kurir', email: 'charlie.vh@example.com', role: 'Kurir', wilayah: 'Jabodetabek-Banten', area: 'Jakarta Timur', workLocation: 'Hub Cawang', joinDate: new Date(2024, 0, 10).toISOString(), bankName: 'Bank BRI', bankAccountNumber: '1122334455', bankRecipientName: 'Charlie Van Houten', status: 'Nonaktif', passwordValue: '123456' },
 ];
 
 export default function ManageKurirsPage() {
@@ -61,13 +53,8 @@ export default function ManageKurirsPage() {
   const [isEditKurirDialogOpen, setIsEditKurirDialogOpen] = useState(false);
   const [currentEditingKurir, setCurrentEditingKurir] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-
-  const [formWilayah, setFormWilayah] = useState<string | undefined>(undefined);
-  const [formArea, setFormArea] = useState<string | undefined>(undefined);
-  const [formAvailableAreas, setFormAvailableAreas] = useState<Area[]>([]);
-  const [formAvailableHubs, setFormAvailableHubs] = useState<Hub[]>([]);
   
-  const { register, handleSubmit, reset, control, watch, formState: { errors }, setValue } = useForm<KurirFormData>({
+  const { register, handleSubmit, reset, control, formState: { errors }, setValue } = useForm<KurirFormData>({
     resolver: zodResolver(kurirSchema),
     defaultValues: {
       wilayah: '', area: '', workLocation: '', passwordValue: '',
@@ -75,59 +62,21 @@ export default function ManageKurirsPage() {
     }
   });
 
-  const watchedWilayah = watch("wilayah");
-  const watchedArea = watch("area");
-
-  useEffect(() => {
-    if (watchedWilayah) {
-      const wilayahData = mockLocationsData.find(w => w.id === watchedWilayah);
-      const areas = wilayahData?.areas.filter(a => !a.id.startsWith('all-area-')) || [];
-      setFormAvailableAreas(areas);
-      if(!areas.find(a => a.id === watchedArea)) setValue("area", ""); 
-      setFormAvailableHubs([]);
-      if(!areas.find(a => a.id === watchedArea)) setValue("workLocation", "");
-    } else {
-      setFormAvailableAreas([]);
-      setFormAvailableHubs([]);
-    }
-  }, [watchedWilayah, setValue, watchedArea]);
-
-  useEffect(() => {
-    if (watchedArea) {
-      const areaData = formAvailableAreas.find(a => a.id === watchedArea);
-      const hubs = areaData?.hubs.filter(h => !h.id.startsWith('all-hub-')) || [];
-      setFormAvailableHubs(hubs);
-      if(!hubs.find(h => h.id === watch("workLocation"))) setValue("workLocation", "");
-    } else {
-      setFormAvailableHubs([]);
-    }
-  }, [watchedArea, formAvailableAreas, setValue, watch]);
-
-
-  const handleAddKurir: SubmitHandler<KurirFormData> = (data) => {
+  const handleAddKurirSubmit: SubmitHandler<KurirFormData> = (data) => {
     const newKurirId = data.id && data.id.trim() !== '' ? data.id : `K${String(Date.now()).slice(-7)}`;
     if (kurirs.find(k => k.id === newKurirId)) {
         toast({ title: "Gagal Menambahkan", description: `ID Kurir ${newKurirId} sudah ada.`, variant: "destructive"});
         return;
     }
-    const selectedWilayahName = mockLocationsData.find(w => w.id === data.wilayah)?.name;
-    const selectedAreaName = formAvailableAreas.find(a => a.id === data.area)?.name;
-    const selectedHubName = formAvailableHubs.find(h => h.id === data.workLocation)?.name;
 
     const newKurir: UserProfile = {
-      ...data,
+      ...data, // spread validated form data
       id: newKurirId,
       email: data.email || `${newKurirId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`,
       role: 'Kurir',
       status: 'Aktif',
       joinDate: data.joinDate.toISOString(),
-      wilayah: selectedWilayahName, 
-      area: selectedAreaName, 
-      workLocation: selectedHubName, 
       passwordValue: data.passwordValue || 'defaultPassword123',
-      wilayahId: data.wilayah, // Store IDs for editing
-      areaId: data.area,
-      hubId: data.workLocation,
     };
     setKurirs(prev => [...prev, newKurir]);
     toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} (ID: ${newKurirId}) berhasil ditambahkan.` });
@@ -143,22 +92,13 @@ export default function ManageKurirsPage() {
     setValue('passwordValue', ''); // Clear password for edit
     setValue('jabatan', kurir.jabatan || '');
     
-    // Set Wilayah, then Area, then Hub for cascading effect
-    const wilayahId = kurir.wilayahId || mockLocationsData.find(w => w.name === kurir.wilayah)?.id;
-    setValue('wilayah', wilayahId || '');
+    setValue('wilayah', kurir.wilayah || '');
+    setValue('area', kurir.area || '');
+    setValue('workLocation', kurir.workLocation || '');
     
-    // Trigger useEffects for area/hub population
-    // Need to set these after wilayah is processed by its useEffect
-    setTimeout(() => {
-        const areaId = kurir.areaId || mockLocationsData.flatMap(w => w.areas).find(a => a.name === kurir.area && (wilayahId ? a.id.includes(wilayahId.split('-')[0]) : true))?.id;
-        setValue('area', areaId || '');
-        setTimeout(() => {
-             const hubId = kurir.hubId || mockLocationsData.flatMap(w => w.areas).flatMap(a => a.hubs).find(h => h.name === kurir.workLocation && (areaId ? h.id.includes(areaId.split('-')[0]) : true))?.id;
-             setValue('workLocation', hubId || '');
-        }, 0);
-    }, 0);
-
-    setValue('joinDate', kurir.joinDate ? parseISO(kurir.joinDate) : new Date());
+    const joinDateObj = kurir.joinDate ? parseISO(kurir.joinDate) : new Date();
+    setValue('joinDate', isValid(joinDateObj) ? joinDateObj : new Date());
+    
     setValue('bankName', kurir.bankName || '');
     setValue('bankAccountNumber', kurir.bankAccountNumber || '');
     setValue('bankRecipientName', kurir.bankRecipientName || '');
@@ -166,27 +106,17 @@ export default function ManageKurirsPage() {
     setIsEditKurirDialogOpen(true);
   };
 
-  const handleEditKurir: SubmitHandler<KurirFormData> = (data) => {
+  const handleEditKurirSubmit: SubmitHandler<KurirFormData> = (data) => {
     if (!currentEditingKurir) return;
-
-    const selectedWilayahName = mockLocationsData.find(w => w.id === data.wilayah)?.name;
-    const selectedAreaName = formAvailableAreas.find(a => a.id === data.area)?.name;
-    const selectedHubName = formAvailableHubs.find(h => h.id === data.workLocation)?.name;
 
     setKurirs(prevKurirs =>
       prevKurirs.map(k =>
         k.id === currentEditingKurir.id
           ? {
               ...k,
-              ...data,
+              ...data, // spread validated form data
               joinDate: data.joinDate.toISOString(),
-              wilayah: selectedWilayahName,
-              area: selectedAreaName,
-              workLocation: selectedHubName,
               passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : k.passwordValue,
-              wilayahId: data.wilayah,
-              areaId: data.area,
-              hubId: data.workLocation,
             }
           : k
       )
@@ -273,56 +203,17 @@ export default function ManageKurirsPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <Label htmlFor={isEdit ? "editKurirWilayah" : "addKurirWilayah"}>Wilayah <span className="text-destructive">*</span></Label>
-          <Controller
-            name="wilayah"
-            control={control}
-            render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value}>
-                <SelectTrigger><SelectValue placeholder="Pilih Wilayah" /></SelectTrigger>
-                <SelectContent>
-                  {mockLocationsData.filter(w => w.id !== 'all-wilayah').map(w => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
+          <Input id={isEdit ? "editKurirWilayah" : "addKurirWilayah"} {...register("wilayah")} placeholder="cth: Jabodetabek-Banten"/>
           {errors.wilayah && <p className="text-destructive text-sm mt-1">{errors.wilayah.message}</p>}
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirArea" : "addKurirArea"}>Area <span className="text-destructive">*</span></Label>
-            <Controller
-              name="area"
-              control={control}
-              render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value} disabled={!watchedWilayah || formAvailableAreas.length === 0}>
-                      <SelectTrigger><SelectValue placeholder="Pilih Area" /></SelectTrigger>
-                      <SelectContent>
-                          {formAvailableAreas.map(a => (
-                              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                          ))}
-                      </SelectContent>
-                  </Select>
-              )}
-          />
+          <Input id={isEdit ? "editKurirArea" : "addKurirArea"} {...register("area")} placeholder="cth: Jakarta Pusat"/>
           {errors.area && <p className="text-destructive text-sm mt-1">{errors.area.message}</p>}
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirWorkLocation" : "addKurirWorkLocation"}>Lokasi Kerja (Hub) <span className="text-destructive">*</span></Label>
-            <Controller
-              name="workLocation"
-              control={control}
-              render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value} disabled={!watchedArea || formAvailableHubs.length === 0}>
-                      <SelectTrigger><SelectValue placeholder="Pilih Hub" /></SelectTrigger>
-                      <SelectContent>
-                          {formAvailableHubs.map(h => (
-                              <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
-                          ))}
-                      </SelectContent>
-                  </Select>
-              )}
-          />
+          <Input id={isEdit ? "editKurirWorkLocation" : "addKurirWorkLocation"} {...register("workLocation")} placeholder="cth: Hub Thamrin"/>
           {errors.workLocation && <p className="text-destructive text-sm mt-1">{errors.workLocation.message}</p>}
         </div>
       </div>
@@ -340,7 +231,7 @@ export default function ManageKurirsPage() {
                           className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}
                       >
                           <LucideCalendarIcon className="mr-2 h-4 w-4" />
-                          {field.value ? format(field.value, "PPP", { locale: indonesiaLocale }) : <span>Pilih tanggal</span>}
+                          {field.value && isValid(field.value) ? format(field.value, "PPP", { locale: indonesiaLocale }) : <span>Pilih tanggal</span>}
                       </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
@@ -396,7 +287,13 @@ export default function ManageKurirsPage() {
           </div>
           <Dialog open={isAddKurirDialogOpen} onOpenChange={setIsAddKurirDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="mt-2 sm:mt-0 w-full sm:w-auto" onClick={() => reset()}>
+              <Button className="mt-2 sm:mt-0 w-full sm:w-auto" onClick={() => {
+                  reset({
+                    id: '', fullName: '', nik: '', passwordValue: '', jabatan: '',
+                    wilayah: '', area: '', workLocation: '',
+                    joinDate: undefined, bankName: '', bankAccountNumber: '', bankRecipientName: '', email: ''
+                  });
+                }}>
                 <UserPlus className="mr-2 h-4 w-4" /> Tambah Kurir Baru
               </Button>
             </DialogTrigger>
@@ -405,7 +302,7 @@ export default function ManageKurirsPage() {
                 <DialogTitle>Tambah Kurir Baru</DialogTitle>
                 <DialogDescription>Isi detail lengkap untuk Kurir baru.</DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSubmit(handleAddKurir)} className="space-y-4 py-4">
+              <form onSubmit={handleSubmit(handleAddKurirSubmit)} className="space-y-4 py-4">
                 <KurirFormFields />
                 <DialogFooter className="pt-4">
                   <Button type="button" variant="outline" onClick={() => { reset(); setIsAddKurirDialogOpen(false); }}>Batal</Button>
@@ -474,10 +371,10 @@ export default function ManageKurirsPage() {
       <Dialog open={isEditKurirDialogOpen} onOpenChange={setIsEditKurirDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Kurir</DialogTitle>
+            <DialogTitle>Edit Kurir: {currentEditingKurir?.fullName}</DialogTitle>
             <DialogDescription>Perbarui detail Kurir. ID tidak dapat diubah.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit(handleEditKurir)} className="space-y-4 py-4">
+          <form onSubmit={handleSubmit(handleEditKurirSubmit)} className="space-y-4 py-4">
             <KurirFormFields isEdit={true}/>
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => { reset(); setIsEditKurirDialogOpen(false); setCurrentEditingKurir(null);}}>Batal</Button>
@@ -504,7 +401,7 @@ export default function ManageKurirsPage() {
             <Input id="excel-file-kurir" type="file" accept=".xlsx, .xls" className="mt-1" />
           </div>
           <p className="text-xs text-muted-foreground">
-            Format kolom yang diharapkan: ID Kurir (opsional), Nama Lengkap, NIK, Password Awal, Jabatan, Email (opsional), Wilayah (ID), Area (ID), Lokasi Kerja (ID Hub), Tanggal Join (YYYY-MM-DD), Nama Bank (opsional), No Rekening (opsional), Nama Pemilik Rekening (opsional).
+            Format kolom yang diharapkan: ID Kurir (opsional), Nama Lengkap, NIK, Password Awal, Jabatan, Wilayah, Area, Lokasi Kerja (Hub), Tanggal Join (YYYY-MM-DD), Email (opsional), Nama Bank (opsional), No Rekening (opsional), Nama Pemilik Rekening (opsional).
           </p>
           <Button onClick={handleImportKurirs} className="w-full sm:w-auto">
             <FileUp className="mr-2 h-4 w-4" /> Impor Data Kurir
@@ -514,3 +411,6 @@ export default function ManageKurirsPage() {
     </div>
   );
 }
+
+
+    
