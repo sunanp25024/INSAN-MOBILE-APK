@@ -93,7 +93,6 @@ export default function ManageKurirsPage() {
         status: 'Aktif',
         joinDate: data.joinDate.toISOString(),
         passwordValue: data.passwordValue || 'defaultPassword123',
-        contractStatus: data.contractStatus,
       };
       setKurirs(prev => [...prev, newKurir]);
       toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} (ID: ${newKurirId}) berhasil ditambahkan.` });
@@ -136,7 +135,6 @@ export default function ManageKurirsPage() {
                 ...data, 
                 joinDate: data.joinDate.toISOString(),
                 passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : k.passwordValue,
-                contractStatus: data.contractStatus,
               }
             : k
         )
@@ -187,60 +185,60 @@ export default function ManageKurirsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {!isEdit && (
             <div>
-            <Label htmlFor={isEdit ? "editKurirId" : "addKurirId"}>ID Kurir (Opsional)</Label>
+            <Label htmlFor={isEdit ? "editKurirId" : "addKurirId"} className="mb-1 block">ID Kurir (Opsional)</Label>
             <Input id={isEdit ? "editKurirId" : "addKurirId"} {...register("id")} placeholder="Otomatis jika kosong" />
             {errors.id && <p className="text-destructive text-sm mt-1">{errors.id.message}</p>}
             </div>
         )}
         {isEdit && (
              <div>
-            <Label htmlFor="editKurirId">ID Kurir</Label>
+            <Label htmlFor="editKurirId" className="mb-1 block">ID Kurir</Label>
             <Input id="editKurirId" {...register("id")} readOnly className="bg-muted/50"/>
             </div>
         )}
         <div>
-          <Label htmlFor={isEdit ? "editKurirFullName" : "addKurirFullName"}>Nama Lengkap <span className="text-destructive">*</span></Label>
+          <Label htmlFor={isEdit ? "editKurirFullName" : "addKurirFullName"} className="mb-1 block">Nama Lengkap <span className="text-destructive">*</span></Label>
           <Input id={isEdit ? "editKurirFullName" : "addKurirFullName"} {...register("fullName")} />
           {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
         </div>
         <div>
-          <Label htmlFor={isEdit ? "editKurirNik" : "addKurirNik"}>NIK <span className="text-destructive">*</span></Label>
+          <Label htmlFor={isEdit ? "editKurirNik" : "addKurirNik"} className="mb-1 block">NIK <span className="text-destructive">*</span></Label>
           <Input id={isEdit ? "editKurirNik" : "addKurirNik"} {...register("nik")} placeholder="16 digit NIK" />
           {errors.nik && <p className="text-destructive text-sm mt-1">{errors.nik.message}</p>}
         </div>
           <div>
-          <Label htmlFor={isEdit ? "editKurirPassword" : "addKurirPassword"}>
+          <Label htmlFor={isEdit ? "editKurirPassword" : "addKurirPassword"} className="mb-1 block">
             {isEdit ? "Password Baru (Opsional)" : "Password Awal *"}
           </Label>
           <Input id={isEdit ? "editKurirPassword" : "addKurirPassword"} type="password" {...register("passwordValue")} placeholder={isEdit ? "Kosongkan jika tidak diubah" : ""} />
           {errors.passwordValue && errors.passwordValue.message && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
         </div>
         <div>
-          <Label htmlFor={isEdit ? "editKurirJabatan" : "addKurirJabatan"}>Jabatan <span className="text-destructive">*</span></Label>
+          <Label htmlFor={isEdit ? "editKurirJabatan" : "addKurirJabatan"} className="mb-1 block">Jabatan <span className="text-destructive">*</span></Label>
           <Input id={isEdit ? "editKurirJabatan" : "addKurirJabatan"} {...register("jabatan")} placeholder="cth: Kurir, Kurir Motor" />
           {errors.jabatan && <p className="text-destructive text-sm mt-1">{errors.jabatan.message}</p>}
         </div>
         <div>
-          <Label htmlFor={isEdit ? "editKurirEmail" : "addKurirEmail"}>Email (Opsional)</Label>
+          <Label htmlFor={isEdit ? "editKurirEmail" : "addKurirEmail"} className="mb-1 block">Email (Opsional)</Label>
           <Input id={isEdit ? "editKurirEmail" : "addKurirEmail"} type="email" {...register("email")} placeholder="Otomatis jika kosong"/>
           {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
         </div>
       </div>
 
-      <Label className="font-semibold block mt-4">Lokasi Penempatan:</Label>
+      <Label className="font-semibold block mt-4 mb-2">Lokasi Penempatan:</Label>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <Label htmlFor={isEdit ? "editKurirWilayah" : "addKurirWilayah"}>Wilayah <span className="text-destructive">*</span></Label>
+          <Label htmlFor={isEdit ? "editKurirWilayah" : "addKurirWilayah"} className="mb-1 block">Wilayah <span className="text-destructive">*</span></Label>
           <Input id={isEdit ? "editKurirWilayah" : "addKurirWilayah"} {...register("wilayah")} placeholder="cth: Jabodetabek-Banten"/>
           {errors.wilayah && <p className="text-destructive text-sm mt-1">{errors.wilayah.message}</p>}
         </div>
         <div>
-          <Label htmlFor={isEdit ? "editKurirArea" : "addKurirArea"}>Area <span className="text-destructive">*</span></Label>
+          <Label htmlFor={isEdit ? "editKurirArea" : "addKurirArea"} className="mb-1 block">Area <span className="text-destructive">*</span></Label>
           <Input id={isEdit ? "editKurirArea" : "addKurirArea"} {...register("area")} placeholder="cth: Jakarta Pusat"/>
           {errors.area && <p className="text-destructive text-sm mt-1">{errors.area.message}</p>}
         </div>
         <div>
-          <Label htmlFor={isEdit ? "editKurirWorkLocation" : "addKurirWorkLocation"}>Lokasi Kerja (Hub) <span className="text-destructive">*</span></Label>
+          <Label htmlFor={isEdit ? "editKurirWorkLocation" : "addKurirWorkLocation"} className="mb-1 block">Lokasi Kerja (Hub) <span className="text-destructive">*</span></Label>
           <Input id={isEdit ? "editKurirWorkLocation" : "addKurirWorkLocation"} {...register("workLocation")} placeholder="cth: Hub Thamrin"/>
           {errors.workLocation && <p className="text-destructive text-sm mt-1">{errors.workLocation.message}</p>}
         </div>
@@ -248,7 +246,7 @@ export default function ManageKurirsPage() {
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <div>
-          <Label htmlFor={isEdit ? "editKurirJoinDate" : "addKurirJoinDate"}>Tanggal Join <span className="text-destructive">*</span></Label>
+          <Label htmlFor={isEdit ? "editKurirJoinDate" : "addKurirJoinDate"} className="mb-1 block">Tanggal Join <span className="text-destructive">*</span></Label>
           <Controller
             name="joinDate"
             control={control}
@@ -279,27 +277,27 @@ export default function ManageKurirsPage() {
             {errors.joinDate && <p className="text-destructive text-sm mt-1">{errors.joinDate.message}</p>}
         </div>
         <div>
-          <Label htmlFor={isEdit ? "editKurirContractStatus" : "addKurirContractStatus"}>Status Kontrak <span className="text-destructive">*</span></Label>
+          <Label htmlFor={isEdit ? "editKurirContractStatus" : "addKurirContractStatus"} className="mb-1 block">Status Kontrak <span className="text-destructive">*</span></Label>
           <Input id={isEdit ? "editKurirContractStatus" : "addKurirContractStatus"} {...register("contractStatus")} placeholder="cth: Permanent, Contract"/>
           {errors.contractStatus && <p className="text-destructive text-sm mt-1">{errors.contractStatus.message}</p>}
         </div>
       </div>
 
 
-      <Label className="font-semibold block mt-4">Informasi Bank (Opsional):</Label>
+      <Label className="font-semibold block mt-4 mb-3">Informasi Bank (Opsional):</Label>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <Label htmlFor={isEdit ? "editKurirBankName" : "addKurirBankName"}>Nama Bank</Label>
+          <Label htmlFor={isEdit ? "editKurirBankName" : "addKurirBankName"} className="mb-1 block">Nama Bank</Label>
           <Input id={isEdit ? "editKurirBankName" : "addKurirBankName"} {...register("bankName")} />
           {errors.bankName && errors.bankName.message && <p className="text-destructive text-sm mt-1">{errors.bankName.message}</p>}
         </div>
         <div>
-          <Label htmlFor={isEdit ? "editKurirBankAccountNumber" : "addKurirBankAccountNumber"}>Nomor Rekening</Label>
+          <Label htmlFor={isEdit ? "editKurirBankAccountNumber" : "addKurirBankAccountNumber"} className="mb-1 block">Nomor Rekening</Label>
           <Input id={isEdit ? "editKurirBankAccountNumber" : "addKurirBankAccountNumber"} {...register("bankAccountNumber")} />
             {errors.bankAccountNumber && errors.bankAccountNumber.message && <p className="text-destructive text-sm mt-1">{errors.bankAccountNumber.message}</p>}
         </div>
         <div>
-          <Label htmlFor={isEdit ? "editKurirBankRecipientName" : "addKurirBankRecipientName"}>Nama Pemilik Rekening</Label>
+          <Label htmlFor={isEdit ? "editKurirBankRecipientName" : "addKurirBankRecipientName"} className="mb-1 block">Nama Pemilik Rekening</Label>
           <Input id={isEdit ? "editKurirBankRecipientName" : "addKurirBankRecipientName"} {...register("bankRecipientName")} />
           {errors.bankRecipientName && errors.bankRecipientName.message && <p className="text-destructive text-sm mt-1">{errors.bankRecipientName.message}</p>}
         </div>
@@ -346,7 +344,7 @@ export default function ManageKurirsPage() {
               </DialogHeader>
               <form onSubmit={handleSubmit(handleAddKurirSubmit)} className="space-y-4 py-4">
                 <KurirFormFields />
-                <DialogFooter className="pt-4">
+                <DialogFooter className="pt-6">
                   <Button type="button" variant="outline" onClick={() => { reset(); setIsAddKurirDialogOpen(false); }}>Batal</Button>
                   <Button type="submit">
                     {currentUser.role === 'Admin' ? 'Ajukan Penambahan' : 'Simpan Kurir'}
@@ -439,7 +437,7 @@ export default function ManageKurirsPage() {
           </DialogHeader>
           <form onSubmit={handleSubmit(handleEditKurirSubmit)} className="space-y-4 py-4">
             <KurirFormFields isEdit={true}/>
-            <DialogFooter className="pt-4">
+            <DialogFooter className="pt-6">
               <Button type="button" variant="outline" onClick={() => { reset(); setIsEditKurirDialogOpen(false); setCurrentEditingKurir(null);}}>Batal</Button>
               <Button type="submit">
                  {currentUser.role === 'Admin' ? 'Ajukan Perubahan' : 'Simpan Perubahan'}
