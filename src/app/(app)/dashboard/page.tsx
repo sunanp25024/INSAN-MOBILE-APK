@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight, Filter as FilterIcon, Download as DownloadIcon, Search as SearchIcon, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, DeliveryActivity, MonthlySummaryData, WeeklyShipmentSummary } from '@/types';
+import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, DeliveryActivity, DashboardSummaryData, WeeklyShipmentSummary, MonthlySummaryData } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -54,16 +54,6 @@ const MotivationalQuotes = [
   "Jangan biarkan rintangan menghentikanmu. Kamu luar biasa!",
   "Terima kasih atas dedikasimu. Setiap langkahmu berarti!"
 ];
-
-interface DashboardSummaryData {
-  activeCouriersToday: number;
-  totalPackagesProcessedToday: number;
-  totalPackagesDeliveredToday: number;
-  onTimeDeliveryRateToday: number; 
-  dailyShipmentSummary: { date: string; name: string; terkirim: number; pending: number }[];
-  weeklyShipmentSummary: WeeklyShipmentSummary[];
-  monthlyPerformanceSummary: MonthlySummaryData[];
-}
 
 
 export default function DashboardPage() {
@@ -1076,7 +1066,8 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Unified Charts Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
             <CardHeader>
             <CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5"/>Ringkasan Pengiriman (7 Hari Terakhir)</CardTitle>
@@ -1127,33 +1118,31 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
             </CardContent>
         </Card>
+        <Card className="md:col-span-2">
+            <CardHeader>
+                <CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5" />Ringkasan Performa Bulanan (3 Bulan Terakhir)</CardTitle>
+                <CardDescription>Perbandingan total paket terkirim dan pending.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[320px] pt-4">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <RechartsBarChart data={dashboardSummary.monthlyPerformanceSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
+                        <XAxis dataKey="month" tick={{fontSize: '0.75rem'}} />
+                        <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--chart-1))" tick={{fontSize: '0.75rem'}} />
+                        <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-2))" tick={{fontSize: '0.75rem'}} />
+                        <Tooltip
+                            contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }}
+                            cursor={{ fill: "hsl(var(--accent)/0.2)" }}
+                        />
+                        <Legend wrapperStyle={{fontSize: "0.8rem"}} />
+                        <Bar yAxisId="left" dataKey="totalDelivered" name="Total Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={25} />
+                        <Bar yAxisId="left" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={25} />
+                    </RechartsBarChart>
+                </ResponsiveContainer>
+            </CardContent>
+        </Card>
       </div>
       
-      <Card>
-        <CardHeader>
-            <CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5" />Ringkasan Performa Bulanan (3 Bulan Terakhir)</CardTitle>
-            <CardDescription>Perbandingan total paket terkirim dan pending.</CardDescription>
-        </CardHeader>
-        <CardContent className="h-[320px] pt-4">
-             <ResponsiveContainer width="100%" height="100%">
-                <RechartsBarChart data={dashboardSummary.monthlyPerformanceSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-                    <XAxis dataKey="month" tick={{fontSize: '0.75rem'}} />
-                    <YAxis yAxisId="left" orientation="left" stroke="hsl(var(--chart-1))" tick={{fontSize: '0.75rem'}} />
-                    <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-2))" tick={{fontSize: '0.75rem'}} />
-                    <Tooltip
-                        contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }}
-                        cursor={{ fill: "hsl(var(--accent)/0.2)" }}
-                    />
-                    <Legend wrapperStyle={{fontSize: "0.8rem"}} />
-                    <Bar yAxisId="left" dataKey="totalDelivered" name="Total Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={25} />
-                    <Bar yAxisId="left" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={25} />
-                </RechartsBarChart>
-            </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
