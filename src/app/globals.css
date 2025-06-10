@@ -8,53 +8,53 @@ body {
 
 @layer base {
   :root {
-    /* Light, Elegant Theme - Mitra Kurir SPX */
-    --background: 0 0% 98%; /* Almost White */
-    --foreground: 224 71% 10%; /* Dark Blue/Black for text */
+    /* Calmer, Softer Light Theme - Mitra Kurir SPX */
+    --background: 210 60% 98%; /* Very Light Cool Gray */
+    --foreground: 210 20% 25%; /* Soft Dark Blue/Gray for text */
 
     --card: 0 0% 100%; /* White */
-    --card-foreground: 224 71% 10%; /* Dark Blue/Black for card text */
+    --card-foreground: 210 20% 25%; /* Soft Dark Blue/Gray for card text */
 
     --popover: 0 0% 100%; /* White */
-    --popover-foreground: 224 71% 10%; /* Dark Blue/Black for popover text */
+    --popover-foreground: 210 20% 25%; /* Soft Dark Blue/Gray for popover text */
 
-    --primary: 45 90% 50%; /* Vibrant Gold */
-    --primary-foreground: 45 90% 15%; /* Dark Brown for text on gold */
+    --primary: 200 50% 50%; /* Muted Blue */
+    --primary-foreground: 200 50% 95%; /* Very Light Blue/White for text on primary */
 
     --secondary: 210 30% 90%; /* Light Muted Blue/Gray */
-    --secondary-foreground: 210 30% 30%; /* Darker text for secondary */
+    --secondary-foreground: 210 30% 40%; /* Darker text for secondary */
 
-    --muted: 215 28% 90%; /* Light Muted Blue/Gray */
-    --muted-foreground: 210 40% 45%; /* Slightly Darker Muted Text */
+    --muted: 210 40% 95%; /* Very Light Cool Gray */
+    --muted-foreground: 210 30% 55%; /* Medium Muted Text */
 
-    --accent: 48 95% 58%; /* Brighter, slightly more orangey Gold/Amber for accents */
-    --accent-foreground: 45 90% 10%; /* Dark text for accent */
+    --accent: 180 40% 60%; /* Soft Teal/Aqua */
+    --accent-foreground: 180 40% 15%; /* Dark text for accent */
 
-    --destructive: 0 70% 50%; /* Deep Red */
+    --destructive: 0 60% 60%; /* Softer Red */
     --destructive-foreground: 0 0% 100%; /* White */
 
-    --border: 215 28% 85%; /* Light Gray Border */
-    --input: 215 28% 92%; /* Very Light Gray Input Background */
-    --ring: 45 90% 55%; /* Gold for Focus Rings */
+    --border: 210 30% 88%; /* Light Gray Border */
+    --input: 210 30% 94%; /* Very Light Gray Input Background */
+    --ring: 200 50% 55%; /* Muted Blue for Focus Rings */
 
     --radius: 0.5rem;
 
-    /* Chart colors */
-    --chart-1: 210 70% 50%; /* Blue */
-    --chart-2: 45 80% 45%;  /* Gold/Orange */
-    --chart-3: 160 60% 40%; /* Teal */
-    --chart-4: 280 60% 55%; /* Purple */
-    --chart-5: 0 65% 55%;   /* Red */
+    /* Chart colors - Softer Tones */
+    --chart-1: 200 55% 60%; /* Muted Blue */
+    --chart-2: 170 40% 55%;  /* Soft Teal/Green */
+    --chart-3: 30 60% 65%; /* Soft Orange */
+    --chart-4: 260 45% 70%; /* Soft Purple */
+    --chart-5: 0 50% 65%;   /* Softer Red */
 
-    /* Sidebar colors - Light Sidebar */
-    --sidebar-background: 0 0% 96%;
-    --sidebar-foreground: 224 71% 15%;
-    --sidebar-primary: 45 90% 50%;
-    --sidebar-primary-foreground: 45 90% 15%;
-    --sidebar-accent: 215 28% 88%;
-    --sidebar-accent-foreground: 224 71% 10%;
-    --sidebar-border: 215 28% 80%;
-    --sidebar-ring: 45 90% 55%;
+    /* Sidebar colors - Calmer Light Sidebar */
+    --sidebar-background: 210 50% 96%; /* Slightly off-white cool gray */
+    --sidebar-foreground: 210 20% 30%; /* Darker, soft blue/gray text */
+    --sidebar-primary: 200 50% 50%; /* Muted Blue (same as primary) */
+    --sidebar-primary-foreground: 200 50% 95%; /* Very Light Blue/White */
+    --sidebar-accent: 210 30% 92%; /* Lighter accent for hover */
+    --sidebar-accent-foreground: 200 50% 30%; /* Darker blue for accent text */
+    --sidebar-border: 210 30% 85%; /* Softer border */
+    --sidebar-ring: 200 50% 55%; /* Muted Blue (same as ring) */
   }
 
   .dark {
