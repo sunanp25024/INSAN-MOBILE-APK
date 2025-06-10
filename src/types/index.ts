@@ -63,3 +63,21 @@ export interface WeeklyPerformancePoint {
   delivered: number;
   pending: number;
 }
+
+export interface AttendanceActivity {
+  id: string;
+  kurirName: string;
+  kurirId: string;
+  action: 'check-in' | 'check-out' | 'reported-late';
+  timestamp: string; // ISO date string
+}
+
+export interface DeliveryActivity {
+  id: string;
+  kurirName: string;
+  kurirId: string;
+  packageId: string;
+  action: 'picked-up' | 'in-transit' | 'delivered' | 'delivery-failed' | 'returned-to-hub';
+  timestamp: string; // ISO date string
+  details?: string; // e.g., "Recipient not home", "Package damaged"
+}
