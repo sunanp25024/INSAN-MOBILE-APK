@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'MITRA KURIR SPX by PIS',
-  description: 'Aplikasi Manajemen Kurir SPX by PIS',
+  title: 'INSAN MOBILE',
+  description: 'Aplikasi INSAN MOBILE',
 };
 
 export default function RootLayout({

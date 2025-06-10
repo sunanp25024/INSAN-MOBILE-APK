@@ -109,7 +109,7 @@ export default function LoginPage() {
           <div className="flex justify-center mb-4">
             <AppLogo className="h-20 w-20 text-primary" />
           </div>
-          <CardTitle className="text-3xl font-bold text-primary">MITRA KURIR SPX</CardTitle>
+          <CardTitle className="text-3xl font-bold text-primary">INSAN MOBILE</CardTitle>
           <CardDescription>Silakan login untuk melanjutkan</CardDescription>
         </CardHeader>
         <CardContent>
