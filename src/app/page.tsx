@@ -85,7 +85,17 @@ export default function LoginPage() {
         fullName: user.fullName,
         role: user.role,
         avatarUrl: user.avatarUrl,
-        email: user.email
+        email: user.email,
+        // Menyertakan detail tambahan jika ada, agar konsisten dengan apa yang mungkin dibutuhkan di halaman profil
+        workLocation: user.workLocation,
+        joinDate: user.joinDate,
+        position: user.position,
+        contractStatus: user.contractStatus,
+        bankAccountNumber: user.bankAccountNumber,
+        bankName: user.bankName,
+        bankRecipientName: user.bankRecipientName,
+        photoIdUrl: user.photoIdUrl,
+        nik: user.nik,
       }));
       
       router.push('/dashboard');
@@ -104,10 +114,10 @@ export default function LoginPage() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
-      <Card className="w-full max-w-md shadow-2xl border-primary/30">
+      <Card className="w-full max-w-md shadow-2xl border-primary/20">
         <CardHeader className="text-center space-y-2">
           <div className="flex justify-center mb-4">
-            <AppLogo className="h-20 w-20 text-primary" />
+            <AppLogo className="h-28 w-28 text-primary" />
           </div>
           <CardTitle className="text-3xl font-bold text-primary">INSAN MOBILE</CardTitle>
           <CardDescription>Silakan login untuk melanjutkan</CardDescription>
