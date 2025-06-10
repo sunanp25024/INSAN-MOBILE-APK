@@ -55,6 +55,71 @@ const MotivationalQuotes = [
   "Terima kasih atas dedikasimu. Setiap langkahmu berarti!"
 ];
 
+// Mock location data for filters
+interface Hub {
+  id: string;
+  name: string;
+}
+
+interface Area {
+  id: string;
+  name: string;
+  hubs: Hub[];
+}
+
+interface Wilayah {
+  id: string;
+  name: string;
+  areas: Area[];
+}
+
+const mockLocations: Wilayah[] = [
+  {
+    id: 'all-wilayah', name: 'Semua Wilayah', areas: [] // Special case for "all"
+  },
+  {
+    id: 'jabodetabek-banten',
+    name: 'Jabodetabek-Banten',
+    areas: [
+      { id: 'all-area-jb', name: 'Semua Area (Jabodetabek-Banten)', hubs: []},
+      {
+        id: 'jakarta-pusat',
+        name: 'Jakarta Pusat',
+        hubs: [
+          { id: 'all-hub-jp', name: 'Semua Hub (Jakarta Pusat)'},
+          { id: 'jp-hub-thamrin', name: 'Hub Thamrin' },
+          { id: 'jp-hub-sudirman', name: 'Hub Sudirman' },
+        ],
+      },
+      {
+        id: 'jakarta-timur',
+        name: 'Jakarta Timur',
+        hubs: [
+          { id: 'all-hub-jt', name: 'Semua Hub (Jakarta Timur)'},
+          { id: 'jt-hub-cawang', name: 'Hub Cawang' },
+          { id: 'jt-hub-rawamangun', name: 'Hub Rawamangun' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'jawa-barat',
+    name: 'Jawa Barat',
+    areas: [
+      { id: 'all-area-jabar', name: 'Semua Area (Jawa Barat)', hubs: []},
+      {
+        id: 'bandung-kota',
+        name: 'Bandung Kota',
+        hubs: [
+          { id: 'all-hub-bdg', name: 'Semua Hub (Bandung Kota)'},
+          { id: 'bdg-hub-kota', name: 'Hub Bandung Kota' },
+          { id: 'bdg-hub-dago', name: 'Hub Dago' },
+        ],
+      },
+    ],
+  },
+];
+
 
 export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -81,10 +146,19 @@ export default function DashboardPage() {
   const [photoRecipientName, setPhotoRecipientName] = useState('');
   const [isCourierCheckedIn, setIsCourierCheckedIn] = useState<boolean | null>(null);
   const [isScanningForDeliveryUpdate, setIsScanningForDeliveryUpdate] = useState(false);
+  
+  // Dashboard states for managerial roles
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummaryData | null>(null);
   const [attendanceActivities, setAttendanceActivities] = useState<AttendanceActivity[]>([]);
   const [courierWorkSummaries, setCourierWorkSummaries] = useState<CourierWorkSummaryActivity[]>([]);
 
+  // Filter states
+  const [selectedWilayah, setSelectedWilayah] = useState<string>('all-wilayah');
+  const [selectedArea, setSelectedArea] = useState<string>('all-area');
+  const [selectedHub, setSelectedHub] = useState<string>('all-hub');
+  const [searchKurir, setSearchKurir] = useState<string>('');
+  const [areaOptions, setAreaOptions] = useState<Area[]>([]);
+  const [hubOptions, setHubOptions] = useState<Hub[]>([]);
 
   const { toast } = useToast();
 
@@ -93,7 +167,73 @@ export default function DashboardPage() {
     defaultValues: { totalPackages: 0, codPackages: 0, nonCodPackages: 0 }
   });
 
-  useEffect(() => {
+  const generateInitialDashboardSummary = (isFiltered = false): DashboardSummaryData => {
+    const today = new Date();
+    let baseActiveCouriers = Math.floor(Math.random() * 15) + 5;
+    let basePackagesProcessed = Math.floor(Math.random() * 200) + 100;
+    let basePackagesDelivered = Math.floor(Math.random() * (basePackagesProcessed - 20)) + (basePackagesProcessed > 100 ? 80 : 30);
+    
+    if (isFiltered) { // Simulate data reduction when filtered
+        baseActiveCouriers = Math.floor(baseActiveCouriers * (Math.random() * 0.5 + 0.3)); // 30-80% of original
+        basePackagesProcessed = Math.floor(basePackagesProcessed * (Math.random() * 0.5 + 0.3));
+        basePackagesDelivered = Math.floor(basePackagesDelivered * (Math.random() * 0.5 + 0.3));
+        basePackagesDelivered = Math.min(basePackagesDelivered, basePackagesProcessed - Math.floor(basePackagesProcessed*0.1)); // ensure delivered <= processed
+    }
+    baseActiveCouriers = Math.max(1, baseActiveCouriers);
+    basePackagesProcessed = Math.max(5, basePackagesProcessed);
+    basePackagesDelivered = Math.max(0, basePackagesDelivered);
+
+
+    const dailySummary = Array.from({ length: 7 }).map((_, i) => {
+      const day = subDays(today, 6 - i);
+      const delivered = Math.floor(Math.random() * (isFiltered ? 50 : 100)) + (isFiltered ? 10 : 50);
+      const pending = Math.floor(Math.random() * (isFiltered ? 10 : 20)) + (isFiltered ? 1 : 5);
+      return {
+        date: day.toISOString(),
+        name: format(day, 'dd/MM', { locale: indonesiaLocale }),
+        terkirim: delivered,
+        pending: pending,
+      };
+    });
+
+    const weeklySummary: WeeklyShipmentSummary[] = [];
+    const currentMonthWeeks = eachWeekOfInterval({
+      start: startOfWeek(new Date(getYear(today), getMonth(today), 1), { weekStartsOn: 1 }),
+      end: endOfWeek(new Date(getYear(today), getMonth(today) +1, 0), { weekStartsOn: 1 })
+    }, { weekStartsOn: 1 });
+    
+    currentMonthWeeks.slice(-4).forEach((weekStart, index) => { 
+      weeklySummary.push({
+        week: `Minggu ${index + 1}`,
+        terkirim: Math.floor(Math.random() * (isFiltered ? 150 : 300)) + (isFiltered ? 50 : 200),
+        pending: Math.floor(Math.random() * (isFiltered ? 25 : 50)) + (isFiltered ? 5 : 10),
+      });
+    });
+
+    const monthlySummary: MonthlySummaryData[] = Array.from({length: 3}).map((_, i) => {
+      const monthDate = new Date(today.getFullYear(), today.getMonth() - (2-i), 1);
+      const delivered = Math.floor(Math.random() * (isFiltered ? 600 : 1200)) + (isFiltered ? 200 : 800);
+      const pending = Math.floor(Math.random() * (isFiltered ? 100 : 200)) + (isFiltered ? 20 : 50);
+      return {
+        month: format(monthDate, 'MMM yyyy', {locale: indonesiaLocale}),
+        totalDelivered: delivered,
+        totalPending: pending,
+        successRate: (delivered / (delivered + pending)) * 100,
+      };
+    });
+
+    return {
+      activeCouriersToday: baseActiveCouriers,
+      totalPackagesProcessedToday: basePackagesProcessed,
+      totalPackagesDeliveredToday: basePackagesDelivered,
+      onTimeDeliveryRateToday: Math.floor(Math.random() * 15) + 85,
+      dailyShipmentSummary: dailySummary,
+      weeklyShipmentSummary: weeklySummary,
+      monthlyPerformanceSummary: monthlySummary,
+    };
+  };
+
+ useEffect(() => {
     const userDataString = localStorage.getItem('loggedInUser');
     if (userDataString) {
       try {
@@ -101,80 +241,54 @@ export default function DashboardPage() {
         setCurrentUser(parsedUser);
 
         if (parsedUser.role !== 'Kurir') {
-          const today = new Date();
-          const dailySummary = Array.from({ length: 7 }).map((_, i) => {
-            const day = subDays(today, 6 - i);
-            const delivered = Math.floor(Math.random() * 100) + 50;
-            const pending = Math.floor(Math.random() * 20) + 5;
-            return {
-              date: day.toISOString(),
-              name: format(day, 'dd/MM', { locale: indonesiaLocale }),
-              terkirim: delivered,
-              pending: pending,
-            };
-          });
-
-          const weeklySummary: WeeklyShipmentSummary[] = [];
-          const currentMonthWeeks = eachWeekOfInterval({
-            start: startOfWeek(new Date(getYear(today), getMonth(today), 1), { weekStartsOn: 1 }),
-            end: endOfWeek(new Date(getYear(today), getMonth(today) +1, 0), { weekStartsOn: 1 })
-          }, { weekStartsOn: 1 });
-          
-          currentMonthWeeks.slice(-4).forEach((weekStart, index) => { // Take last 4 weeks
-            weeklySummary.push({
-              week: `Minggu ${index + 1}`,
-              terkirim: Math.floor(Math.random() * 300) + 200,
-              pending: Math.floor(Math.random() * 50) + 10,
-            });
-          });
-
-          const monthlySummary: MonthlySummaryData[] = Array.from({length: 3}).map((_, i) => {
-            const monthDate = new Date(today.getFullYear(), today.getMonth() - (2-i), 1);
-            const delivered = Math.floor(Math.random() * 1200) + 800;
-            const pending = Math.floor(Math.random() * 200) + 50;
-            return {
-              month: format(monthDate, 'MMM yyyy', {locale: indonesiaLocale}),
-              totalDelivered: delivered,
-              totalPending: pending,
-              successRate: (delivered / (delivered + pending)) * 100,
-            };
-          });
-
-
-          const summaryData: DashboardSummaryData = {
-            activeCouriersToday: Math.floor(Math.random() * 15) + 5,
-            totalPackagesProcessedToday: Math.floor(Math.random() * 200) + 100,
-            totalPackagesDeliveredToday: Math.floor(Math.random() * 150) + 80,
-            onTimeDeliveryRateToday: Math.floor(Math.random() * 15) + 85,
-            dailyShipmentSummary: dailySummary,
-            weeklyShipmentSummary: weeklySummary,
-            monthlyPerformanceSummary: monthlySummary,
-          };
-          setDashboardSummary(summaryData);
+          setDashboardSummary(generateInitialDashboardSummary());
 
           const mockAttendance: AttendanceActivity[] = [
-            { id: 'att1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(7, 55, 0, 0).valueOf().toString(), location: 'Jakarta Pusat Hub' },
-            { id: 'att2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(8, 5, 0, 0).valueOf().toString(), location: 'Bandung Kota Hub' },
-            { id: 'att3', kurirName: 'Charlie Van Houten', kurirId: 'KURIR003', action: 'reported-late', timestamp: subDays(new Date(), 0).setHours(9, 15, 0, 0).valueOf().toString(), location: 'Surabaya Timur Hub' },
-            { id: 'att4', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-out', timestamp: subDays(new Date(), 0).setHours(17, 2, 0, 0).valueOf().toString(), location: 'Jakarta Pusat Hub' },
+            { id: 'att1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(7, 55, 0, 0).valueOf().toString(), location: 'Jakarta Pusat Hub (Thamrin)' },
+            { id: 'att2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', action: 'check-in', timestamp: subDays(new Date(), 0).setHours(8, 5, 0, 0).valueOf().toString(), location: 'Bandung Kota Hub (Kota)' },
+            { id: 'att3', kurirName: 'Charlie Van Houten', kurirId: 'KURIR003', action: 'reported-late', timestamp: subDays(new Date(), 0).setHours(9, 15, 0, 0).valueOf().toString(), location: 'Surabaya Timur Hub (Cawang)' }, // Example: mismatch location for demo
+            { id: 'att4', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', action: 'check-out', timestamp: subDays(new Date(), 0).setHours(17, 2, 0, 0).valueOf().toString(), location: 'Jakarta Pusat Hub (Thamrin)' },
           ].sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
           setAttendanceActivities(mockAttendance);
           
-          const mockCourierWorkSummaries: CourierWorkSummaryActivity[] = [
-            { id: 'sum1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', hubLocation: 'Jakarta Pusat Hub', timestamp: subDays(new Date(), 0).setHours(17, 5, 0, 0).valueOf().toString(), totalPackagesAssigned: 50, packagesDelivered: 48, packagesPendingOrReturned: 2 },
-            { id: 'sum2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', hubLocation: 'Bandung Kota Hub', timestamp: subDays(new Date(), 0).setHours(17, 30, 0, 0).valueOf().toString(), totalPackagesAssigned: 45, packagesDelivered: 40, packagesPendingOrReturned: 5 },
+          const mockCourierWorkSummariesData: CourierWorkSummaryActivity[] = [
+            { id: 'sum1', kurirName: 'Budi Santoso', kurirId: 'PISTEST2025', hubLocation: 'Jakarta Pusat Hub (Thamrin)', timestamp: subDays(new Date(), 0).setHours(17, 5, 0, 0).valueOf().toString(), totalPackagesAssigned: 50, packagesDelivered: 48, packagesPendingOrReturned: 2 },
+            { id: 'sum2', kurirName: 'Ani Yudhoyono', kurirId: 'KURIR002', hubLocation: 'Bandung Kota Hub (Kota)', timestamp: subDays(new Date(), 0).setHours(17, 30, 0, 0).valueOf().toString(), totalPackagesAssigned: 45, packagesDelivered: 40, packagesPendingOrReturned: 5 },
             { id: 'sum3', kurirName: 'Dewi Persik', kurirId: 'KURIR004', hubLocation: 'Medan Barat Hub', timestamp: subDays(new Date(), 1).setHours(18, 0, 0, 0).valueOf().toString(), totalPackagesAssigned: 55, packagesDelivered: 55, packagesPendingOrReturned: 0 },
           ].sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
-          setCourierWorkSummaries(mockCourierWorkSummaries);
+          setCourierWorkSummaries(mockCourierWorkSummariesData);
+          
+          // Initialize Area options
+          const defaultWilayah = mockLocations.find(w => w.id === 'all-wilayah');
+          let initialAreas: Area[] = [];
+          mockLocations.forEach(w => {
+            if (w.id !== 'all-wilayah') initialAreas = initialAreas.concat(w.areas);
+          });
+           // Add "Semua Area" option that encompasses all areas from all wilayah
+          const allAreasOption: Area = { id: 'all-area', name: 'Semua Area', hubs: [] };
+          mockLocations.forEach(w => {
+            if (w.id !== 'all-wilayah') {
+                w.areas.forEach(ar => {
+                    if(ar.id.startsWith('all-area-')) return; // skip combined "semua area" for a wilayah
+                    allAreasOption.hubs = allAreasOption.hubs.concat(ar.hubs.filter(h => !h.id.startsWith('all-hub-')));
+                });
+            }
+          });
+          setAreaOptions([allAreasOption, ...initialAreas.filter(a => !a.id.startsWith('all-area-'))]); // Filter out specific "Semua Area (Wilayah X)"
 
+          // Initialize Hub options
+          let initialHubs: Hub[] = [];
+          initialAreas.forEach(a => {
+            if (!a.id.startsWith('all-area-')) initialHubs = initialHubs.concat(a.hubs);
+          });
+          const allHubsOption: Hub = { id: 'all-hub', name: 'Semua Hub' };
+          setHubOptions([allHubsOption, ...initialHubs.filter(h => !h.id.startsWith('all-hub-'))]);
         }
-
       } catch (error) {
         console.error("Failed to parse user data from localStorage for dashboard", error);
       }
     }
   }, []);
-
 
   useEffect(() => {
     if (currentUser?.role !== 'Kurir') return;
@@ -508,13 +622,117 @@ export default function DashboardPage() {
     return <ListChecks className="h-5 w-5 text-blue-500" />;
   };
 
-  const handleDashboardFilterApply = () => {
-    toast({ title: "Filter Diterapkan (Simulasi)", description: "Data dashboard akan diperbarui sesuai filter." });
+  const triggerFilterSimulation = () => {
+    setDashboardSummary(generateInitialDashboardSummary(true)); // Pass true to get "filtered" data
+    
+    const wilayahName = mockLocations.find(w => w.id === selectedWilayah)?.name || 'Semua Wilayah';
+    const areaName = areaOptions.find(a => a.id === selectedArea)?.name || 'Semua Area';
+    const hubName = hubOptions.find(h => h.id === selectedHub)?.name || 'Semua Hub';
+
+    let filterMessage = `Menerapkan filter: Wilayah (${wilayahName}), Area (${areaName}), Hub (${hubName})`;
+    if (searchKurir) {
+      filterMessage += `, Kurir (${searchKurir})`;
+    }
+    toast({ title: "Filter Diterapkan (Simulasi)", description: filterMessage });
   };
 
-  const handleDownloadDashboardSummary = () => {
-    toast({ title: "Unduh Ringkasan (Simulasi)", description: "Ringkasan data dashboard sedang disiapkan untuk diunduh." });
+  const handleWilayahChange = (wilayahId: string) => {
+    setSelectedWilayah(wilayahId);
+    const currentWilayah = mockLocations.find(w => w.id === wilayahId);
+    let newAreaOptions: Area[] = [];
+    if (wilayahId === 'all-wilayah') {
+        mockLocations.forEach(w => {
+            if (w.id !== 'all-wilayah') newAreaOptions = newAreaOptions.concat(w.areas);
+        });
+        newAreaOptions = newAreaOptions.filter(a => !a.id.startsWith('all-area-')); // Remove specific "Semua Area (Wilayah X)"
+        newAreaOptions.unshift({id: 'all-area', name: 'Semua Area', hubs: []}); // Add the global "Semua Area"
+    } else {
+        newAreaOptions = currentWilayah?.areas || [];
+    }
+    setAreaOptions(newAreaOptions);
+    setSelectedArea(newAreaOptions.length > 0 ? newAreaOptions[0].id : 'all-area'); // Default to first or "all"
+    
+    // Reset Hubs based on new Area default
+    const defaultAreaForHubs = newAreaOptions.find(a => a.id === (newAreaOptions.length > 0 ? newAreaOptions[0].id : 'all-area'));
+    let newHubOptions: Hub[] = [];
+     if (defaultAreaForHubs && defaultAreaForHubs.id !== 'all-area' && !defaultAreaForHubs.id.startsWith('all-area-')) {
+        newHubOptions = defaultAreaForHubs.hubs || [];
+    } else { // if "Semua Area" is selected or no specific area
+        areaOptions.forEach(ar => {
+            if (!ar.id.startsWith('all-area-')) { // Exclude "Semua Area (Wilayah X)"
+                 newHubOptions = newHubOptions.concat(ar.hubs.filter(h => !h.id.startsWith('all-hub-')));
+            }
+        });
+        newHubOptions = Array.from(new Set(newHubOptions.map(h => h.id))).map(id => newHubOptions.find(h => h.id === id)!); // Deduplicate
+        newHubOptions.unshift({id: 'all-hub', name: 'Semua Hub'});
+    }
+    setHubOptions(newHubOptions);
+    setSelectedHub(newHubOptions.length > 0 ? newHubOptions[0].id : 'all-hub');
+    triggerFilterSimulation();
   };
+
+  const handleAreaChange = (areaId: string) => {
+    setSelectedArea(areaId);
+    const currentArea = areaOptions.find(a => a.id === areaId);
+    let newHubOptions: Hub[] = [];
+
+    if (areaId === 'all-area' || areaId.startsWith('all-area-')) { // If "Semua Area" (global or wilayah-specific)
+        if (selectedWilayah === 'all-wilayah' || areaId === 'all-area') { // Global "Semua Area"
+            let allHubsFromAllAreas: Hub[] = [];
+            mockLocations.forEach(w => {
+                if (w.id !== 'all-wilayah') {
+                    w.areas.forEach(ar => {
+                        if (!ar.id.startsWith('all-area-')) { // Exclude "Semua Area (Wilayah X)"
+                            allHubsFromAllAreas = allHubsFromAllAreas.concat(ar.hubs.filter(h => !h.id.startsWith('all-hub-')));
+                        }
+                    });
+                }
+            });
+            newHubOptions = Array.from(new Set(allHubsFromAllAreas.map(h => h.id))).map(id => allHubsFromAllAreas.find(h => h.id === id)!); // Deduplicate
+        } else { // "Semua Area (Wilayah X)"
+             const currentWilayah = mockLocations.find(w => w.id === selectedWilayah);
+             currentWilayah?.areas.forEach(ar => {
+                 if (!ar.id.startsWith('all-area-')) { // Exclude "Semua Area (Wilayah X)" itself
+                    newHubOptions = newHubOptions.concat(ar.hubs.filter(h => !h.id.startsWith('all-hub-')));
+                 }
+             });
+             newHubOptions = Array.from(new Set(newHubOptions.map(h => h.id))).map(id => newHubOptions.find(h => h.id === id)!); // Deduplicate
+        }
+        newHubOptions.unshift({id: 'all-hub', name: 'Semua Hub'});
+    } else { // Specific Area
+        newHubOptions = currentArea?.hubs || [];
+    }
+    setHubOptions(newHubOptions);
+    setSelectedHub(newHubOptions.length > 0 ? newHubOptions[0].id : 'all-hub');
+    triggerFilterSimulation();
+  };
+
+  const handleHubChange = (hubId: string) => {
+    setSelectedHub(hubId);
+    triggerFilterSimulation();
+  };
+  
+  const handleSearchKurirChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchKurir(event.target.value);
+    triggerFilterSimulation(); // Or debounce this for performance
+  };
+
+  const handleDashboardFilterApply = () => {
+    triggerFilterSimulation(); // Re-trigger with current state
+  };
+  
+  const handleDownloadDashboardSummary = () => {
+    const wilayahName = mockLocations.find(w => w.id === selectedWilayah)?.name || 'Semua Wilayah';
+    const areaName = areaOptions.find(a => a.id === selectedArea)?.name || 'Semua Area';
+    const hubName = hubOptions.find(h => h.id === selectedHub)?.name || 'Semua Hub';
+    
+    let filterMessage = `Wilayah: ${wilayahName}, Area: ${areaName}, Hub: ${hubName}`;
+    if (searchKurir) {
+      filterMessage += `, Kurir: ${searchKurir}`;
+    }
+    toast({ title: "Unduh Ringkasan (Simulasi)", description: `Data akan diunduh berdasarkan filter: ${filterMessage}` });
+  };
+
 
   if (!currentUser) {
     return <div className="flex justify-center items-center h-screen"><p>Memuat data pengguna...</p></div>;
@@ -762,9 +980,9 @@ export default function DashboardPage() {
             <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
               {[...inTransitPackages]
                   .sort((a, b) => {
-                    if (a.status === 'delivered' && b.status !== 'delivered') return -1; // Delivered first
+                    if (a.status === 'delivered' && b.status !== 'delivered') return -1; 
                     if (a.status !== 'delivered' && b.status === 'delivered') return 1;
-                    return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime(); // Then by last update time
+                    return new Date(b.lastUpdateTime).getTime() - new Date(a.lastUpdateTime).getTime(); 
                   })
                   .map(pkg => (
                 <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
@@ -944,50 +1162,47 @@ export default function DashboardPage() {
               Filter & Aksi Cepat Dashboard
             </CardTitle>
             <CardDescription>
-              Saring data yang ditampilkan di dashboard atau unduh ringkasan.
+              Saring data yang ditampilkan di dashboard atau unduh ringkasan. (Perubahan filter akan memberi efek simulasi pada statistik)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
               <div>
                 <Label htmlFor="dashboard-wilayah">Wilayah</Label>
-                <Select>
+                <Select value={selectedWilayah} onValueChange={handleWilayahChange}>
                   <SelectTrigger id="dashboard-wilayah">
-                    <SelectValue placeholder="Semua Wilayah" />
+                    <SelectValue placeholder="Pilih Wilayah" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Semua Wilayah</SelectItem>
-                    <SelectItem value="jabodetabek">Jabodetabek</SelectItem>
-                    <SelectItem value="jawa-barat">Jawa Barat</SelectItem>
-                    <SelectItem value="jawa-tengah">Jawa Tengah</SelectItem>
+                    {mockLocations.map(w => (
+                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label htmlFor="dashboard-area">Area Operasional</Label>
-                <Select>
+                <Select value={selectedArea} onValueChange={handleAreaChange} disabled={areaOptions.length === 0 || selectedWilayah === 'all-wilayah' && areaOptions.length <=1}>
                   <SelectTrigger id="dashboard-area">
-                    <SelectValue placeholder="Semua Area" />
+                    <SelectValue placeholder="Pilih Area" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Semua Area</SelectItem>
-                    <SelectItem value="jakarta-pusat">Jakarta Pusat</SelectItem>
-                    <SelectItem value="bandung-kota">Bandung Kota</SelectItem>
-                    <SelectItem value="surabaya-timur">Surabaya Timur</SelectItem>
+                     {areaOptions.map(a => (
+                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label htmlFor="dashboard-lokasi-kerja">Lokasi Kerja (Hub)</Label>
-                <Select>
+                 <Select value={selectedHub} onValueChange={handleHubChange} disabled={hubOptions.length === 0 || selectedArea === 'all-area' && hubOptions.length <= 1 || selectedArea.startsWith('all-area-') && hubOptions.length <=1}>
                   <SelectTrigger id="dashboard-lokasi-kerja">
-                    <SelectValue placeholder="Semua Hub" />
+                    <SelectValue placeholder="Pilih Hub" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Semua Hub</SelectItem>
-                    <SelectItem value="hub-a">Hub A (Jakarta)</SelectItem>
-                    <SelectItem value="hub-b">Hub B (Bandung)</SelectItem>
-                    <SelectItem value="hub-c">Hub C (Surabaya)</SelectItem>
+                    {hubOptions.map(h => (
+                      <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -995,7 +1210,14 @@ export default function DashboardPage() {
                 <Label htmlFor="dashboard-search-kurir">Cari Kurir (Nama/ID)</Label>
                 <div className="relative">
                   <SearchIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input id="dashboard-search-kurir" type="search" placeholder="Masukkan Nama atau ID Kurir..." className="pl-8" />
+                  <Input 
+                    id="dashboard-search-kurir" 
+                    type="search" 
+                    placeholder="Masukkan Nama atau ID Kurir..." 
+                    className="pl-8" 
+                    value={searchKurir}
+                    onChange={handleSearchKurirChange}
+                  />
                 </div>
               </div>
               <Button onClick={handleDashboardFilterApply} className="w-full lg:w-auto self-end">
