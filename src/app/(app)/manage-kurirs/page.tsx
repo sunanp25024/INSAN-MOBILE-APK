@@ -19,6 +19,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const kurirSchema = z.object({
   id: z.string().min(1, "ID Kurir wajib diisi, cth: PISTESTXXXX").optional(),
@@ -30,6 +31,7 @@ const kurirSchema = z.object({
   area: z.string().min(1, "Area wajib diisi"),
   workLocation: z.string().min(1, "Lokasi kerja (Hub) wajib diisi"),
   joinDate: z.date({ required_error: "Tanggal join wajib diisi" }),
+  contractStatus: z.enum(['Permanent', 'Contract', 'Probation'], { required_error: "Status kontrak wajib dipilih" }),
   bankName: z.string().min(3, "Nama bank minimal 3 karakter").optional().or(z.literal('')),
   bankAccountNumber: z.string().min(5, "Nomor rekening minimal 5 digit").regex(/^\d+$/, "Nomor rekening hanya boleh berisi angka").optional().or(z.literal('')),
   bankRecipientName: z.string().min(3, "Nama pemilik rekening minimal 3 karakter").optional().or(z.literal('')),
@@ -39,9 +41,9 @@ const kurirSchema = z.object({
 type KurirFormData = z.infer<typeof kurirSchema>;
 
 const initialKurirData: UserProfile[] = [
-    { id: 'PISTEST2025', fullName: 'Budi Santoso', nik: '3273201009900001', jabatan: 'Kurir Senior', email: 'budi.s@example.com', role: 'Kurir', wilayah: 'Jabodetabek-Banten', area: 'Jakarta Pusat', workLocation: 'Hub Thamrin', joinDate: new Date(2023, 4, 15).toISOString(), bankName: 'Bank Central Asia', bankAccountNumber: '1234567890', bankRecipientName: 'Budi Santoso', status: 'Aktif', passwordValue: '123456' },
-    { id: 'KURIR002', fullName: 'Ani Yudhoyono', nik: '3273201009900002', jabatan: 'Kurir', email: 'ani.y@example.com', role: 'Kurir', wilayah: 'Jawa Barat', area: 'Bandung Kota', workLocation: 'Hub Bandung Kota', joinDate: new Date(2023, 7, 1).toISOString(), bankName: 'Bank Mandiri', bankAccountNumber: '0987654321', bankRecipientName: 'Ani Yudhoyono', status: 'Aktif', passwordValue: '123456' },
-    { id: 'KURIR003', fullName: 'Charlie Van Houten', nik: '3273201009900003', jabatan: 'Kurir', email: 'charlie.vh@example.com', role: 'Kurir', wilayah: 'Jabodetabek-Banten', area: 'Jakarta Timur', workLocation: 'Hub Cawang', joinDate: new Date(2024, 0, 10).toISOString(), bankName: 'Bank BRI', bankAccountNumber: '1122334455', bankRecipientName: 'Charlie Van Houten', status: 'Nonaktif', passwordValue: '123456' },
+    { id: 'PISTEST2025', fullName: 'Budi Santoso', nik: '3273201009900001', jabatan: 'Kurir Senior', email: 'budi.s@example.com', role: 'Kurir', wilayah: 'Jabodetabek-Banten', area: 'Jakarta Pusat', workLocation: 'Hub Thamrin', joinDate: new Date(2023, 4, 15).toISOString(), contractStatus: 'Permanent', bankName: 'Bank Central Asia', bankAccountNumber: '1234567890', bankRecipientName: 'Budi Santoso', status: 'Aktif', passwordValue: '123456' },
+    { id: 'KURIR002', fullName: 'Ani Yudhoyono', nik: '3273201009900002', jabatan: 'Kurir', email: 'ani.y@example.com', role: 'Kurir', wilayah: 'Jawa Barat', area: 'Bandung Kota', workLocation: 'Hub Bandung Kota', joinDate: new Date(2023, 7, 1).toISOString(), contractStatus: 'Contract', bankName: 'Bank Mandiri', bankAccountNumber: '0987654321', bankRecipientName: 'Ani Yudhoyono', status: 'Aktif', passwordValue: '123456' },
+    { id: 'KURIR003', fullName: 'Charlie Van Houten', nik: '3273201009900003', jabatan: 'Kurir', email: 'charlie.vh@example.com', role: 'Kurir', wilayah: 'Jabodetabek-Banten', area: 'Jakarta Timur', workLocation: 'Hub Cawang', joinDate: new Date(2024, 0, 10).toISOString(), contractStatus: 'Probation', bankName: 'Bank BRI', bankAccountNumber: '1122334455', bankRecipientName: 'Charlie Van Houten', status: 'Nonaktif', passwordValue: '123456' },
 ];
 
 export default function ManageKurirsPage() {
@@ -65,7 +67,7 @@ export default function ManageKurirsPage() {
   const { register, handleSubmit, reset, control, formState: { errors }, setValue } = useForm<KurirFormData>({
     resolver: zodResolver(kurirSchema),
     defaultValues: {
-      wilayah: '', area: '', workLocation: '', passwordValue: '',
+      wilayah: '', area: '', workLocation: '', passwordValue: '', contractStatus: 'Contract',
       bankName: '', bankAccountNumber: '', bankRecipientName: '', email: '',
     }
   });
@@ -74,12 +76,12 @@ export default function ManageKurirsPage() {
     const newKurirId = data.id && data.id.trim() !== '' ? data.id : `K${String(Date.now()).slice(-7)}`;
     
     if (currentUser?.role === 'Admin') {
-      if (kurirs.find(k => k.id === newKurirId)) { // Still check for ID conflict locally for Admin for immediate feedback
+      if (kurirs.find(k => k.id === newKurirId)) { 
         toast({ title: "Gagal Mengajukan", description: `ID Kurir ${newKurirId} sudah ada atau sedang diajukan.`, variant: "destructive"});
         return;
       }
       toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan Kurir ${data.fullName} (ID: ${newKurirId}) telah dikirim ke MasterAdmin untuk persetujuan.` });
-    } else { // MasterAdmin or other direct roles
+    } else { 
       if (kurirs.find(k => k.id === newKurirId)) {
           toast({ title: "Gagal Menambahkan", description: `ID Kurir ${newKurirId} sudah ada.`, variant: "destructive"});
           return;
@@ -92,6 +94,7 @@ export default function ManageKurirsPage() {
         status: 'Aktif',
         joinDate: data.joinDate.toISOString(),
         passwordValue: data.passwordValue || 'defaultPassword123',
+        contractStatus: data.contractStatus,
       };
       setKurirs(prev => [...prev, newKurir]);
       toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} (ID: ${newKurirId}) berhasil ditambahkan.` });
@@ -112,6 +115,7 @@ export default function ManageKurirsPage() {
     setValue('workLocation', kurir.workLocation || '');
     const joinDateObj = kurir.joinDate ? parseISO(kurir.joinDate) : new Date();
     setValue('joinDate', isValid(joinDateObj) ? joinDateObj : new Date());
+    setValue('contractStatus', kurir.contractStatus || 'Contract');
     setValue('bankName', kurir.bankName || '');
     setValue('bankAccountNumber', kurir.bankAccountNumber || '');
     setValue('bankRecipientName', kurir.bankRecipientName || '');
@@ -124,7 +128,7 @@ export default function ManageKurirsPage() {
 
     if (currentUser?.role === 'Admin') {
       toast({ title: "Permintaan Diajukan", description: `Permintaan perubahan data Kurir ${data.fullName} (ID: ${currentEditingKurir.id}) telah dikirim ke MasterAdmin untuk persetujuan.` });
-    } else { // MasterAdmin or other direct roles
+    } else { 
       setKurirs(prevKurirs =>
         prevKurirs.map(k =>
           k.id === currentEditingKurir.id
@@ -133,6 +137,7 @@ export default function ManageKurirsPage() {
                 ...data, 
                 joinDate: data.joinDate.toISOString(),
                 passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : k.passwordValue,
+                contractStatus: data.contractStatus,
               }
             : k
         )
@@ -155,11 +160,7 @@ export default function ManageKurirsPage() {
         title: "Permintaan Diajukan",
         description: `Permintaan perubahan status Kurir ${kurir?.fullName || kurirId} menjadi ${newStatus ? 'Aktif' : 'Nonaktif'} telah dikirim ke MasterAdmin.`,
       });
-      // For Admin, do not change the state visually immediately on the switch
-      // The switch will revert to its original state unless we prevent default or manage its checked state carefully.
-      // For simplicity, we'll let the toast be the primary feedback. The MasterAdmin would approve to make the change permanent.
-      // To prevent visual update of the switch for Admin, we don't call setKurirs here for Admin role.
-    } else { // MasterAdmin or other direct roles
+    } else { 
       setKurirs(prevKurirs => 
         prevKurirs.map(kurir => 
           kurir.id === kurirId ? { ...kurir, status: newStatus ? 'Aktif' : 'Nonaktif' } : kurir
@@ -246,37 +247,60 @@ export default function ManageKurirsPage() {
         </div>
       </div>
       
-      <div className="mt-4">
-        <Label htmlFor={isEdit ? "editKurirJoinDate" : "addKurirJoinDate"}>Tanggal Join <span className="text-destructive">*</span></Label>
-        <Controller
-          name="joinDate"
-          control={control}
-          render={({ field }) => (
-              <Popover>
-                  <PopoverTrigger asChild>
-                      <Button
-                          variant={"outline"}
-                          className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}
-                      >
-                          <LucideCalendarIcon className="mr-2 h-4 w-4" />
-                          {field.value && isValid(field.value) ? format(field.value, "PPP", { locale: indonesiaLocale }) : <span>Pilih tanggal</span>}
-                      </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                      <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date > new Date() || date < new Date("1990-01-01")}
-                          initialFocus
-                          locale={indonesiaLocale}
-                      />
-                  </PopoverContent>
-              </Popover>
-          )}
-        />
-          {errors.joinDate && <p className="text-destructive text-sm mt-1">{errors.joinDate.message}</p>}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div>
+          <Label htmlFor={isEdit ? "editKurirJoinDate" : "addKurirJoinDate"}>Tanggal Join <span className="text-destructive">*</span></Label>
+          <Controller
+            name="joinDate"
+            control={control}
+            render={({ field }) => (
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button
+                            variant={"outline"}
+                            className={`w-full justify-start text-left font-normal ${!field.value && "text-muted-foreground"}`}
+                        >
+                            <LucideCalendarIcon className="mr-2 h-4 w-4" />
+                            {field.value && isValid(field.value) ? format(field.value, "PPP", { locale: indonesiaLocale }) : <span>Pilih tanggal</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                        <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) => date > new Date() || date < new Date("1990-01-01")}
+                            initialFocus
+                            locale={indonesiaLocale}
+                        />
+                    </PopoverContent>
+                </Popover>
+            )}
+          />
+            {errors.joinDate && <p className="text-destructive text-sm mt-1">{errors.joinDate.message}</p>}
+        </div>
+        <div>
+          <Label htmlFor={isEdit ? "editKurirContractStatus" : "addKurirContractStatus"}>Status Kontrak <span className="text-destructive">*</span></Label>
+          <Controller
+            name="contractStatus"
+            control={control}
+            render={({ field }) => (
+              <Select onValueChange={field.onChange} value={field.value}>
+                <SelectTrigger id={isEdit ? "editKurirContractStatus" : "addKurirContractStatus"}>
+                  <SelectValue placeholder="Pilih status kontrak" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Permanent">Permanent</SelectItem>
+                  <SelectItem value="Contract">Contract</SelectItem>
+                  <SelectItem value="Probation">Probation</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          />
+          {errors.contractStatus && <p className="text-destructive text-sm mt-1">{errors.contractStatus.message}</p>}
+        </div>
       </div>
+
 
       <Label className="font-semibold block mt-4">Informasi Bank (Opsional):</Label>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -324,7 +348,8 @@ export default function ManageKurirsPage() {
                   reset({
                     id: '', fullName: '', nik: '', passwordValue: '', jabatan: '',
                     wilayah: '', area: '', workLocation: '',
-                    joinDate: undefined, bankName: '', bankAccountNumber: '', bankRecipientName: '', email: ''
+                    joinDate: undefined, contractStatus: 'Contract', 
+                    bankName: '', bankAccountNumber: '', bankRecipientName: '', email: ''
                   });
                 }}>
                 <UserPlus className="mr-2 h-4 w-4" /> Tambah Kurir Baru
@@ -378,11 +403,9 @@ export default function ManageKurirsPage() {
                         checked={kurir.status === 'Aktif'}
                         onCheckedChange={(newStatus) => handleStatusChange(kurir.id, newStatus)}
                         aria-label={`Status kurir ${kurir.fullName}`}
-                        // If Admin, the switch interaction is handled by handleStatusChange to not update state directly
-                        disabled={currentUser.role === 'Admin' && kurir.status === 'Aktif' && kurir.status !== (kurirs.find(k=>k.id === kurir.id)?.status || 'Nonaktif')} // A bit tricky to manage switch state without full backend
                         onClick={(e) => {
-                          if (currentUser.role === 'Admin') {
-                            e.preventDefault(); // Prevent default switch toggle for admin if we are just sending request
+                          if (currentUser?.role === 'Admin') {
+                            e.preventDefault(); 
                             handleStatusChange(kurir.id, !(kurir.status === 'Aktif'));
                           }
                         }}
@@ -394,10 +417,12 @@ export default function ManageKurirsPage() {
                     <TableCell className="text-center space-x-1">
                       <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(kurir)}><Edit size={16}/></Button>
                       <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => {
-                        if (currentUser.role === 'Admin') {
+                        if (currentUser?.role === 'Admin') {
                             toast({title: "Permintaan Diajukan", description: `Penghapusan kurir ${kurir.id} memerlukan persetujuan MasterAdmin.`});
                         } else {
-                            toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${kurir.id} belum diimplementasikan.`});
+                            // Implement actual delete for MasterAdmin if needed, or keep as placeholder
+                            const kurirToDelete = kurirs.find(k => k.id === kurir.id);
+                            toast({title: "Fungsi Hapus (MasterAdmin)", description: `Kurir ${kurirToDelete?.fullName || kurir.id} akan dihapus (simulasi).`});
                         }
                       }}><Trash2 size={16}/></Button>
                     </TableCell>
@@ -458,7 +483,7 @@ export default function ManageKurirsPage() {
             <Input id="excel-file-kurir" type="file" accept=".xlsx, .xls" className="mt-1" />
           </div>
           <p className="text-xs text-muted-foreground">
-            Format kolom yang diharapkan: ID Kurir (opsional), Nama Lengkap, NIK, Password Awal, Jabatan, Wilayah, Area, Lokasi Kerja (Hub), Tanggal Join (YYYY-MM-DD), Email (opsional), Nama Bank (opsional), No Rekening (opsional), Nama Pemilik Rekening (opsional).
+            Format kolom yang diharapkan: ID Kurir (opsional), Nama Lengkap, NIK, Password Awal, Jabatan, Wilayah, Area, Lokasi Kerja (Hub), Tanggal Join (YYYY-MM-DD), Status Kontrak (Permanent/Contract/Probation), Email (opsional), Nama Bank (opsional), No Rekening (opsional), Nama Pemilik Rekening (opsional).
           </p>
           <Button onClick={handleImportKurirs} className="w-full sm:w-auto">
             <FileUp className="mr-2 h-4 w-4" /> Impor Data Kurir

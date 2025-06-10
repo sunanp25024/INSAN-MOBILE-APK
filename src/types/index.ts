@@ -8,11 +8,11 @@ export interface UserProfile {
   role: UserRole;
   email?: string;
   passwordValue?: string; // Only for mock/initial setup, not for general display
-  nik?: string; // New
-  jabatan?: string; // New
-  wilayah?: string; // New - ID Wilayah
-  area?: string; // New - ID Area
-  workLocation?: string; // Hub Location - Existing, but will be selected via dropdown for Kurir
+  nik?: string; 
+  jabatan?: string; 
+  wilayah?: string; 
+  area?: string; 
+  workLocation?: string; // Hub Location
   joinDate?: string;
   position?: string; // Used as 'Jabatan' for Kurir, or Role name for others
   contractStatus?: 'Permanent' | 'Contract' | 'Probation';
