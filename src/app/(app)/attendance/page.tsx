@@ -226,22 +226,22 @@ export default function AttendancePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {todayRecord?.checkInTime ? (
-            <Alert variant={todayRecord.status === 'Present' ? 'default' : todayRecord.status === 'Late' ? 'destructive': 'default'} className={todayRecord.status === 'Present' ? 'bg-green-100 border-green-300 dark:bg-green-900/30 dark:border-green-700' : todayRecord.status === 'Late' ? 'bg-yellow-100 border-yellow-300 dark:bg-yellow-900/30 dark:border-yellow-700' : ''}>
-              <CheckCircle className={`h-4 w-4 ${todayRecord.status === 'Present' ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}`} />
+            <Alert variant={todayRecord.status === 'Late' ? 'destructive' : 'default'}>
+              <CheckCircle className={`h-4 w-4 ${todayRecord.status === 'Present' ? 'text-primary' : ''}`} />
               <AlertTitle>Sudah Check-In pukul {todayRecord.checkInTime}</AlertTitle>
               <AlertDescription>Status Kehadiran: {todayRecord.status}</AlertDescription>
             </Alert>
           ) : (
-            <Alert variant="default" className="bg-red-100 border-red-300 dark:bg-red-900/30 dark:border-red-700">
-              <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
               <AlertTitle>Belum Check-In</AlertTitle>
               <AlertDescription>Silakan lakukan check-in untuk memulai hari kerja Anda.</AlertDescription>
             </Alert>
           )}
 
           {todayRecord?.checkOutTime && (
-            <Alert variant="default" className="bg-blue-100 border-blue-300 dark:bg-blue-900/30 dark:border-blue-700">
-              <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <Alert variant="default">
+              <CheckCircle className="h-4 w-4 text-primary" />
               <AlertTitle>Sudah Check-Out pukul {todayRecord.checkOutTime}</AlertTitle>
               <AlertDescription>Hari kerja Anda telah selesai.</AlertDescription>
             </Alert>
@@ -249,16 +249,18 @@ export default function AttendancePage() {
           
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
             <Button 
+              variant="default"
               onClick={handleCheckIn} 
               disabled={!!todayRecord?.checkInTime}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white dark:bg-green-500 dark:hover:bg-green-600 dark:text-gray-900"
+              className="flex-1"
             >
               <CheckCircle className="mr-2 h-4 w-4" /> Check In
             </Button>
             <Button 
+              variant="destructive"
               onClick={handleCheckOut} 
               disabled={!todayRecord?.checkInTime || !!todayRecord?.checkOutTime}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white dark:bg-red-500 dark:hover:bg-red-600 dark:text-gray-900"
+              className="flex-1"
             >
               <XCircle className="mr-2 h-4 w-4" /> Check Out
             </Button>
@@ -307,7 +309,7 @@ export default function AttendancePage() {
                   <CardDescription>{format(selectedDate, "eeee, dd MMMM yyyy", { locale: indonesiaLocale })}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-1 text-sm">
-                  <p>Status: <span className={`font-semibold ${selectedRecord.status === 'Present' ? 'text-green-600 dark:text-green-400' : selectedRecord.status === 'Late' ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>{selectedRecord.status}</span></p>
+                  <p>Status: <span className={`font-semibold ${selectedRecord.status === 'Present' ? 'text-primary' : selectedRecord.status === 'Late' ? 'text-destructive' : 'text-destructive'}`}>{selectedRecord.status}</span></p>
                   {selectedRecord.checkInTime && <p>Check-In: {selectedRecord.checkInTime}</p>}
                   {selectedRecord.checkOutTime && <p>Check-Out: {selectedRecord.checkOutTime}</p>}
                   {workDuration && <p>Total Jam Kerja: <span className="font-semibold">{workDuration}</span></p>}
@@ -408,3 +410,4 @@ export default function AttendancePage() {
     </div>
   );
 }
+
