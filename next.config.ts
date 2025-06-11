@@ -17,7 +17,12 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      // i.ibb.co is removed as the logo is now local
+      {
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
 };
