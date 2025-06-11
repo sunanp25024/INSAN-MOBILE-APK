@@ -953,7 +953,7 @@ export default function DashboardPage() {
 
               {isScanning && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                  <Card className="w-[calc(100%-2rem)] max-w-xl">
+                  <Card className="w-[calc(100%-2rem)] max-w-2xl">
                     <CardHeader>
                       <CardTitle>Scan Barcode Paket</CardTitle>
                       <CardDescription>Arahkan kamera ke barcode paket. Pemindaian otomatis.</CardDescription>
@@ -1059,7 +1059,7 @@ export default function DashboardPage() {
             </CardContent>
             {capturingForPackageId && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                  <Card className="w-[calc(100%-2rem)] max-w-xl">
+                  <Card className="w-[calc(100%-2rem)] max-w-2xl">
                     <CardHeader>
                       <CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle>
                       <CardDescription>Ambil foto dan masukkan nama penerima.</CardDescription>
@@ -1094,7 +1094,7 @@ export default function DashboardPage() {
               )}
               {isScanningForDeliveryUpdate && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                  <Card className="w-[calc(100%-2rem)] max-w-xl">
+                  <Card className="w-[calc(100%-2rem)] max-w-2xl">
                     <CardHeader>
                       <CardTitle>Scan Resi Paket untuk Update Pengiriman</CardTitle>
                       <CardDescription>Arahkan kamera ke barcode paket yang akan diupdate. Pemindaian otomatis.</CardDescription>
