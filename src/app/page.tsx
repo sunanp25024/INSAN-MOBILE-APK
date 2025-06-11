@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,104 +10,104 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { AppLogo } from '@/components/icons/AppLogo';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
-import type { UserRole, UserProfile } from '@/types';
-
-// Mock users with different roles
-const mockUsers: Record<string, UserProfile & { passwordValue: string }> = {
-  'MASTERADMIN001': {
-    id: 'MASTERADMIN001',
-    fullName: 'Super Admin',
-    role: 'MasterAdmin',
-    passwordValue: 'master123',
-    avatarUrl: 'https://placehold.co/100x100.png?text=MA',
-    email: 'master@example.com',
-  },
-  'ADMIN001': {
-    id: 'ADMIN001',
-    fullName: 'Admin Staff',
-    role: 'Admin',
-    passwordValue: 'admin123',
-    avatarUrl: 'https://placehold.co/100x100.png?text=AD',
-    email: 'admin@example.com',
-  },
-  'PIC001': {
-    id: 'PIC001',
-    fullName: 'PIC Lapangan',
-    role: 'PIC',
-    passwordValue: 'pic123',
-    avatarUrl: 'https://placehold.co/100x100.png?text=PC',
-    email: 'pic@example.com',
-  },
-  'PISTEST2025': { // Existing Kurir
-    id: 'PISTEST2025',
-    fullName: 'Budi Santoso',
-    role: 'Kurir',
-    passwordValue: '123456',
-    workLocation: 'Jakarta Pusat Hub',
-    joinDate: new Date().toISOString(),
-    position: 'Kurir Senior',
-    contractStatus: 'Permanent',
-    bankAccountNumber: '1234567890',
-    bankName: 'Bank Central Asia',
-    bankRecipientName: 'Budi Santoso',
-    avatarUrl: 'https://placehold.co/100x100.png',
-    photoIdUrl: 'https://placehold.co/300x200.png',
-    email: 'budi.s@example.com',
-  }
-};
-
+import type { UserProfile } from '@/types';
+import { auth, db } from '@/lib/firebase'; // Import Firebase auth and db
+import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function LoginPage() {
-  const [userIdInput, setUserIdInput] = useState('');
+  const [emailInput, setEmailInput] = useState(''); // Changed from userIdInput to emailInput
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is signed in, see if we have their profile and redirect
+        const storedUser = localStorage.getItem('loggedInUser');
+        if (storedUser) {
+          router.replace('/dashboard');
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (!emailInput.includes('@')) {
+        toast({
+            title: 'Login Gagal',
+            description: 'Format User ID harus berupa email yang valid.',
+            variant: 'destructive',
+        });
+        setIsLoading(false);
+        return;
+    }
 
-    const user = mockUsers[userIdInput.toUpperCase()];
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, emailInput, password);
+      const firebaseUser = userCredential.user;
 
-    if (user && user.passwordValue === password) {
+      if (firebaseUser) {
+        // Fetch user profile from Firestore
+        const userDocRef = doc(db, "users", firebaseUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          const userProfileData = userDocSnap.data() as UserProfile;
+          
+          toast({
+            title: 'Login Berhasil',
+            description: `Selamat datang kembali, ${userProfileData.fullName}! Peran: ${userProfileData.role}`,
+          });
+          
+          localStorage.setItem('isAuthenticated', 'true');
+          // Store the full profile fetched from Firestore
+          localStorage.setItem('loggedInUser', JSON.stringify({
+            ...userProfileData, // Spread all fields from Firestore
+            uid: firebaseUser.uid, // Add Firebase UID for reference if needed
+          }));
+          
+          router.replace('/dashboard');
+        } else {
+          // This case should ideally not happen if data seeding is correct
+          // User exists in Auth, but no profile in Firestore
+          toast({
+            title: 'Login Gagal',
+            description: 'Profil pengguna tidak ditemukan. Hubungi administrator.',
+            variant: 'destructive',
+          });
+          await auth.signOut(); // Sign out the user from Auth
+          localStorage.removeItem('isAuthenticated');
+          localStorage.removeItem('loggedInUser');
+          localStorage.removeItem('courierCheckedInToday');
+        }
+      }
+    } catch (error: any) {
+      let errorMessage = 'Email atau password salah.';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMessage = 'Email atau password yang Anda masukkan salah.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Format email tidak valid.';
+      } else {
+        console.error("Firebase login error:", error);
+        errorMessage = 'Terjadi kesalahan saat login. Coba lagi nanti.';
+      }
       toast({
-        title: 'Login Successful',
-        description: `Welcome back, ${user.fullName}! Role: ${user.role}`,
-      });
-      
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('loggedInUser', JSON.stringify({
-        id: user.id,
-        fullName: user.fullName,
-        role: user.role,
-        avatarUrl: user.avatarUrl,
-        email: user.email,
-        // Menyertakan detail tambahan jika ada, agar konsisten dengan apa yang mungkin dibutuhkan di halaman profil
-        workLocation: user.workLocation,
-        joinDate: user.joinDate,
-        position: user.position,
-        contractStatus: user.contractStatus,
-        bankAccountNumber: user.bankAccountNumber,
-        bankName: user.bankName,
-        bankRecipientName: user.bankRecipientName,
-        photoIdUrl: user.photoIdUrl,
-        nik: user.nik,
-      }));
-      
-      router.push('/dashboard');
-    } else {
-      toast({
-        title: 'Login Failed',
-        description: 'Invalid ID or Password.',
+        title: 'Login Gagal',
+        description: errorMessage,
         variant: 'destructive',
       });
       localStorage.removeItem('isAuthenticated');
       localStorage.removeItem('loggedInUser');
-      localStorage.removeItem('courierCheckedInToday'); // Also clear check-in status
+      localStorage.removeItem('courierCheckedInToday');
     }
     setIsLoading(false);
   };
@@ -125,13 +125,13 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="id">User ID</Label>
+              <Label htmlFor="email">User ID (Email)</Label>
               <Input
-                id="id"
-                type="text"
-                placeholder="Masukkan User ID Anda"
-                value={userIdInput}
-                onChange={(e) => setUserIdInput(e.target.value)}
+                id="email"
+                type="email"
+                placeholder="Masukkan alamat email Anda"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
                 required
                 className="bg-input border-border focus:ring-primary focus:border-primary"
               />

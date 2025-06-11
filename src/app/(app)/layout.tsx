@@ -46,6 +46,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/toaster";
 import type { UserRole, UserProfile } from "@/types";
+import { auth } from '@/lib/firebase'; // Import Firebase auth
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 interface NavItem {
   href: string;
@@ -67,7 +69,6 @@ const allNavItems: NavItem[] = [
 
   // Admin specific
   // Manage PICs and Manage Kurirs are shared with MasterAdmin
-
   { href: "/pending-approvals", icon: MailCheck, label: "Status Persetujuan", roles: ['Admin'] },
   
   // PIC specific
@@ -88,44 +89,94 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [currentUser, setCurrentUser] = React.useState<UserProfile | null>(null);
   const [navItems, setNavItems] = React.useState<NavItem[]>([]);
+  const [loadingAuth, setLoadingAuth] = React.useState(true);
 
   React.useEffect(() => {
-    const isAuthenticated = localStorage.getItem('isAuthenticated');
-    const userDataString = localStorage.getItem('loggedInUser');
-
-    if (!isAuthenticated || !userDataString) {
-      router.replace('/'); 
-      return;
-    }
-    
-    try {
-      const parsedUser = JSON.parse(userDataString) as UserProfile;
-      setCurrentUser(parsedUser);
-      if (parsedUser && parsedUser.role) {
-        setNavItems(allNavItems.filter(item => item.roles.includes(parsedUser.role)));
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in.
+        const userDataString = localStorage.getItem('loggedInUser');
+        if (userDataString) {
+          try {
+            const parsedUser = JSON.parse(userDataString) as UserProfile;
+            // Basic check: if the UID from localStorage matches firebaseUser's UID
+            // For more robust check, you might re-fetch from Firestore or ensure token validity
+            if (parsedUser.uid === firebaseUser.uid) {
+              setCurrentUser(parsedUser);
+              if (parsedUser.role) {
+                setNavItems(allNavItems.filter(item => item.roles.includes(parsedUser.role)));
+              } else {
+                router.replace('/'); // Missing role, critical info
+              }
+            } else {
+              // Mismatch, clear stale data and redirect
+              localStorage.removeItem('isAuthenticated');
+              localStorage.removeItem('loggedInUser');
+              router.replace('/');
+            }
+          } catch (error) {
+            console.error("Failed to parse user data from localStorage", error);
+            localStorage.removeItem('isAuthenticated');
+            localStorage.removeItem('loggedInUser');
+            router.replace('/');
+          }
+        } else {
+          // No user data in localStorage despite Firebase auth - might happen on first load or if cleared
+          // Redirect to login to fetch and store profile
+          router.replace('/');
+        }
       } else {
-        // Fallback or error if role is not defined
-        router.replace('/');
+        // User is signed out.
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('loggedInUser');
+        localStorage.removeItem('courierCheckedInToday');
+        setCurrentUser(null);
+        setNavItems([]);
+        if (pathname !== '/') { // Avoid redirect loop if already on login page
+             router.replace('/');
+        }
       }
+      setLoadingAuth(false);
+    });
+
+    return () => unsubscribe(); // Cleanup subscription on unmount
+  }, [router, pathname]);
+
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // onAuthStateChanged will handle clearing localStorage and redirecting
     } catch (error) {
-      console.error("Failed to parse user data from localStorage", error);
-      router.replace('/');
+      console.error("Error signing out: ", error);
+      // Fallback cleanup if signOut fails or onAuthStateChanged doesn't trigger as expected
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('loggedInUser');
+      localStorage.removeItem('courierCheckedInToday');
+      router.push('/');
     }
-  }, [router]);
-
-
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('loggedInUser');
-    localStorage.removeItem('courierCheckedInToday');
-    router.push('/');
   };
 
-  if (!currentUser) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>; // Or a proper loader
+  if (loadingAuth) {
+    return <div className="flex h-screen items-center justify-center">Memverifikasi sesi...</div>;
   }
   
-  const userInitials = currentUser.fullName?.split(" ").map(n => n[0]).join("").toUpperCase() || "XX";
+  if (!currentUser && pathname !== '/') {
+     // This case should ideally be handled by onAuthStateChanged redirecting to '/'
+     // But as a fallback, if not loading and no user, show loading or redirect.
+     // To prevent flashing content, we might just show a loader until redirect from onAuthStateChanged happens.
+    return <div className="flex h-screen items-center justify-center">Mengalihkan ke halaman login...</div>;
+  }
+  
+  // If currentUser is null, it means we are on the login page, so we don't render the layout.
+  // This check relies on the fact that if user is not authenticated, onAuthStateChanged redirects to '/'.
+  // If the pathname is '/', it means it's the login page, so children (login page) should be rendered directly.
+  if (!currentUser && pathname.startsWith('/dashboard')) { // Or any other protected route prefix
+     return <div className="flex h-screen items-center justify-center">Anda tidak diautentikasi. Mengalihkan...</div>;
+  }
+
+
+  const userInitials = currentUser?.fullName?.split(" ").map(n => n[0]).join("").toUpperCase() || "XX";
 
   return (
     <SidebarProvider defaultOpen>
@@ -161,18 +212,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="w-full justify-start items-center p-2 h-auto">
                 <Avatar className="h-9 w-9 mr-3">
-                  <AvatarImage src={currentUser.avatarUrl || `https://placehold.co/100x100.png?text=${userInitials}`} alt={currentUser.fullName || "User"} data-ai-hint="man face"/>
+                  <AvatarImage src={currentUser?.avatarUrl || `https://placehold.co/100x100.png?text=${userInitials}`} alt={currentUser?.fullName || "User"} data-ai-hint="man face"/>
                   <AvatarFallback>{userInitials}</AvatarFallback>
                 </Avatar>
                 <div className="text-left flex-grow">
-                  <p className="text-sm font-medium text-sidebar-foreground">{currentUser.fullName || "User"}</p>
-                  <p className="text-xs text-muted-foreground">{currentUser.id}</p>
+                  <p className="text-sm font-medium text-sidebar-foreground">{currentUser?.fullName || "User"}</p>
+                  <p className="text-xs text-muted-foreground">{currentUser?.id}</p>
                 </div>
                 <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" className="w-56 mb-2">
-              <DropdownMenuLabel>Akun Saya ({currentUser.role})</DropdownMenuLabel>
+              <DropdownMenuLabel>Akun Saya ({currentUser?.role})</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => router.push('/profile')}>
                 <User className="mr-2 h-4 w-4" />
@@ -193,7 +244,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </Sidebar>
       <SidebarInset>
         <div className="p-4 sm:p-6 lg:p-8">
-          <div className="mb-6 md:hidden"> {/* Mobile sidebar trigger container */}
+          <div className="mb-6 md:hidden">
              <SidebarTrigger />
           </div>
           {children}

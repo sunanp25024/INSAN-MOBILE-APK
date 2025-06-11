@@ -3,19 +3,20 @@
 export type UserRole = 'MasterAdmin' | 'Admin' | 'PIC' | 'Kurir';
 
 export interface UserProfile {
-  id: string;
+  uid?: string; // Firebase Auth User ID, added when fetching/storing
+  id: string; // Your application-specific ID (e.g., PISTEST2025)
   fullName: string;
   role: UserRole;
-  email?: string;
-  passwordValue?: string; // Only for mock/initial setup, not for general display
+  email?: string; // Should match Firebase Auth email
+  // passwordValue is removed as it's handled by Firebase Auth
   nik?: string; 
   jabatan?: string; 
   wilayah?: string; 
   area?: string; 
   workLocation?: string; // Hub Location
-  joinDate?: string;
-  position?: string; // Used as 'Jabatan' for Kurir, or Role name for others
-  contractStatus?: string; // Changed from enum to string
+  joinDate?: string; // Store as ISO string
+  position?: string; 
+  contractStatus?: string;
   bankAccountNumber?: string;
   bankName?: string;
   bankRecipientName?: string;
@@ -31,14 +32,14 @@ export type CourierProfile = UserProfile & {
 
 
 export interface PackageItem {
-  id: string;
+  id: string; // This could be the resi number
   status: 'process' | 'in_transit' | 'delivered' | 'pending_return' | 'returned';
   isCOD: boolean;
   recipientName?: string;
-  deliveryProofPhotoUrl?: string;
-  returnProofPhotoUrl?: string;
+  deliveryProofPhotoUrl?: string; // URL to image in Firebase Storage
+  returnProofPhotoUrl?: string; // URL to image in Firebase Storage
   returnLeadReceiverName?: string;
-  lastUpdateTime: string;
+  lastUpdateTime: string; // ISO string
 }
 
 export interface DailyPackageInput {
@@ -48,14 +49,14 @@ export interface DailyPackageInput {
 }
 
 export interface AttendanceRecord {
-  date: string;
-  checkInTime?: string;
-  checkOutTime?: string;
+  date: string; // ISO string (yyyy-mm-dd)
+  checkInTime?: string; // HH:mm
+  checkOutTime?: string; // HH:mm
   status: 'Present' | 'Absent' | 'Late';
 }
 
 export interface DailyPerformance {
-  date: string;
+  date: string; // ISO string
   totalDelivered: number;
   totalPending: number;
   successRate: number;
@@ -68,31 +69,34 @@ export interface WeeklyPerformancePoint {
 }
 
 export interface AttendanceActivity {
-  id: string;
+  id: string; // Firestore document ID
   kurirName: string;
-  kurirId: string;
+  kurirId: string; // Your app's Kurir ID
+  kurirUid?: string; // Firebase UID of the Kurir
   action: 'check-in' | 'check-out' | 'reported-late';
-  timestamp: string;
-  location?: string;
+  timestamp: string; // ISO string or Firestore Timestamp
+  location?: string; // Hub location
 }
 
 export interface DeliveryActivity {
-  id: string;
+  id: string; // Firestore document ID
   kurirName: string;
-  kurirId: string;
-  packageId: string;
+  kurirId: string; // Your app's Kurir ID
+  kurirUid?: string; // Firebase UID of the Kurir
+  packageId: string; // Resi number
   action: 'picked-up' | 'in-transit' | 'delivered' | 'delivery-failed' | 'returned-to-hub';
-  timestamp: string;
+  timestamp: string; // ISO string or Firestore Timestamp
   details?: string;
   location?: string; // Hub location of the courier
 }
 
 export interface CourierWorkSummaryActivity {
-  id: string; // Unique ID for this summary activity
+  id: string; // Firestore document ID
   kurirName: string;
-  kurirId: string;
-  hubLocation: string; // Location of the hub they operate from
-  timestamp: string; // Timestamp when they finished/reported
+  kurirId: string; // Your app's Kurir ID
+  kurirUid?: string; // Firebase UID of the Kurir
+  hubLocation: string; 
+  timestamp: string; // ISO string or Firestore Timestamp
   totalPackagesAssigned: number;
   packagesDelivered: number;
   packagesPendingOrReturned: number;
@@ -150,7 +154,7 @@ export const mockLocationsData: Wilayah[] = [
     areas: [
       { id: 'all-area-jb', name: 'Semua Area (Jabodetabek-Banten)', hubs: []},
       {
-        id: 'jakarta-pusat-jb', // Made ID more unique
+        id: 'jakarta-pusat-jb', 
         name: 'Jakarta Pusat',
         hubs: [
           { id: 'all-hub-jp', name: 'Semua Hub (Jakarta Pusat)'},
@@ -159,7 +163,7 @@ export const mockLocationsData: Wilayah[] = [
         ],
       },
       {
-        id: 'jakarta-timur-jb', // Made ID more unique
+        id: 'jakarta-timur-jb', 
         name: 'Jakarta Timur',
         hubs: [
           { id: 'all-hub-jt', name: 'Semua Hub (Jakarta Timur)'},
@@ -175,7 +179,7 @@ export const mockLocationsData: Wilayah[] = [
     areas: [
       { id: 'all-area-jabar', name: 'Semua Area (Jawa Barat)', hubs: []},
       {
-        id: 'bandung-kota-jabar', // Made ID more unique
+        id: 'bandung-kota-jabar', 
         name: 'Bandung Kota',
         hubs: [
           { id: 'all-hub-bdg', name: 'Semua Hub (Bandung Kota)'},
@@ -186,4 +190,3 @@ export const mockLocationsData: Wilayah[] = [
     ],
   },
 ];
-
