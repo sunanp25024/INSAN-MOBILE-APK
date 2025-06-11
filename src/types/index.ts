@@ -3,12 +3,11 @@
 export type UserRole = 'MasterAdmin' | 'Admin' | 'PIC' | 'Kurir';
 
 export interface UserProfile {
-  uid?: string; // Firebase Auth User ID, added when fetching/storing
-  id: string; // Your application-specific ID (e.g., PISTEST2025)
+  uid: string; // Firebase Auth User ID, THIS IS MANDATORY for logged-in users.
+  id: string; // Your application-specific ID (e.g., PISTEST2025, ADMIN001)
   fullName: string;
   role: UserRole;
   email?: string; // Should match Firebase Auth email
-  // passwordValue is removed as it's handled by Firebase Auth
   nik?: string; 
   jabatan?: string; 
   wilayah?: string; 
@@ -36,17 +35,38 @@ export interface PackageItem {
   status: 'process' | 'in_transit' | 'delivered' | 'pending_return' | 'returned';
   isCOD: boolean;
   recipientName?: string;
-  deliveryProofPhotoUrl?: string; // URL to image in Firebase Storage
-  returnProofPhotoUrl?: string; // URL to image in Firebase Storage
+  deliveryProofPhotoUrl?: string; // URL to image in Firebase Storage (or dataURL for now)
+  returnProofPhotoUrl?: string; // URL to image in Firebase Storage (or dataURL for now)
   returnLeadReceiverName?: string;
-  lastUpdateTime: string; // ISO string
+  lastUpdateTime: string; // ISO string for local state, Firestore Timestamp for DB
+  // For Firestore, we might use Timestamp for lastUpdateTime
 }
 
-export interface DailyPackageInput {
+export interface DailyPackageInput { // This type is for the initial form input for the day.
   totalPackages: number;
   codPackages: number;
   nonCodPackages: number;
 }
+
+// Type for Firestore document in `kurir_daily_tasks`
+export interface KurirDailyTaskDoc {
+  kurirUid: string;
+  kurirFullName: string;
+  date: string; // YYYY-MM-DD format for document ID simplicity, or store a Timestamp field
+  totalPackages: number;
+  codPackages: number;
+  nonCodPackages: number;
+  taskStatus: 'pending_setup' | 'in_progress' | 'completed' | 'archived'; // e.g. when day is reset
+  createdAt: any; // Firestore Timestamp
+  updatedAt: any; // Firestore Timestamp
+  // Summary fields after completion
+  finalDeliveredCount?: number;
+  finalPendingReturnCount?: number;
+  finalReturnProofPhotoUrl?: string; // Overall proof for all returned packages
+  finalReturnLeadReceiverName?: string; // Overall lead receiver for all returned packages
+  finishTimestamp?: any; // Firestore Timestamp
+}
+
 
 export interface AttendanceRecord {
   date: string; // ISO string (yyyy-mm-dd)
