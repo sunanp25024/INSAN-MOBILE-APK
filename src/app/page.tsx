@@ -16,7 +16,7 @@ import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
 export default function LoginPage() {
-  const [emailInput, setEmailInput] = useState(''); // Changed from userIdInput to emailInput
+  const [emailInput, setEmailInput] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -26,7 +26,6 @@ export default function LoginPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        // User is signed in, see if we have their profile and redirect
         const storedUser = localStorage.getItem('loggedInUser');
         if (storedUser) {
           router.replace('/dashboard');
@@ -36,10 +35,12 @@ export default function LoginPage() {
     return () => unsubscribe();
   }, [router]);
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    let loginSuccess = false;
+    let finalError: any = null;
+    const maxRetries = 2; // Initial attempt + 2 retries = 3 attempts total
 
     if (!emailInput.includes('@')) {
         toast({
@@ -51,54 +52,80 @@ export default function LoginPage() {
         return;
     }
 
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, emailInput, password);
-      const firebaseUser = userCredential.user;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Login attempt ${attempt + 1}...`);
+        const userCredential = await signInWithEmailAndPassword(auth, emailInput, password);
+        const firebaseUser = userCredential.user;
 
-      if (firebaseUser) {
-        // Fetch user profile from Firestore
-        const userDocRef = doc(db, "users", firebaseUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
+        if (firebaseUser) {
+          const userDocRef = doc(db, "users", firebaseUser.uid);
+          const userDocSnap = await getDoc(userDocRef);
 
-        if (userDocSnap.exists()) {
-          const userProfileData = userDocSnap.data() as UserProfile;
-          
+          if (userDocSnap.exists()) {
+            const userProfileData = userDocSnap.data() as UserProfile;
+            toast({
+              title: 'Login Berhasil',
+              description: `Selamat datang kembali, ${userProfileData.fullName}! Peran: ${userProfileData.role}`,
+            });
+            localStorage.setItem('isAuthenticated', 'true');
+            localStorage.setItem('loggedInUser', JSON.stringify({
+              ...userProfileData,
+              uid: firebaseUser.uid,
+            }));
+            loginSuccess = true;
+            router.replace('/dashboard');
+            break; // Exit loop on success
+          } else {
+            // This error means Auth succeeded but Firestore profile is missing
+            finalError = { code: 'auth/user-profile-not-found', message: 'Profil pengguna tidak ditemukan di database.' };
+            // No need to call auth.signOut() here as the main loop will handle toast and local storage clearing
+            break; 
+          }
+        }
+      } catch (error: any) {
+        finalError = error;
+        console.error(`Login attempt ${attempt + 1} failed:`, error.code, error.message);
+        if (error.code === 'auth/visibility-check-was-unavailable' && attempt < maxRetries) {
+          const delay = (attempt + 1) * 1500; // 1.5s, 3s
+          console.log(`Retrying login in ${delay / 1000}s due to ${error.code}`);
           toast({
-            title: 'Login Berhasil',
-            description: `Selamat datang kembali, ${userProfileData.fullName}! Peran: ${userProfileData.role}`,
+            title: 'Masalah Koneksi Sementara',
+            description: `Mencoba login lagi (${attempt + 1}/${maxRetries})...`,
+            variant: 'default',
+            duration: delay + 500
           });
-          
-          localStorage.setItem('isAuthenticated', 'true');
-          // Store the full profile fetched from Firestore
-          localStorage.setItem('loggedInUser', JSON.stringify({
-            ...userProfileData, // Spread all fields from Firestore
-            uid: firebaseUser.uid, // Add Firebase UID for reference if needed
-          }));
-          
-          router.replace('/dashboard');
+          await new Promise(resolve => setTimeout(resolve, delay));
+          // Continue to next attempt
         } else {
-          // This case should ideally not happen if data seeding is correct
-          // User exists in Auth, but no profile in Firestore
-          toast({
-            title: 'Login Gagal',
-            description: 'Profil pengguna tidak ditemukan. Hubungi administrator.',
-            variant: 'destructive',
-          });
-          await auth.signOut(); // Sign out the user from Auth
-          localStorage.removeItem('isAuthenticated');
-          localStorage.removeItem('loggedInUser');
-          localStorage.removeItem('courierCheckedInToday');
+          // Non-retryable error or max retries reached for visibility check
+          break; // Exit loop
         }
       }
-    } catch (error: any) {
-      let errorMessage = 'Email atau password salah.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        errorMessage = 'Email atau password yang Anda masukkan salah.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Format email tidak valid.';
-      } else {
-        console.error("Firebase login error:", error);
-        errorMessage = 'Terjadi kesalahan saat login. Coba lagi nanti.';
+    }
+
+    if (!loginSuccess && finalError) {
+      let errorMessage = 'Email atau password salah.'; // Default message
+      switch (finalError.code) {
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+          errorMessage = 'Email atau password yang Anda masukkan salah.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Format email tidak valid.';
+          break;
+        case 'auth/visibility-check-was-unavailable':
+          errorMessage = 'Gagal terhubung ke server autentikasi setelah beberapa percobaan. Periksa koneksi internet Anda dan coba lagi. Jika masalah berlanjut, hubungi support.';
+          break;
+        case 'auth/user-profile-not-found':
+          errorMessage = finalError.message; // Use message from custom error
+           if (auth.currentUser) await auth.signOut(); // Ensure sign out if auth succeeded but profile missing
+          break;
+        default:
+          console.error("Firebase login error (unhandled final):", finalError);
+          errorMessage = 'Terjadi kesalahan saat login. Silakan coba lagi nanti.';
+          break;
       }
       toast({
         title: 'Login Gagal',
