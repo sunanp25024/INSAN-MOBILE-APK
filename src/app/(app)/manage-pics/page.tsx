@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Briefcase, FileUp, UserPlus, Edit, Trash2 } from 'lucide-react';
+import { Briefcase, FileUp, UserPlus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,32 +13,37 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile } from '@/types';
+import type { UserProfile, ApprovalRequest } from '@/types';
 import { Switch } from '@/components/ui/switch';
+import { auth, db } from '@/lib/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { collection, addDoc, getDocs, doc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const picSchema = z.object({
-  id: z.string().min(1, "ID PIC tidak boleh kosong").optional(),
+  id: z.string().min(1, "ID PIC tidak boleh kosong").optional(), // App-specific ID
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
   passwordValue: z.string().min(6, "Password minimal 6 karakter").optional().or(z.literal('')),
-  workLocation: z.string().min(3, "Area tanggung jawab minimal 3 karakter"), // Represents 'Area' for PIC
+  workLocation: z.string().min(3, "Area tanggung jawab minimal 3 karakter"),
 });
 
-type PICFormData = z.infer<typeof picSchema>;
+// For edit, password is not directly changed here.
+const editPicSchema = picSchema.omit({ passwordValue: true });
 
-const initialPICData: UserProfile[] = [
-    { id: 'PIC001', fullName: 'PIC Lapangan Satu', email: 'pic001@example.com', role: 'PIC', workLocation: 'Jakarta Pusat', status: 'Aktif', passwordValue: 'pic123' },
-    { id: 'PIC002', fullName: 'PIC Wilayah Dua', email: 'pic002@example.com', role: 'PIC', workLocation: 'Bandung Kota', status: 'Aktif', passwordValue: 'pic123' },
-];
+type PICFormData = z.infer<typeof picSchema>;
+type EditPICFormData = z.infer<typeof editPicSchema>;
 
 export default function ManagePICsPage() {
   const { toast } = useToast();
-  const [pics, setPics] = useState<UserProfile[]>(initialPICData);
+  const [pics, setPics] = useState<UserProfile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAddPICDialogOpen, setIsAddPICDialogOpen] = useState(false);
   const [isEditPICDialogOpen, setIsEditPICDialogOpen] = useState(false);
   const [currentEditingPIC, setCurrentEditingPIC] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [firebaseError, setFirebaseError] = useState<string | null>(null);
 
   useEffect(() => {
     const userDataString = localStorage.getItem('loggedInUser');
@@ -49,72 +54,270 @@ export default function ManagePICsPage() {
     }
   }, []);
 
+  const fetchPICs = async () => {
+    setIsLoading(true);
+    setFirebaseError(null);
+    try {
+      const q = query(collection(db, "users"), where("role", "==", "PIC"));
+      const querySnapshot = await getDocs(q);
+      const picList: UserProfile[] = [];
+      querySnapshot.forEach((doc) => {
+        picList.push({ uid: doc.id, ...doc.data() } as UserProfile);
+      });
+      setPics(picList);
+    } catch (error: any) {
+      console.error("Error fetching PICs: ", error);
+      setFirebaseError("Gagal memuat data PIC. Periksa koneksi atau coba lagi nanti.");
+      toast({ title: "Error Memuat Data", description: error.message, variant: "destructive" });
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchPICs();
+  }, []);
+
   const { register, handleSubmit, reset, formState: { errors }, setValue } = useForm<PICFormData>({
     resolver: zodResolver(picSchema),
   });
+  
+  const { register: registerEdit, handleSubmit: handleSubmitEdit, reset: resetEdit, formState: { errors: errorsEdit }, setValue: setValueEdit } = useForm<EditPICFormData>({
+    resolver: zodResolver(editPicSchema),
+  });
 
-  const handleAddPIC: SubmitHandler<PICFormData> = (data) => {
-    const newPICId = data.id && data.id.trim() !== '' ? data.id : `PIC${String(Date.now()).slice(-6)}`;
-    
-    if (currentUser?.role === 'Admin') {
-      if (pics.find(pic => pic.id === newPICId)) {
-        toast({ title: "Gagal Mengajukan", description: `ID PIC ${newPICId} sudah ada atau sedang diajukan.`, variant: "destructive"});
-        return;
-      }
-      toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan PIC ${data.fullName} (ID: ${newPICId}) telah dikirim ke MasterAdmin untuk persetujuan.` });
-    } else { // MasterAdmin or other direct roles
-      if (pics.find(pic => pic.id === newPICId)) {
-        toast({ title: "Gagal Menambahkan", description: `ID PIC ${newPICId} sudah ada.`, variant: "destructive"});
-        return;
-      }
-      const newPIC: UserProfile = {
-        ...data,
-        id: newPICId,
-        role: 'PIC',
-        status: 'Aktif',
-        passwordValue: data.passwordValue || 'defaultPassword',
-      };
-      setPics(prev => [...prev, newPIC]);
-      toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} (ID: ${newPICId}) berhasil ditambahkan.` });
+  const handleAddPIC: SubmitHandler<PICFormData> = async (data) => {
+    if (!currentUser || !currentUser.uid) {
+      toast({ title: "Error", description: "Pengguna tidak terautentikasi.", variant: "destructive" });
+      return;
     }
-    reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
-    setIsAddPICDialogOpen(false);
+    if (!data.passwordValue && currentUser.role === 'MasterAdmin') {
+        toast({ title: "Password Dibutuhkan", description: "Password awal wajib diisi untuk PIC baru oleh MasterAdmin.", variant: "destructive" });
+        return;
+    }
+    if (!data.passwordValue && currentUser.role === 'Admin') {
+        toast({ title: "Password Dibutuhkan", description: "Password awal wajib diisi untuk pengajuan PIC baru oleh Admin.", variant: "destructive" });
+        return;
+    }
+
+
+    const appPICId = data.id && data.id.trim() !== '' ? data.id.trim() : `PIC${String(Date.now()).slice(-6)}`;
+    const emailForAuth = data.email.trim();
+
+    if (currentUser.role === 'Admin') {
+      // Admin mengajukan permintaan persetujuan
+      if (pics.some(pic => pic.id === appPICId)) {
+        toast({ title: "Gagal Mengajukan", description: `ID Aplikasi PIC ${appPICId} sudah ada atau sedang diajukan.`, variant: "destructive"});
+        return;
+      }
+      if (pics.some(pic => pic.email === emailForAuth)) {
+        toast({ title: "Gagal Mengajukan", description: `Email ${emailForAuth} sudah digunakan atau sedang diajukan.`, variant: "destructive"});
+        return;
+      }
+
+      const approvalPayload: Partial<UserProfile> & { passwordValue?: string } = {
+        id: appPICId,
+        fullName: data.fullName,
+        email: emailForAuth,
+        role: 'PIC',
+        status: 'PendingApproval',
+        workLocation: data.workLocation,
+        passwordValue: data.passwordValue, // Password to be used by MasterAdmin for Auth creation
+        createdAt: new Date().toISOString(),
+        createdBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
+      };
+
+      const approvalRequest: ApprovalRequest = {
+        type: 'NEW_USER_PIC',
+        status: 'pending',
+        requestedByUid: currentUser.uid,
+        requestedByName: currentUser.fullName,
+        requestedByRole: currentUser.role,
+        requestTimestamp: serverTimestamp(),
+        targetEntityType: 'USER_PROFILE_DATA',
+        targetEntityId: appPICId,
+        targetEntityName: data.fullName,
+        payload: approvalPayload,
+        notesFromRequester: "Pengajuan PIC baru.",
+      };
+
+      try {
+        await addDoc(collection(db, "approval_requests"), approvalRequest);
+        toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan PIC ${data.fullName} (ID: ${appPICId}) telah dikirim ke MasterAdmin untuk persetujuan.` });
+        reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
+        setIsAddPICDialogOpen(false);
+      } catch (error: any) {
+        console.error("Error submitting approval request:", error);
+        toast({ title: "Error Pengajuan", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
+      }
+
+    } else if (currentUser.role === 'MasterAdmin') {
+      // MasterAdmin langsung menambahkan PIC
+      if (pics.some(pic => pic.id === appPICId)) {
+        toast({ title: "Gagal Menambahkan", description: `ID Aplikasi PIC ${appPICId} sudah ada.`, variant: "destructive"});
+        return;
+      }
+      // Check if email is already in use in Firebase Auth by querying Firestore first (basic check)
+      const existingEmailUser = pics.find(p => p.email === emailForAuth);
+      if (existingEmailUser) {
+          toast({ title: "Gagal Menambahkan", description: `Email ${emailForAuth} sudah terdaftar.`, variant: "destructive"});
+          return;
+      }
+
+      try {
+        // 1. Create user in Firebase Authentication
+        const userCredential = await createUserWithEmailAndPassword(auth, emailForAuth, data.passwordValue!);
+        const firebaseUser = userCredential.user;
+
+        if (firebaseUser) {
+          // 2. Create user profile in Firestore
+          const newPICProfile: UserProfile = {
+            uid: firebaseUser.uid,
+            id: appPICId,
+            fullName: data.fullName,
+            email: emailForAuth,
+            role: 'PIC',
+            status: 'Aktif',
+            workLocation: data.workLocation,
+            joinDate: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            createdBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
+          };
+
+          await setDoc(doc(db, "users", firebaseUser.uid), newPICProfile);
+          toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} (ID: ${appPICId}) berhasil ditambahkan.` });
+          fetchPICs(); // Refresh list
+          reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
+          setIsAddPICDialogOpen(false);
+        }
+      } catch (error: any)
+      {
+        console.error("Error adding PIC by MasterAdmin: ", error);
+        let errorMessage = "Gagal menambahkan PIC.";
+        if (error.code === 'auth/email-already-in-use') {
+          errorMessage = "Email ini sudah terdaftar di Firebase Authentication. Gunakan email lain.";
+        } else if (error.code === 'auth/weak-password') {
+          errorMessage = "Password terlalu lemah. Gunakan minimal 6 karakter.";
+        }
+        toast({ title: "Error", description: errorMessage, variant: "destructive" });
+      }
+    }
   };
 
   const handleOpenEditDialog = (pic: UserProfile) => {
     setCurrentEditingPIC(pic);
-    setValue('id', pic.id);
-    setValue('fullName', pic.fullName);
-    setValue('email', pic.email || '');
-    setValue('workLocation', pic.workLocation || '');
-    setValue('passwordValue', ''); // Clear password for edit
+    setValueEdit('id', pic.id);
+    setValueEdit('fullName', pic.fullName);
+    setValueEdit('email', pic.email || '');
+    setValueEdit('workLocation', pic.workLocation || '');
+    // Password is not edited here
     setIsEditPICDialogOpen(true);
   };
 
-  const handleEditPIC: SubmitHandler<PICFormData> = (data) => {
-    if (!currentEditingPIC) return;
-
-    if (currentUser?.role === 'Admin') {
-      toast({ title: "Permintaan Diajukan", description: `Permintaan perubahan data PIC ${data.fullName} (ID: ${currentEditingPIC.id}) telah dikirim ke MasterAdmin untuk persetujuan.` });
-    } else { // MasterAdmin or other direct roles
-      setPics(prevPics =>
-        prevPics.map(pic =>
-          pic.id === currentEditingPIC.id
-            ? {
-                ...pic,
-                fullName: data.fullName,
-                email: data.email,
-                workLocation: data.workLocation,
-                passwordValue: data.passwordValue && data.passwordValue.trim() !== '' ? data.passwordValue : pic.passwordValue,
-              }
-            : pic
-        )
-      );
-      toast({ title: "PIC Diperbarui", description: `Data PIC ${data.fullName} berhasil diperbarui.` });
+  const handleEditPIC: SubmitHandler<EditPICFormData> = async (data) => {
+    if (!currentEditingPIC || !currentEditingPIC.uid) return;
+     if (!currentUser || !currentUser.uid) {
+      toast({ title: "Error", description: "Pengguna tidak terautentikasi.", variant: "destructive" });
+      return;
     }
-    reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
+
+    // Check if new email conflicts with other users (excluding the current user)
+    if (data.email && data.email !== currentEditingPIC.email && pics.some(p => p.email === data.email && p.uid !== currentEditingPIC.uid)) {
+        toast({ title: "Gagal Memperbarui", description: `Email ${data.email} sudah digunakan oleh PIC lain.`, variant: "destructive"});
+        return;
+    }
+    
+    const updatePayload: Partial<UserProfile> = {
+        fullName: data.fullName,
+        email: data.email,
+        workLocation: data.workLocation,
+        updatedAt: new Date().toISOString(),
+        updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
+    };
+
+
+    if (currentUser.role === 'Admin') {
+      const approvalRequest: ApprovalRequest = {
+        type: 'UPDATE_USER_PROFILE',
+        status: 'pending',
+        requestedByUid: currentUser.uid,
+        requestedByName: currentUser.fullName,
+        requestedByRole: currentUser.role,
+        requestTimestamp: serverTimestamp(),
+        targetEntityType: 'USER_PROFILE_DATA',
+        targetEntityId: currentEditingPIC.uid, // UID of the PIC being edited
+        targetEntityName: currentEditingPIC.fullName,
+        payload: updatePayload,
+        oldPayload: { // Capture some old fields for audit
+            fullName: currentEditingPIC.fullName,
+            email: currentEditingPIC.email,
+            workLocation: currentEditingPIC.workLocation,
+        },
+        notesFromRequester: `Pengajuan perubahan data untuk PIC ID: ${currentEditingPIC.id}`,
+      };
+      try {
+        await addDoc(collection(db, "approval_requests"), approvalRequest);
+        toast({ title: "Permintaan Perubahan Diajukan", description: `Permintaan perubahan data PIC ${data.fullName} (ID: ${currentEditingPIC.id}) telah dikirim ke MasterAdmin.` });
+      } catch (error: any) {
+        console.error("Error submitting update approval request:", error);
+        toast({ title: "Error Pengajuan Update", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
+      }
+    } else if (currentUser.role === 'MasterAdmin') {
+      try {
+        const picDocRef = doc(db, "users", currentEditingPIC.uid);
+        await updateDoc(picDocRef, updatePayload);
+        toast({ title: "PIC Diperbarui", description: `Data PIC ${data.fullName} berhasil diperbarui.` });
+        fetchPICs();
+      } catch (error: any) {
+        console.error("Error updating PIC by MasterAdmin: ", error);
+        toast({ title: "Error Update", description: `Gagal memperbarui PIC: ${error.message}`, variant: "destructive" });
+      }
+    }
+    resetEdit({id: '', fullName: '', email: '', workLocation: ''});
     setIsEditPICDialogOpen(false);
     setCurrentEditingPIC(null);
+  };
+  
+  const handleDeletePIC = async (picToDelete: UserProfile) => {
+    if (!picToDelete.uid) {
+        toast({ title: "Error", description: "UID PIC tidak ditemukan.", variant: "destructive" });
+        return;
+    }
+    if (!currentUser) return;
+
+    if (currentUser.role === 'Admin') {
+        // Admin mengajukan permintaan penghapusan (atau lebih baik, penonaktifan)
+        const approvalRequest: ApprovalRequest = {
+            type: 'DEACTIVATE_USER', // Or 'DELETE_USER_REQUEST' if hard delete is intended after approval
+            status: 'pending',
+            requestedByUid: currentUser.uid,
+            requestedByName: currentUser.fullName,
+            requestedByRole: currentUser.role,
+            requestTimestamp: serverTimestamp(),
+            targetEntityType: 'USER_PROFILE_DATA',
+            targetEntityId: picToDelete.uid,
+            targetEntityName: picToDelete.fullName,
+            payload: { status: 'Nonaktif' }, // Example payload for deactivation
+            notesFromRequester: `Pengajuan penonaktifan/penghapusan PIC ID: ${picToDelete.id}`,
+        };
+        try {
+            await addDoc(collection(db, "approval_requests"), approvalRequest);
+            toast({title: "Permintaan Diajukan", description: `Permintaan penonaktifan/penghapusan PIC ${picToDelete.fullName} telah dikirim ke MasterAdmin.`});
+        } catch (error: any) {
+            toast({ title: "Error Pengajuan", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
+        }
+    } else if (currentUser.role === 'MasterAdmin') {
+        if (!window.confirm(`Apakah Anda yakin ingin menghapus PIC ${picToDelete.fullName}? Profil Firestore akan dihapus. Akun Firebase Auth perlu dihapus manual via Firebase Console.`)) {
+            return;
+        }
+        try {
+            await deleteDoc(doc(db, "users", picToDelete.uid));
+            toast({ title: "Profil PIC Dihapus", description: `Profil PIC ${picToDelete.fullName} telah dihapus dari Firestore.` });
+            fetchPICs();
+        } catch (error: any) {
+            console.error("Error deleting PIC profile: ", error);
+            toast({ title: "Error Menghapus Profil", description: `Gagal menghapus profil PIC: ${error.message}`, variant: "destructive" });
+        }
+    }
   };
 
 
@@ -122,23 +325,53 @@ export default function ManagePICsPage() {
      toast({ title: "Fitur Dalam Pengembangan", description: "Impor PIC dari Excel belum diimplementasikan." });
   };
   
-  const handleStatusChange = (picId: string, newStatus: boolean) => {
-    if (currentUser?.role === 'Admin') {
-      const pic = pics.find(p => p.id === picId);
-      toast({
-        title: "Permintaan Diajukan",
-        description: `Permintaan perubahan status PIC ${pic?.fullName || picId} menjadi ${newStatus ? 'Aktif' : 'Nonaktif'} telah dikirim ke MasterAdmin.`,
-      });
-    } else { // MasterAdmin or other direct roles
-      setPics(prevPics => 
-        prevPics.map(pic => 
-          pic.id === picId ? { ...pic, status: newStatus ? 'Aktif' : 'Nonaktif' } : pic
-        )
-      );
-      toast({
-        title: "Status PIC Diperbarui",
-        description: `Status PIC ${picId} telah diubah menjadi ${newStatus ? 'Aktif' : 'Nonaktif'}. Akun ${newStatus ? 'dapat' : 'tidak dapat'} digunakan.`,
-      });
+  const handleStatusChange = async (picToUpdate: UserProfile, newStatusActive: boolean) => {
+    if (!picToUpdate.uid) {
+      toast({ title: "Error", description: "UID PIC tidak ditemukan.", variant: "destructive" });
+      return;
+    }
+    if (!currentUser) return;
+
+    const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
+    const payloadForApproval = { status: newStatus };
+
+    if (currentUser.role === 'Admin') {
+        const approvalRequest: ApprovalRequest = {
+            type: newStatusActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
+            status: 'pending',
+            requestedByUid: currentUser.uid,
+            requestedByName: currentUser.fullName,
+            requestedByRole: currentUser.role,
+            requestTimestamp: serverTimestamp(),
+            targetEntityType: 'USER_PROFILE_DATA',
+            targetEntityId: picToUpdate.uid,
+            targetEntityName: picToUpdate.fullName,
+            payload: payloadForApproval,
+            notesFromRequester: `Pengajuan perubahan status PIC ID ${picToUpdate.id} menjadi ${newStatus}.`,
+        };
+         try {
+            await addDoc(collection(db, "approval_requests"), approvalRequest);
+            toast({ title: "Permintaan Perubahan Status Diajukan", description: `Permintaan perubahan status PIC ${picToUpdate.fullName} menjadi ${newStatus} telah dikirim.` });
+        } catch (error: any) {
+            toast({ title: "Error Pengajuan", description: `Gagal mengajukan perubahan status: ${error.message}`, variant: "destructive" });
+        }
+    } else if (currentUser.role === 'MasterAdmin') {
+        try {
+            const picDocRef = doc(db, "users", picToUpdate.uid);
+            await updateDoc(picDocRef, { 
+                status: newStatus,
+                updatedAt: new Date().toISOString(),
+                updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
+            });
+            toast({
+                title: "Status PIC Diperbarui",
+                description: `Status PIC ${picToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
+            });
+            fetchPICs();
+        } catch (error: any) {
+            console.error("Error updating PIC status: ", error);
+            toast({ title: "Error Update Status", description: `Gagal memperbarui status PIC: ${error.message}`, variant: "destructive" });
+        }
     }
   };
 
@@ -150,7 +383,7 @@ export default function ManagePICsPage() {
   );
   
   if (!currentUser) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+    return <div className="flex h-screen items-center justify-center">Loading user data...</div>;
   }
 
   return (
@@ -164,13 +397,13 @@ export default function ManagePICsPage() {
             </CardTitle>
             <CardDescription>
               {currentUser.role === 'Admin' 
-                ? "Kelola akun PIC. Penambahan atau perubahan data memerlukan persetujuan MasterAdmin."
+                ? "Kelola akun PIC. Penambahan, perubahan, atau penghapusan data memerlukan persetujuan MasterAdmin."
                 : "Kelola akun pengguna dengan peran PIC (Person In Charge)."}
             </CardDescription>
           </div>
           <Dialog open={isAddPICDialogOpen} onOpenChange={setIsAddPICDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="mt-2 sm:mt-0 w-full sm:w-auto" onClick={() => reset()}>
+              <Button className="mt-2 sm:mt-0 w-full sm:w-auto" onClick={() => reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''})}>
                 <UserPlus className="mr-2 h-4 w-4" /> Tambah PIC Baru
               </Button>
             </DialogTrigger>
@@ -215,6 +448,13 @@ export default function ManagePICsPage() {
           </Dialog>
         </CardHeader>
         <CardContent>
+           {firebaseError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error Terjadi</AlertTitle>
+              <AlertDescription>{firebaseError}</AlertDescription>
+            </Alert>
+          )}
            <div className="mb-4">
             <Input
               placeholder="Cari PIC (ID, Nama, Email, Area)..."
@@ -223,71 +463,68 @@ export default function ManagePICsPage() {
               className="max-w-sm"
             />
           </div>
-          <Card className="border shadow-sm">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID PIC</TableHead>
-                  <TableHead>Nama Lengkap</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Area Tanggung Jawab</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-center">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPICs.length > 0 ? filteredPICs.map((pic) => (
-                  <TableRow key={pic.id}>
-                    <TableCell className="font-medium">{pic.id}</TableCell>
-                    <TableCell>{pic.fullName}</TableCell>
-                    <TableCell>{pic.email}</TableCell>
-                    <TableCell>{pic.workLocation}</TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={pic.status === 'Aktif'}
-                        onCheckedChange={(newStatus) => handleStatusChange(pic.id, newStatus)}
-                        aria-label={`Status PIC ${pic.fullName}`}
-                        onClick={(e) => {
-                          if (currentUser.role === 'Admin') {
-                            e.preventDefault(); 
-                            handleStatusChange(pic.id, !(pic.status === 'Aktif'));
-                          }
-                        }}
-                      />
-                      <span className={`ml-2 text-xs ${pic.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
-                        {pic.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center space-x-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(pic)}><Edit size={16}/></Button>
-                      <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => {
-                        if (currentUser.role === 'Admin') {
-                            toast({title: "Permintaan Diajukan", description: `Penghapusan PIC ${pic.id} memerlukan persetujuan MasterAdmin.`});
-                        } else {
-                            toast({title: "Fitur Dalam Pengembangan", description: `Hapus ${pic.id} belum diimplementasikan.`});
-                        }
-                      }}><Trash2 size={16}/></Button>
-                    </TableCell>
-                  </TableRow>
-                )) : (
-                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">Tidak ada data PIC yang cocok dengan pencarian.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </Card>
-           <p className="text-xs text-muted-foreground text-center mt-4">
-            Menampilkan {filteredPICs.length} dari {pics.length} PIC.
-          </p>
+          {isLoading ? (<p>Memuat data PIC...</p>) : (
+            <>
+              <Card className="border shadow-sm">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID PIC</TableHead>
+                      <TableHead>Nama Lengkap</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Area Tanggung Jawab</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPICs.length > 0 ? filteredPICs.map((pic) => (
+                      <TableRow key={pic.uid}>
+                        <TableCell className="font-medium">{pic.id}</TableCell>
+                        <TableCell>{pic.fullName}</TableCell>
+                        <TableCell>{pic.email}</TableCell>
+                        <TableCell>{pic.workLocation}</TableCell>
+                        <TableCell>
+                          <Switch
+                            checked={pic.status === 'Aktif'}
+                            onCheckedChange={(newStatusChecked) => handleStatusChange(pic, newStatusChecked)}
+                            aria-label={`Status PIC ${pic.fullName}`}
+                            onClick={(e) => {
+                              if (currentUser.role === 'Admin') {
+                                e.preventDefault(); 
+                                handleStatusChange(pic, !(pic.status === 'Aktif'));
+                              }
+                            }}
+                          />
+                          <span className={`ml-2 text-xs ${pic.status === 'Aktif' ? 'text-green-600' : pic.status === 'PendingApproval' ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {pic.status}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center space-x-1">
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(pic)}><Edit size={16}/></Button>
+                          <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeletePIC(pic)}><Trash2 size={16}/></Button>
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground">Tidak ada data PIC yang cocok dengan pencarian.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </Card>
+              <p className="text-xs text-muted-foreground text-center mt-4">
+                Menampilkan {filteredPICs.length} dari {pics.length} PIC.
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
       
-      {/* Edit PIC Dialog */}
       <Dialog open={isEditPICDialogOpen} onOpenChange={(open) => {
         if (!open) {
           setCurrentEditingPIC(null);
-          reset();
+          resetEdit({id: '', fullName: '', email: '', workLocation: ''});
         }
         setIsEditPICDialogOpen(open);
       }}>
@@ -296,33 +533,29 @@ export default function ManagePICsPage() {
             <DialogTitle>Edit PIC: {currentEditingPIC?.fullName}</DialogTitle>
             <DialogDescription>Perbarui detail PIC. ID tidak dapat diubah.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit(handleEditPIC)} className="space-y-4 py-4">
+          <form onSubmit={handleSubmitEdit(handleEditPIC)} className="space-y-4 py-4">
             <div>
               <Label htmlFor="editPicId">ID PIC</Label>
-              <Input id="editPicId" {...register("id")} readOnly className="bg-muted/50" />
+              <Input id="editPicId" {...registerEdit("id")} readOnly className="bg-muted/50" />
             </div>
             <div>
               <Label htmlFor="editPicFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
-              <Input id="editPicFullName" {...register("fullName")} />
-              {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
+              <Input id="editPicFullName" {...registerEdit("fullName")} />
+              {errorsEdit.fullName && <p className="text-destructive text-sm mt-1">{errorsEdit.fullName.message}</p>}
             </div>
             <div>
               <Label htmlFor="editPicEmail">Email <span className="text-destructive">*</span></Label>
-              <Input id="editPicEmail" type="email" {...register("email")} />
-              {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
+              <Input id="editPicEmail" type="email" {...registerEdit("email")} />
+              {errorsEdit.email && <p className="text-destructive text-sm mt-1">{errorsEdit.email.message}</p>}
+               <p className="text-xs text-muted-foreground mt-1">Mengubah email di sini hanya mempengaruhi profil Firestore. Untuk mengubah email login Firebase Auth, perlu proses terpisah.</p>
             </div>
             <div>
               <Label htmlFor="editPicWorkLocation">Area Tanggung Jawab <span className="text-destructive">*</span></Label>
-              <Input id="editPicWorkLocation" {...register("workLocation")} />
-              {errors.workLocation && <p className="text-destructive text-sm mt-1">{errors.workLocation.message}</p>}
-            </div>
-            <div>
-              <Label htmlFor="editPicPassword">Password Baru (Opsional)</Label>
-              <Input id="editPicPassword" type="password" {...register("passwordValue")} placeholder="Kosongkan jika tidak ingin diubah"/>
-              {errors.passwordValue && errors.passwordValue.message && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
+              <Input id="editPicWorkLocation" {...registerEdit("workLocation")} />
+              {errorsEdit.workLocation && <p className="text-destructive text-sm mt-1">{errorsEdit.workLocation.message}</p>}
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { reset(); setIsEditPICDialogOpen(false); setCurrentEditingPIC(null);}}>Batal</Button>
+              <Button type="button" variant="outline" onClick={() => { resetEdit({id: '', fullName: '', email: '', workLocation: ''}); setIsEditPICDialogOpen(false); setCurrentEditingPIC(null);}}>Batal</Button>
               <Button type="submit">
                  {currentUser.role === 'Admin' ? 'Ajukan Perubahan' : 'Simpan Perubahan'}
               </Button>
@@ -330,7 +563,6 @@ export default function ManagePICsPage() {
           </form>
         </DialogContent>
       </Dialog>
-
 
       <Card>
         <CardHeader>
@@ -358,4 +590,3 @@ export default function ManagePICsPage() {
     </div>
   );
 }
-
