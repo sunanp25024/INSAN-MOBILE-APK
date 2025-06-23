@@ -13,7 +13,7 @@ import { UserPlus, ArrowLeft } from 'lucide-react';
 import type { UserProfile } from '@/types';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -45,20 +45,20 @@ export default function SetupAdminPage() {
 
       if (firebaseUser) {
         // 2. Create user profile in Firestore
-        const newAdminProfile: Omit<UserProfile, 'uid'> = {
+        const newAdminProfile: Omit<UserProfile, 'uid' | 'joinDate' | 'createdAt'> = {
           id: data.appId,
           fullName: data.fullName,
           email: data.email,
           role: 'MasterAdmin',
           status: 'Aktif',
-          joinDate: Timestamp.now().toDate().toISOString(),
-          createdAt: Timestamp.now().toDate().toISOString(),
         };
 
         // Use Firebase Auth UID as document ID in Firestore for consistency
         await setDoc(doc(db, "users", firebaseUser.uid), {
             ...newAdminProfile,
-            uid: firebaseUser.uid // also store uid inside the document
+            uid: firebaseUser.uid, // also store uid inside the document
+            joinDate: serverTimestamp(),
+            createdAt: serverTimestamp(),
         });
 
         toast({
@@ -75,6 +75,8 @@ export default function SetupAdminPage() {
         errorMessage = "Email ini sudah terdaftar. Gunakan email lain atau periksa Firebase Authentication.";
       } else if (error.code === 'auth/weak-password') {
         errorMessage = "Password terlalu lemah. Gunakan minimal 6 karakter.";
+      } else if (error.code === 'permission-denied' || error.code === 'permission_denied') {
+        errorMessage = "Gagal menyimpan profil karena masalah izin. Pastikan Firestore Security Rules sudah diperbarui sesuai instruksi terbaru.";
       }
       toast({
         title: "Setup Gagal",
