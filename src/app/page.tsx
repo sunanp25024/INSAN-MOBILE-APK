@@ -11,8 +11,8 @@ import { AppLogo } from '@/components/icons/AppLogo';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 import type { UserProfile } from '@/types';
-import { auth, db } from '@/lib/firebase'; // Updated import
-import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 
@@ -24,24 +24,12 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        const storedUser = localStorage.getItem('loggedInUser');
-        if (storedUser) {
-          router.replace('/dashboard');
-        }
-      }
-    });
-    return () => unsubscribe();
-  }, [router]);
+  // The main onAuthStateChanged listener in layout.tsx now handles redirection logic.
+  // This page is now only for handling login form submission.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    let loginSuccess = false;
-    let finalError: any = null;
-    const maxRetries = 2; 
 
     if (!emailInput.includes('@')) {
         toast({
@@ -53,62 +41,25 @@ export default function LoginPage() {
         return;
     }
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`Login attempt ${attempt + 1} with email: ${emailInput}`);
-        const userCredential = await signInWithEmailAndPassword(auth, emailInput, password);
-        const firebaseUser = userCredential.user;
-        console.log("Firebase Auth successful, user UID:", firebaseUser.uid);
+    try {
+      console.log(`Attempting login with email: ${emailInput}`);
+      const userCredential = await signInWithEmailAndPassword(auth, emailInput, password);
+      const firebaseUser = userCredential.user;
+      console.log("Firebase Auth successful, user UID:", firebaseUser.uid);
 
-        if (firebaseUser) {
-          const userDocRef = doc(db, "users", firebaseUser.uid);
-          console.log("Fetching Firestore document from:", userDocRef.path);
-          const userDocSnap = await getDoc(userDocRef);
-
-          if (userDocSnap.exists()) {
-            const userProfileData = userDocSnap.data() as UserProfile;
-            console.log("Firestore document found:", userProfileData);
-            toast({
-              title: 'Login Berhasil',
-              description: `Selamat datang kembali, ${userProfileData.fullName}! Peran: ${userProfileData.role}`,
-            });
-            localStorage.setItem('isAuthenticated', 'true');
-            localStorage.setItem('loggedInUser', JSON.stringify({
-              ...userProfileData, // Spread existing data from Firestore
-              uid: firebaseUser.uid, // Ensure Firebase UID is included
-            }));
-            loginSuccess = true;
-            router.replace('/dashboard');
-            break; 
-          } else {
-            console.error("Firestore document NOT found for UID:", firebaseUser.uid);
-            finalError = { code: 'auth/user-profile-not-found', message: 'Profil pengguna tidak ditemukan di database.' };
-            if (auth.currentUser) await auth.signOut();
-            break; 
-          }
-        }
-      } catch (error: any) {
-        finalError = error;
-        console.error(`Login attempt ${attempt + 1} failed:`, error.code, error.message);
-        if (error.code === 'auth/visibility-check-was-unavailable' && attempt < maxRetries) {
-          const delay = (attempt + 1) * 1500; 
-          console.log(`Retrying login in ${delay / 1000}s due to ${error.code}`);
-          toast({
-            title: 'Masalah Koneksi Sementara',
-            description: `Mencoba login lagi (${attempt + 1}/${maxRetries})...`,
-            variant: 'default',
-            duration: delay + 500
-          });
-          await new Promise(resolve => setTimeout(resolve, delay));
-        } else {
-          break; 
-        }
-      }
-    }
-
-    if (!loginSuccess && finalError) {
-      let errorMessage = 'Email atau password salah.'; 
-      switch (finalError.code) {
+      // After successful sign-in, the onAuthStateChanged in layout.tsx will
+      // automatically fetch the user's profile from Firestore, set local storage,
+      // and redirect to the dashboard. We just need to wait for it.
+      
+      toast({
+        title: 'Login Berhasil',
+        description: `Mengalihkan ke dashboard...`,
+      });
+      // No need to manually push, the layout will handle it.
+      
+    } catch (error: any) {
+      let errorMessage = 'Email atau password salah.';
+      switch (error.code) {
         case 'auth/user-not-found':
         case 'auth/wrong-password':
         case 'auth/invalid-credential':
@@ -117,14 +68,11 @@ export default function LoginPage() {
         case 'auth/invalid-email':
           errorMessage = 'Format email tidak valid.';
           break;
-        case 'auth/visibility-check-was-unavailable':
-           errorMessage = 'Gagal terhubung ke server autentikasi setelah beberapa percobaan. Periksa koneksi internet Anda dan coba lagi. Jika masalah berlanjut, hubungi support.';
-          break;
-        case 'auth/user-profile-not-found':
-          errorMessage = finalError.message; 
-          break;
+        case 'auth/too-many-requests':
+            errorMessage = 'Terlalu banyak percobaan login. Coba lagi nanti.';
+            break;
         default:
-          console.error("Firebase login error (unhandled final):", finalError);
+          console.error("Firebase login error:", error);
           errorMessage = 'Terjadi kesalahan saat login. Silakan coba lagi nanti.';
           break;
       }
@@ -133,11 +81,9 @@ export default function LoginPage() {
         description: errorMessage,
         variant: 'destructive',
       });
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('loggedInUser');
-      localStorage.removeItem('courierCheckedInToday');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (

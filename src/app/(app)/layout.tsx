@@ -46,8 +46,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/toaster";
 import type { UserRole, UserProfile } from "@/types";
-import { auth } from '@/lib/firebase'; // Import Firebase auth
+import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from "firebase/firestore";
 
 interface NavItem {
   href: string;
@@ -92,38 +93,55 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [loadingAuth, setLoadingAuth] = React.useState(true);
 
   React.useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoadingAuth(true);
       if (firebaseUser) {
-        // User is signed in.
-        const userDataString = localStorage.getItem('loggedInUser');
-        if (userDataString) {
+        // User is signed in via Auth. Let's ensure we have their profile.
+        let userProfile: UserProfile | null = null;
+        
+        // 1. Try to get profile from local storage first for speed
+        const localData = localStorage.getItem('loggedInUser');
+        if (localData) {
           try {
-            const parsedUser = JSON.parse(userDataString) as UserProfile;
-            // Basic check: if the UID from localStorage matches firebaseUser's UID
-            // For more robust check, you might re-fetch from Firestore or ensure token validity
-            if (parsedUser.uid === firebaseUser.uid) {
-              setCurrentUser(parsedUser);
-              if (parsedUser.role) {
-                setNavItems(allNavItems.filter(item => item.roles.includes(parsedUser.role)));
-              } else {
-                router.replace('/'); // Missing role, critical info
-              }
+            const parsed = JSON.parse(localData) as UserProfile;
+            if (parsed.uid === firebaseUser.uid) {
+              userProfile = parsed; // Use local data if it's fresh and matches
+            }
+          } catch (e) { /* ignore parsing error, will fetch new */ }
+        }
+
+        // 2. If no valid local data, fetch from Firestore
+        if (!userProfile) {
+          try {
+            const userDocRef = doc(db, "users", firebaseUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+              userProfile = { uid: firebaseUser.uid, ...userDocSnap.data() } as UserProfile;
+              localStorage.setItem('loggedInUser', JSON.stringify(userProfile));
+              localStorage.setItem('isAuthenticated', 'true');
             } else {
-              // Mismatch, clear stale data and redirect
-              localStorage.removeItem('isAuthenticated');
-              localStorage.removeItem('loggedInUser');
-              router.replace('/');
+              // Profile doesn't exist in DB. This is a problem state.
+              // Sign them out completely.
+              console.error(`Authentication successful for UID ${firebaseUser.uid}, but no profile found in Firestore. Signing out.`);
+              await signOut(auth);
+              userProfile = null;
             }
           } catch (error) {
-            console.error("Failed to parse user data from localStorage", error);
-            localStorage.removeItem('isAuthenticated');
-            localStorage.removeItem('loggedInUser');
-            router.replace('/');
+            console.error("Error fetching user profile in layout, signing out:", error);
+            await signOut(auth);
+            userProfile = null;
           }
-        } else {
-          // No user data in localStorage despite Firebase auth - might happen on first load or if cleared
-          // Redirect to login to fetch and store profile
-          router.replace('/');
+        }
+        
+        // 3. Final decision based on profile
+        if (userProfile) {
+          setCurrentUser(userProfile);
+          setNavItems(allNavItems.filter(item => item.roles.includes(userProfile!.role)));
+          // If user is authenticated and somehow on a public page, redirect to dashboard
+          const publicPages = ['/', '/setup-admin'];
+          if (publicPages.includes(pathname)) {
+            router.replace('/dashboard');
+          }
         }
       } else {
         // User is signed out.
@@ -132,14 +150,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         localStorage.removeItem('courierCheckedInToday');
         setCurrentUser(null);
         setNavItems([]);
-        if (pathname !== '/') { // Avoid redirect loop if already on login page
-             router.replace('/');
+        const publicPages = ['/', '/setup-admin'];
+        if (!publicPages.includes(pathname)) {
+          router.replace('/');
         }
       }
       setLoadingAuth(false);
     });
 
-    return () => unsubscribe(); // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, [router, pathname]);
 
 
@@ -147,12 +166,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     try {
       await signOut(auth);
       // onAuthStateChanged will handle clearing localStorage and redirecting
+      router.push('/');
     } catch (error) {
       console.error("Error signing out: ", error);
-      // Fallback cleanup if signOut fails or onAuthStateChanged doesn't trigger as expected
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('loggedInUser');
-      localStorage.removeItem('courierCheckedInToday');
+      // Fallback cleanup
+      localStorage.clear();
       router.push('/');
     }
   };
@@ -161,18 +179,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return <div className="flex h-screen items-center justify-center">Memverifikasi sesi...</div>;
   }
   
-  if (!currentUser && pathname !== '/') {
-     // This case should ideally be handled by onAuthStateChanged redirecting to '/'
-     // But as a fallback, if not loading and no user, show loading or redirect.
-     // To prevent flashing content, we might just show a loader until redirect from onAuthStateChanged happens.
+  const publicPages = ['/', '/setup-admin'];
+  if (!currentUser && !publicPages.includes(pathname)) {
+    // This case should be handled by onAuthStateChanged redirecting,
+    // but as a fallback, show a loader until the redirect happens.
     return <div className="flex h-screen items-center justify-center">Mengalihkan ke halaman login...</div>;
   }
   
-  // If currentUser is null, it means we are on the login page, so we don't render the layout.
-  // This check relies on the fact that if user is not authenticated, onAuthStateChanged redirects to '/'.
-  // If the pathname is '/', it means it's the login page, so children (login page) should be rendered directly.
-  if (!currentUser && pathname.startsWith('/dashboard')) { // Or any other protected route prefix
-     return <div className="flex h-screen items-center justify-center">Anda tidak diautentikasi. Mengalihkan...</div>;
+  if (publicPages.includes(pathname)) {
+    return <>{children}</>;
   }
 
 
@@ -196,7 +211,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <SidebarMenuItem key={item.href}>
                 <Link href={item.href}>
                   <SidebarMenuButton
-                    isActive={pathname === item.href || (item.href === "/dashboard" && pathname.startsWith("/dashboard"))}
+                    isActive={pathname.startsWith(item.href)}
                     tooltip={{ children: item.label, side: "right", align: "center" }}
                   >
                     <item.icon />
