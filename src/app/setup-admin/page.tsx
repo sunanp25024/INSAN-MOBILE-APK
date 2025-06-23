@@ -13,7 +13,7 @@ import { UserPlus, ArrowLeft } from 'lucide-react';
 import type { UserProfile } from '@/types';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firestore';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -38,6 +38,7 @@ export default function SetupAdminPage() {
 
   const handleSetup: SubmitHandler<SetupFormData> = async (data) => {
     setIsLoading(true);
+    let success = false;
     try {
       // 1. Create user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
@@ -66,7 +67,7 @@ export default function SetupAdminPage() {
           description: `Akun untuk ${data.fullName} telah dibuat. Silakan login.`,
         });
         
-        router.push('/'); // Redirect to login page on success
+        success = true;
       }
     } catch (error: any) {
       console.error("Error setting up MasterAdmin: ", error);
@@ -85,6 +86,9 @@ export default function SetupAdminPage() {
       });
     } finally {
       setIsLoading(false);
+      if (success) {
+        router.push('/'); // Redirect to login page ONLY on success
+      }
     }
   };
 
