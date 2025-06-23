@@ -14,6 +14,7 @@ import type { UserProfile } from '@/types';
 import { auth, db } from '@/lib/firebase'; // Updated import
 import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const [emailInput, setEmailInput] = useState('');
@@ -195,8 +196,11 @@ export default function LoginPage() {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} PIS. All rights reserved.</p>
+        <CardFooter className="flex flex-col items-center text-center text-sm text-muted-foreground space-y-2 pt-4">
+           <p>
+              Bermasalah saat login? <Link href="/setup-admin" className="underline hover:text-primary">Setup Akun MasterAdmin</Link>
+          </p>
+          <p className="pt-2">&copy; {new Date().getFullYear()} PIS. All rights reserved.</p>
         </CardFooter>
       </Card>
     </div>
