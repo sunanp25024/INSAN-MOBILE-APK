@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { AppLogo } from '@/components/icons/AppLogo';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
-import type { UserProfile } from '@/types';
 import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -23,9 +22,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-
-  // The main onAuthStateChanged listener in layout.tsx now handles redirection logic.
-  // This page is now only for handling login form submission.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,20 +38,15 @@ export default function LoginPage() {
     }
 
     try {
-      console.log(`Attempting login with email: ${emailInput}`);
-      const userCredential = await signInWithEmailAndPassword(auth, emailInput, password);
-      const firebaseUser = userCredential.user;
-      console.log("Firebase Auth successful, user UID:", firebaseUser.uid);
-
-      // After successful sign-in, the onAuthStateChanged in layout.tsx will
-      // automatically fetch the user's profile from Firestore, set local storage,
-      // and redirect to the dashboard. We just need to wait for it.
+      await signInWithEmailAndPassword(auth, emailInput, password);
       
       toast({
         title: 'Login Berhasil',
         description: `Mengalihkan ke dashboard...`,
       });
-      // No need to manually push, the layout will handle it.
+      
+      // Redirect to dashboard explicitly after successful login
+      router.push('/dashboard');
       
     } catch (error: any) {
       let errorMessage = 'Email atau password salah.';

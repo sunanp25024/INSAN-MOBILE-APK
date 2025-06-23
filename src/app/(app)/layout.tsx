@@ -93,10 +93,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [loadingAuth, setLoadingAuth] = React.useState(true);
 
   React.useEffect(() => {
+    console.log("Layout Effect triggered. Pathname:", pathname);
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log("onAuthStateChanged triggered.");
       setLoadingAuth(true);
       if (firebaseUser) {
-        // User is signed in via Auth. Let's ensure we have their profile.
+        console.log("Firebase user found, UID:", firebaseUser.uid);
         let userProfile: UserProfile | null = null;
         
         // 1. Try to get profile from local storage first for speed
@@ -105,29 +107,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           try {
             const parsed = JSON.parse(localData) as UserProfile;
             if (parsed.uid === firebaseUser.uid) {
-              userProfile = parsed; // Use local data if it's fresh and matches
+              console.log("User profile found in localStorage.");
+              userProfile = parsed;
             }
-          } catch (e) { /* ignore parsing error, will fetch new */ }
+          } catch (e) { console.warn("Could not parse user data from localStorage.", e) }
         }
 
         // 2. If no valid local data, fetch from Firestore
         if (!userProfile) {
           try {
+            console.log("No local profile. Fetching from Firestore for UID:", firebaseUser.uid);
             const userDocRef = doc(db, "users", firebaseUser.uid);
             const userDocSnap = await getDoc(userDocRef);
             if (userDocSnap.exists()) {
+              console.log("Firestore document found.");
               userProfile = { uid: firebaseUser.uid, ...userDocSnap.data() } as UserProfile;
+              console.log("User profile constructed:", userProfile);
               localStorage.setItem('loggedInUser', JSON.stringify(userProfile));
               localStorage.setItem('isAuthenticated', 'true');
             } else {
-              // Profile doesn't exist in DB. This is a problem state.
-              // Sign them out completely.
-              console.error(`Authentication successful for UID ${firebaseUser.uid}, but no profile found in Firestore. Signing out.`);
+              console.error("Firestore document NOT found for UID:", firebaseUser.uid);
               await signOut(auth);
               userProfile = null;
             }
           } catch (error) {
-            console.error("Error fetching user profile in layout, signing out:", error);
+            console.error("Error fetching user profile from Firestore:", error);
             await signOut(auth);
             userProfile = null;
           }
@@ -135,16 +139,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         
         // 3. Final decision based on profile
         if (userProfile) {
+          console.log("Setting current user state.");
           setCurrentUser(userProfile);
-          setNavItems(allNavItems.filter(item => item.roles.includes(userProfile!.role)));
-          // If user is authenticated and somehow on a public page, redirect to dashboard
-          const publicPages = ['/', '/setup-admin'];
-          if (publicPages.includes(pathname)) {
-            router.replace('/dashboard');
+          if (userProfile.role) {
+            setNavItems(allNavItems.filter(item => item.roles.includes(userProfile!.role)));
+          } else {
+             console.error("User profile is missing 'role' property. Cannot set nav items.");
           }
+        } else {
+           console.log("No user profile available after checks. Current user will be null.");
+           setCurrentUser(null);
         }
+
       } else {
         // User is signed out.
+        console.log("No Firebase user. Clearing session.");
         localStorage.removeItem('isAuthenticated');
         localStorage.removeItem('loggedInUser');
         localStorage.removeItem('courierCheckedInToday');
@@ -152,20 +161,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setNavItems([]);
         const publicPages = ['/', '/setup-admin'];
         if (!publicPages.includes(pathname)) {
+          console.log("Not on a public page, redirecting to login.");
           router.replace('/');
         }
       }
+      console.log("Authentication check finished.");
       setLoadingAuth(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log("Cleaning up onAuthStateChanged listener.");
+      unsubscribe();
+    };
   }, [router, pathname]);
 
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      // onAuthStateChanged will handle clearing localStorage and redirecting
       router.push('/');
     } catch (error) {
       console.error("Error signing out: ", error);
@@ -181,8 +194,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   
   const publicPages = ['/', '/setup-admin'];
   if (!currentUser && !publicPages.includes(pathname)) {
-    // This case should be handled by onAuthStateChanged redirecting,
-    // but as a fallback, show a loader until the redirect happens.
     return <div className="flex h-screen items-center justify-center">Mengalihkan ke halaman login...</div>;
   }
   
