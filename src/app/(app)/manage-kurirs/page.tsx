@@ -56,7 +56,7 @@ export default function ManageKurirsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [firebaseError, setFirebaseError] = useState<string | null>(null);
 
-  const { register, handleSubmit, reset, control, formState: { errors }, setValue } = useForm<KurirFormData>({
+  const { register, handleSubmit, reset, control, formState: { errors }, setValue, watch } = useForm<KurirFormData>({
     resolver: zodResolver(kurirSchema),
     defaultValues: {
       wilayah: '', area: '', workLocation: '', passwordValue: '', contractStatus: '',
@@ -576,4 +576,6 @@ export default function ManageKurirsPage() {
     </div>
   );
 }
+    
+
     
