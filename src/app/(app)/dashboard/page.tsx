@@ -101,7 +101,7 @@ export default function DashboardPage() {
   const [dailyTaskData, setDailyTaskData] = useState<KurirDailyTaskDoc | null>(null);
   const [managedPackages, setManagedPackages] = useState<PackageItem[]>([]); // Packages in 'process' state before starting delivery
   const [inTransitPackages, setInTransitPackages] = useState<PackageItem[]>([]); // Packages 'in_transit' or 'delivered'
-  const [pendingReturnPackages, setPendingReturnPackages] = useState<PackageItem[]>([]); // Packages 'pending_return'
+  const [pendingReturnPackages, setPendingReturnPackages] = useState<PackageItem[]>([]); // Packages 'pending_return' or 'returned'
 
   const [currentScannedResi, setCurrentScannedResi] = useState('');
   const [isManualCOD, setIsManualCOD] = useState(false);
@@ -252,18 +252,47 @@ export default function DashboardPage() {
       setIsCourierCheckedIn(checkedInDate === today);
     };
     updateCheckInStatus(); 
+    window.addEventListener('storage', updateCheckInStatus);
     window.addEventListener('focus', updateCheckInStatus);
-    // ... (rest of check-in status listeners)
-    return () => { /* remove listeners */ };
+    
+    return () => { 
+        window.removeEventListener('storage', updateCheckInStatus);
+        window.removeEventListener('focus', updateCheckInStatus);
+    };
   }, [currentUser]);
 
   useEffect(() => {
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
   }, []);
 
-  // Effect for Camera Permission and Stream Setup (remains largely the same)
+  // Effect for Camera Permission and Stream Setup
   useEffect(() => {
-    // ... (camera permission logic) ...
+    let stream: MediaStream | null = null;
+    const setupCamera = async () => {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
+            setHasCameraPermission(true);
+        } catch (err) {
+            console.error("Camera permission denied:", err);
+            setHasCameraPermission(false);
+            toast({ title: "Akses Kamera Ditolak", description: "Mohon izinkan akses kamera di pengaturan browser Anda.", variant: "destructive" });
+        }
+    };
+
+    if (isScanning || capturingForPackageId || isScanningForDeliveryUpdate) {
+        setupCamera();
+    }
+  
+    return () => {
+        stream?.getTracks().forEach(track => track.stop());
+        if (scannerControlsRef.current) {
+            scannerControlsRef.current.stop();
+            scannerControlsRef.current = null;
+        }
+    };
   }, [isScanning, capturingForPackageId, isScanningForDeliveryUpdate, toast]);
 
 
@@ -318,15 +347,26 @@ export default function DashboardPage() {
                   setIsScanningForDeliveryUpdate(false);
                 }
               }
-              // ... (error handling) ...
+              if (err && !(err instanceof NotFoundException) && !(err instanceof ChecksumException) && !(err instanceof FormatException)) {
+                console.error('Barcode scan error:', err);
+              }
             }
           );
           scannerControlsRef.current = controls;
-        } catch (error) { /* ... */ }
+        } catch (error) {
+           console.error("Failed to start scanner:", error);
+        }
       };
-      // ... (start scan logic) ...
+      
+      const timeoutId = setTimeout(startScan, 300); // Small delay to ensure video element is ready
+      return () => clearTimeout(timeoutId);
     }
-    return () => { /* stop scanner */ };
+    return () => {
+       if (scannerControlsRef.current) {
+         scannerControlsRef.current.stop();
+         scannerControlsRef.current = null;
+       }
+    };
   }, [isScanning, isScanningForDeliveryUpdate, hasCameraPermission, dailyTaskData, managedPackages, inTransitPackages, dailyTaskDocId, toast]);
 
 
@@ -369,11 +409,24 @@ export default function DashboardPage() {
     setIsScanning(true);
   };
 
-  const capturePhoto = () => { /* ... remains the same ... */ return null;}
+  const capturePhoto = (): string | null => {
+      if (videoRef.current && photoCanvasRef.current) {
+        const video = videoRef.current;
+        const canvas = photoCanvasRef.current;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext('2d');
+        if (context) {
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          return canvas.toDataURL('image/jpeg', 0.8);
+        }
+      }
+      return null;
+  }
 
   const handleManualResiAdd = async () => {
     const resiToAdd = currentScannedResi.trim();
-    if (!resiToAdd) { /* ... */ return; }
+    if (!resiToAdd) { toast({title: "Resi Kosong", variant: "destructive"}); return; }
     if (managedPackages.find(p => p.id === resiToAdd) || inTransitPackages.find(p => p.id === resiToAdd)) {
         toast({ title: "Resi Duplikat", variant: "destructive" }); return;
     }
@@ -417,7 +470,7 @@ export default function DashboardPage() {
 
   const handleStartDelivery = async () => {
     if (!dailyTaskData || managedPackages.length !== dailyTaskData.totalPackages || !dailyTaskDocId) {
-      toast({ title: "Paket Belum Lengkap", variant: "destructive" });
+      toast({ title: "Paket Belum Lengkap", description: `Data paket yang di-scan (${managedPackages.length}) tidak sesuai dengan total input (${dailyTaskData?.totalPackages}).`, variant: "destructive" });
       return;
     }
     try {
@@ -445,11 +498,13 @@ export default function DashboardPage() {
     }
   };
 
-  const handleOpenPackageCamera = (packageId: string) => { /* ... remains the same ... */ };
+  const handleOpenPackageCamera = (packageId: string) => {
+    setCapturingForPackageId(packageId);
+  };
 
   const handleCapturePackagePhoto = async () => {
     if (!capturingForPackageId || !dailyTaskDocId) return;
-    if (!photoRecipientName.trim()) { /* ... */ return; }
+    if (!photoRecipientName.trim()) { toast({ title: "Nama Penerima Kosong", variant: "destructive"}); return; }
 
     const photoDataUrl = capturePhoto(); // This is a dataURL
     // In a real app, upload photoDataUrl to Firebase Storage, get downloadURL
@@ -512,21 +567,23 @@ export default function DashboardPage() {
     let finalReturnProofUrl = returnProofPhotoDataUrl; // Use already uploaded/captured one if any
 
     if (remainingInTransit.length > 0) {
+        const updatedPendingReturnPackages = remainingInTransit.map(p => ({ ...p, status: 'pending_return' as const, lastUpdateTime: new Date().toISOString() }));
+        setPendingReturnPackages(prev => [...prev, ...updatedPendingReturnPackages]);
+        setInTransitPackages(prev => prev.filter(p => p.status !== 'in_transit'));
+
       if (!returnProofPhoto && !finalReturnProofUrl) { // No file selected AND no existing URL
-        toast({ title: "Upload Bukti Paket Pending", variant: "destructive" });
-        // Update local state for UI consistency, but Firestore update happens on confirm
-        setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', lastUpdateTime: new Date().toISOString() })));
+        toast({ title: "Upload Bukti Paket Pending", description: "Untuk menyelesaikan, upload foto bukti serah terima semua paket pending.", variant: "destructive" });
         return;
       }
       if (!returnLeadReceiverName.trim()) {
-        toast({ title: "Nama Leader Serah Terima Kosong", variant: "destructive" });
-        setPendingReturnPackages(remainingInTransit.map(p => ({ ...p, status: 'pending_return', lastUpdateTime: new Date().toISOString() })));
+        toast({ title: "Nama Leader Serah Terima Kosong", description: "Isi nama leader/supervisor yang menerima paket retur.", variant: "destructive" });
         return;
       }
       // If a new photo file is selected, use it. Otherwise, keep existing (if any)
       if (returnProofPhoto) {
         // SIMULATE UPLOAD: In real app, upload returnProofPhoto to Storage, get URL
-        finalReturnProofUrl = URL.createObjectURL(returnProofPhoto); // For preview, replace with actual storage URL
+        // For now, we are just using the Data URL from preview
+        finalReturnProofUrl = returnProofPhotoDataUrl;
       }
     }
 
@@ -551,29 +608,31 @@ export default function DashboardPage() {
         const updatedPendingReturn: PackageItem[] = [];
         remainingInTransit.forEach(pkg => {
             const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", pkg.id);
-            // Status becomes 'pending_return' or 'returned' based on whether proof is now available
-            const finalPackageStatus = finalReturnProofUrl ? 'returned' : 'pending_return';
+            // Status becomes 'returned' because proof is now mandatory to finish day.
+            const finalPackageStatus = 'returned';
             batch.update(packageDocRef, { 
                 status: finalPackageStatus, 
                 lastUpdateTime: serverTimestamp(),
-                // Add return specific fields if needed per package, e.g. if individual proof was possible
+                returnProofPhotoUrl: finalReturnProofUrl || null,
+                returnLeadReceiverName: returnLeadReceiverName.trim() || null,
             });
-            updatedPendingReturn.push({ ...pkg, status: finalPackageStatus as PackageItem['status'], returnProofPhotoUrl: finalReturnProofUrl || undefined, returnLeadReceiverName: returnLeadReceiverName.trim() || undefined });
+            updatedPendingReturn.push({ ...pkg, status: finalPackageStatus, returnProofPhotoUrl: finalReturnProofUrl || undefined, returnLeadReceiverName: returnLeadReceiverName.trim() || undefined });
         });
         
         await batch.commit();
 
-        setPendingReturnPackages(updatedPendingReturn);
+        setPendingReturnPackages(prev => [...prev.filter(p => p.status === 'returned'), ...updatedPendingReturn]);
         setInTransitPackages(prev => prev.filter(p => p.status === 'delivered')); // Keep only delivered ones locally for summary
         setDayFinished(true);
-        setDailyTaskData(prev => prev ? {
-            ...prev, 
-            taskStatus: 'completed',
+        const finalTaskData = {
+            ...dailyTaskData, 
+            taskStatus: 'completed' as const,
             finalDeliveredCount: deliveredCount,
             finalPendingReturnCount: pendingForReturnCount,
             finalReturnProofPhotoUrl: finalReturnProofUrl || undefined,
             finalReturnLeadReceiverName: returnLeadReceiverName.trim() || undefined,
-        } : null);
+        };
+        setDailyTaskData(finalTaskData);
 
         toast({ title: "Pengantaran Selesai", description: `Terima kasih! Paket retur diserahkan kepada ${returnLeadReceiverName.trim() || 'N/A'}.` });
     } catch (error) {
@@ -592,11 +651,6 @@ export default function DashboardPage() {
   };
 
   const resetDay = async () => {
-    // For a new day, we expect a new dailyTaskDoc to be created or an existing one for the *new* today to be fetched.
-    // We don't necessarily "reset" the old document, but rather start fresh for the new date.
-    // The useEffect that fetches daily data will handle getting the correct doc for the new `todayDateString`.
-    
-    // Clear local state related to the *previous* day's task
     setDailyTaskDocId(null);
     setDailyTaskData(null);
     resetPackageInputForm({ totalPackages: 0, codPackages: 0, nonCodPackages: 0 });
@@ -616,10 +670,9 @@ export default function DashboardPage() {
         localStorage.removeItem('courierCheckedInToday'); 
     }
     toast({ title: "Hari Baru Dimulai", description: "Semua data lokal telah direset. Selamat bekerja!" });
-    // Trigger re-fetch for new day's data (will happen due to state changes and useEffect dependencies)
   };
 
-  const handleOpenDeliveryScan = () => { /* ... */ };
+  const handleOpenDeliveryScan = () => { setIsScanningForDeliveryUpdate(true) };
 
   const deliveredCountForChart = dailyTaskData?.finalDeliveredCount ?? inTransitPackages.filter(p => p.status === 'delivered').length;
   const pendingCountForChart = dailyTaskData?.finalPendingReturnCount ?? pendingReturnPackages.filter(p => p.status === 'pending_return' || p.status === 'returned').length;
@@ -630,16 +683,22 @@ export default function DashboardPage() {
     { name: 'Pending/Retur', value: pendingCountForChart, color: 'hsl(var(--chart-2))' },
   ];
 
-  const formatActivityTimestamp = (timestamp: string): string => { /* ... */ return "Invalid date" };
-  const getAttendanceActionIcon = (action: AttendanceActivity['action']) => { /* ... */ };
-  const getCourierWorkSummaryIcon = () => { /* ... */ };
-  const triggerFilterSimulation = () => { /* ... */ };
-  const handleWilayahChange = (wilayahId: string) => { /* ... */ };
-  const handleAreaChange = (areaId: string) => { /* ... */ };
-  const handleHubChange = (hubId: string) => { /* ... */ };
-  const handleSearchKurirChange = (event: React.ChangeEvent<HTMLInputElement>) => { /* ... */ };
-  const handleDashboardFilterApply = () => { /* ... */ };
-  const handleDownloadDashboardSummary = () => { /* ... */ };
+  const formatActivityTimestamp = (timestamp: string): string => { 
+      try {
+        return formatDistanceToNow(parseISO(timestamp), { addSuffix: true, locale: indonesiaLocale });
+      } catch (error) {
+          return "Invalid date";
+      }
+  };
+  const getAttendanceActionIcon = (action: AttendanceActivity['action']) => { return <UserCheckIcon /> };
+  const getCourierWorkSummaryIcon = () => { return <Truck /> };
+  const triggerFilterSimulation = () => { };
+  const handleWilayahChange = (wilayahId: string) => { };
+  const handleAreaChange = (areaId: string) => { };
+  const handleHubChange = (hubId: string) => { };
+  const handleSearchKurirChange = (event: React.ChangeEvent<HTMLInputElement>) => { };
+  const handleDashboardFilterApply = () => { };
+  const handleDownloadDashboardSummary = () => { };
 
 
   if (!currentUser) {
@@ -783,13 +842,13 @@ export default function DashboardPage() {
         )}
 
         {/* Pending/Return Packages Section (if delivery started, some packages pending, not finished, and checked in) */}
-        {dailyTaskData && dailyTaskData.taskStatus === 'in_progress' && deliveryStarted && pendingReturnPackages.filter(p => p.status === 'pending_return').length > 0 && !dayFinished && isCourierCheckedIn && (
+        {dailyTaskData && dailyTaskData.taskStatus === 'in_progress' && deliveryStarted && inTransitPackages.filter(p => p.status === 'in_transit').length > 0 && !dayFinished && isCourierCheckedIn && (
            <Card>
-            <CardHeader><CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle><CardDescription>{pendingReturnPackages.filter(p => p.status === 'pending_return').length} paket belum terkirim dan perlu di-retur.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle><CardDescription>{inTransitPackages.filter(p => p.status === 'in_transit').length} paket belum terkirim dan perlu di-retur.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               <div><Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label><Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />{returnProofPhotoDataUrl && <Image src={returnProofPhotoDataUrl} alt="Preview Bukti Retur" width={100} height={100} className="mt-2 rounded border" data-ai-hint="receipt package"/>}{returnProofPhoto && <p className="text-xs text-green-500 dark:text-green-400 mt-1">{returnProofPhoto.name} dipilih.</p>}</div>
               <div><Label htmlFor="returnLeadReceiverName">Nama Leader Serah Terima <span className="text-destructive">*</span></Label><Input id="returnLeadReceiverName" type="text" placeholder="Nama Leader/Supervisor" value={returnLeadReceiverName} onChange={(e) => setReturnLeadReceiverName(e.target.value)}/></div>
-              <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1"><h4 className="text-sm font-medium text-muted-foreground">Daftar Resi Pending:</h4>{pendingReturnPackages.filter(p => p.status === 'pending_return').map(pkg => (<p key={pkg.id} className="text-sm text-muted-foreground break-all">{pkg.id} - <span className="italic">Pending Retur</span></p>))}</div>
+              <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1"><h4 className="text-sm font-medium text-muted-foreground">Daftar Resi Pending:</h4>{inTransitPackages.filter(p => p.status === 'in_transit').map(pkg => (<p key={pkg.id} className="text-sm text-muted-foreground break-all">{pkg.id} - <span className="italic">Pending Retur</span></p>))}</div>
             </CardContent>
             <CardFooter><Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={(!returnProofPhoto && !returnProofPhotoDataUrl) || !returnLeadReceiverName.trim()}>Konfirmasi Selesai dengan Paket Pending</Button></CardFooter>
           </Card>
@@ -851,3 +910,4 @@ export default function DashboardPage() {
   );
 }
 
+    
