@@ -95,27 +95,28 @@ export async function importUsers(
   for (const [index, userData] of usersData.entries()) {
     const rowNum = index + 2; // Excel rows are 1-based, plus header
 
-    // --- Basic validation ---
-    if (!userData.fullName || !userData.passwordValue) {
-      failedCount++;
-      errors.push(`Baris ${rowNum}: Nama Lengkap dan Password Wajib diisi.`);
-      continue;
-    }
-    
     let emailForAuth: string;
     let appUserId: string;
-
-    // --- Role-specific logic & validation ---
     let profileToCreate: Omit<UserProfile, 'uid'>;
 
     try {
       switch (role) {
         case 'Admin':
-          if (!userData.email) {
+          const requiredAdminFields = {
+            fullName: 'Nama Lengkap',
+            email: 'Email',
+            passwordValue: 'Password'
+          };
+          const missingAdminFields = Object.entries(requiredAdminFields)
+            .filter(([key]) => !userData[key])
+            .map(([, value]) => value);
+
+          if (missingAdminFields.length > 0) {
             failedCount++;
-            errors.push(`Baris ${rowNum}: Email wajib diisi untuk Admin.`);
+            errors.push(`Baris ${rowNum}: Kolom berikut wajib diisi: ${missingAdminFields.join(', ')}.`);
             continue;
           }
+
           emailForAuth = userData.email.trim();
           appUserId = userData.id?.toString().trim() || `ADMIN${String(Date.now()).slice(-6) + index}`;
           profileToCreate = {
@@ -130,11 +131,22 @@ export async function importUsers(
           break;
 
         case 'PIC':
-           if (!userData.email || !userData.workLocation) {
+          const requiredPicFields = {
+            fullName: 'Nama Lengkap',
+            email: 'Email',
+            passwordValue: 'Password',
+            workLocation: 'Area Tanggung Jawab'
+          };
+           const missingPicFields = Object.entries(requiredPicFields)
+            .filter(([key]) => !userData[key])
+            .map(([, value]) => value);
+
+          if (missingPicFields.length > 0) {
             failedCount++;
-            errors.push(`Baris ${rowNum}: Email dan Area Tanggung Jawab wajib diisi untuk PIC.`);
+            errors.push(`Baris ${rowNum}: Kolom berikut wajib diisi: ${missingPicFields.join(', ')}.`);
             continue;
           }
+
           emailForAuth = userData.email.trim();
           appUserId = userData.id?.toString().trim() || `PIC${String(Date.now()).slice(-6) + index}`;
           profileToCreate = {
@@ -150,18 +162,33 @@ export async function importUsers(
           break;
 
         case 'Kurir':
-          if (!userData.nik || !userData.jabatan || !userData.wilayah || !userData.area || !userData.workLocation || !userData.joinDate || !userData.contractStatus) {
+          const requiredKurirFields = {
+            fullName: 'Nama Lengkap',
+            nik: 'NIK',
+            passwordValue: 'Password',
+            jabatan: 'Jabatan',
+            wilayah: 'Wilayah',
+            area: 'Area',
+            workLocation: 'Lokasi Kerja (Hub)',
+            joinDate: 'Tanggal Join',
+            contractStatus: 'Status Kontrak',
+          };
+          
+          const missingKurirFields = Object.entries(requiredKurirFields)
+            .filter(([key]) => !userData[key])
+            .map(([, value]) => value);
+
+          if (missingKurirFields.length > 0) {
             failedCount++;
-            errors.push(`Baris ${rowNum}: Semua kolom wajib diisi untuk Kurir (kecuali email dan bank).`);
+            errors.push(`Baris ${rowNum}: Kolom berikut wajib diisi: ${missingKurirFields.join(', ')}.`);
             continue;
           }
+
           appUserId = userData.id?.toString().trim() || `K${String(Date.now()).slice(-7) + index}`;
           emailForAuth = userData.email?.trim() || `${appUserId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`;
           
-          // Handle Excel date which can be a number
           let joinDate: Date;
           if (typeof userData.joinDate === 'number') {
-            // Excel stores dates as serial numbers.
              joinDate = new Date(Math.round((userData.joinDate - 25569) * 86400 * 1000));
           } else {
              joinDate = new Date(userData.joinDate);
@@ -206,7 +233,7 @@ export async function importUsers(
       }
     } catch (e: any) {
         failedCount++;
-        errors.push(`Baris ${rowNum} (${userData.fullName}): Terjadi error tak terduga - ${e.message}`);
+        errors.push(`Baris ${rowNum} (${userData.fullName || 'N/A'}): Terjadi error tak terduga - ${e.message}`);
     }
   }
 
