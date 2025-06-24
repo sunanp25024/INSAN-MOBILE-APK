@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, FileUp, UserPlus, Edit, Trash2, CalendarIcon as LucideCalendarIcon, AlertCircle } from 'lucide-react';
+import { Users, FileUp, UserPlus, Edit, Trash2, CalendarIcon as LucideCalendarIcon, AlertCircle, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,7 @@ import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/fire
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createUserAccount, deleteUserAccount } from '@/lib/firebaseAdminActions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import * as XLSX from 'xlsx';
 
 const kurirSchema = z.object({
   uid: z.string().optional(),
@@ -253,7 +254,21 @@ export default function ManageKurirsPage() {
   };
 
   const handleImportKurirs = () => {
-    toast({ title: "Fitur Dalam Pengembangan", description: "Impor Kurir dari Excel belum diimplementasikan." });
+    toast({ title: "Fitur Dalam Pengembangan", description: "Logika pemrosesan file impor belum diimplementasikan, namun file dapat dipilih." });
+  };
+  
+  const handleDownloadTemplate = () => {
+    const headers = [[
+      'fullName', 'nik', 'passwordValue', 'email (optional)', 'jabatan', 
+      'wilayah', 'area', 'workLocation', 'joinDate (YYYY-MM-DD)', 
+      'contractStatus', 'id (optional)', 'bankName (optional)', 
+      'bankAccountNumber (optional)', 'bankRecipientName (optional)'
+    ]];
+    const ws = XLSX.utils.aoa_to_sheet(headers);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'Kurir_Template.xlsx');
+    toast({ title: "Template Diunduh", description: "Template Kurir_Template.xlsx telah berhasil diunduh." });
   };
   
   const handleStatusChange = async (kurirToUpdate: UserProfile, newStatusActive: boolean) => {
@@ -610,9 +625,14 @@ export default function ManageKurirsPage() {
           <p className="text-xs text-muted-foreground">
             Format kolom yang diharapkan: ID Kurir (opsional), Nama Lengkap, NIK, Password Awal, Jabatan, Wilayah, Area, Lokasi Kerja (Hub), Tanggal Join (YYYY-MM-DD), Status Kontrak (Permanent/Contract/Probation), Email (opsional), Nama Bank (opsional), No Rekening (opsional), Nama Pemilik Rekening (opsional).
           </p>
-          <Button onClick={handleImportKurirs} className="w-full sm:w-auto">
-            <FileUp className="mr-2 h-4 w-4" /> Impor Data Kurir
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={handleImportKurirs} className="w-full sm:w-auto">
+              <FileUp className="mr-2 h-4 w-4" /> Impor Data Kurir
+            </Button>
+            <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto">
+              <Download className="mr-2 h-4 w-4" /> Unduh Template
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

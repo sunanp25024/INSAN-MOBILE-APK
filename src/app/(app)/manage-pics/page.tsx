@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Briefcase, FileUp, UserPlus, Edit, Trash2, AlertCircle } from 'lucide-react';
+import { Briefcase, FileUp, UserPlus, Edit, Trash2, AlertCircle, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +20,7 @@ import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimest
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createUserAccount, deleteUserAccount } from '@/lib/firebaseAdminActions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import * as XLSX from 'xlsx';
 
 const picSchema = z.object({
   id: z.string().min(1, "ID PIC tidak boleh kosong").optional(),
@@ -266,7 +267,16 @@ export default function ManagePICsPage() {
   };
 
   const handleImportPICs = () => {
-     toast({ title: "Fitur Dalam Pengembangan", description: "Impor PIC dari Excel belum diimplementasikan." });
+     toast({ title: "Fitur Dalam Pengembangan", description: "Logika pemrosesan file impor belum diimplementasikan, namun file dapat dipilih." });
+  };
+  
+  const handleDownloadTemplate = () => {
+    const headers = [['fullName', 'email', 'passwordValue', 'workLocation', 'id (optional)']];
+    const ws = XLSX.utils.aoa_to_sheet(headers);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'PIC_Template.xlsx');
+    toast({ title: "Template Diunduh", description: "Template PIC_Template.xlsx telah berhasil diunduh." });
   };
   
   const handleStatusChange = async (picToUpdate: UserProfile, newStatusActive: boolean) => {
@@ -537,9 +547,14 @@ export default function ManagePICsPage() {
           <p className="text-xs text-muted-foreground">
             Format kolom yang diharapkan: ID PIC (opsional), Nama Lengkap, Email, Password Awal, Area Tanggung Jawab.
           </p>
-          <Button onClick={handleImportPICs} className="w-full sm:w-auto">
-            <FileUp className="mr-2 h-4 w-4" /> Impor Data PIC
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={handleImportPICs} className="w-full sm:w-auto">
+              <FileUp className="mr-2 h-4 w-4" /> Impor Data PIC
+            </Button>
+            <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto">
+                <Download className="mr-2 h-4 w-4"/> Unduh Template
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

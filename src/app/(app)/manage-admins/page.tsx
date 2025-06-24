@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, FileUp, UserPlus, Edit, Trash2, AlertCircle } from 'lucide-react';
+import { Users, FileUp, UserPlus, Edit, Trash2, AlertCircle, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,9 +16,11 @@ import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/types';
 import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createUserAccount, deleteUserAccount } from '@/lib/firebaseAdminActions';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import * as XLSX from 'xlsx';
 
 const adminSchema = z.object({
   id: z.string().min(1, "ID Aplikasi Admin tidak boleh kosong (cth: ADMIN00X)").optional(), 
@@ -207,8 +209,18 @@ export default function ManageAdminsPage() {
 };
 
   const handleImportAdmins = () => {
-    toast({ title: "Fitur Dalam Pengembangan", description: "Impor Admin dari Excel belum diimplementasikan." });
+    toast({ title: "Fitur Dalam Pengembangan", description: "Logika pemrosesan file impor belum diimplementasikan, namun file dapat dipilih." });
   };
+
+  const handleDownloadTemplate = () => {
+    const headers = [['fullName', 'email', 'passwordValue', 'id (optional)']];
+    const ws = XLSX.utils.aoa_to_sheet(headers);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'Admin_Template.xlsx');
+    toast({ title: "Template Diunduh", description: "Template Admin_Template.xlsx telah berhasil diunduh." });
+  };
+
 
   const handleStatusChange = async (adminToUpdate: UserProfile, newStatusActive: boolean) => {
     if (!adminToUpdate.uid) {
@@ -342,7 +354,28 @@ export default function ManageAdminsPage() {
                       </TableCell>
                       <TableCell className="text-center space-x-1">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(admin)}><Edit size={16}/></Button>
-                        <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteAdmin(admin)} disabled={isSubmitting}><Trash2 size={16}/></Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0}>
+                                <Button 
+                                  variant="destructive" 
+                                  size="icon" 
+                                  className="h-8 w-8" 
+                                  onClick={() => handleDeleteAdmin(admin)} 
+                                  disabled={isSubmitting || currentUser?.role !== 'MasterAdmin'}
+                                >
+                                  <Trash2 size={16}/>
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            {currentUser?.role !== 'MasterAdmin' && (
+                              <TooltipContent>
+                                <p>Hanya MasterAdmin yang dapat menghapus.</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   )) : (
@@ -413,9 +446,14 @@ export default function ManageAdminsPage() {
           <p className="text-xs text-muted-foreground">
             Format kolom yang diharapkan: ID Aplikasi Admin (opsional), Nama Lengkap, Email (untuk login), Password Awal.
           </p>
-          <Button onClick={handleImportAdmins} className="w-full sm:w-auto">
-            <FileUp className="mr-2 h-4 w-4" /> Impor Data Admin
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={handleImportAdmins} className="w-full sm:w-auto">
+              <FileUp className="mr-2 h-4 w-4" /> Impor Data Admin
+            </Button>
+            <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto">
+              <Download className="mr-2 h-4 w-4" /> Unduh Template
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
