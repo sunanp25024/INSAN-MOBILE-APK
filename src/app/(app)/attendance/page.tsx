@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
@@ -12,26 +12,13 @@ import { useToast } from '@/hooks/use-toast';
 import type { AttendanceRecord, UserProfile } from '@/types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate as getDayOfMonthDateFns } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate as getDayOfMonthDateFns, subDays } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import type { Locale } from "date-fns";
+import { db } from '@/lib/firebase';
+import { doc, setDoc, updateDoc, getDoc, collection, query, where, getDocs, Timestamp, orderBy, limit } from 'firebase/firestore';
+import { Skeleton } from '@/components/ui/skeleton';
 
-const mockPastAttendance: AttendanceRecord[] = [
-  { date: new Date(Date.now() - 86400000 * 3).toISOString(), checkInTime: '08:05', checkOutTime: '17:02', status: 'Present' },
-  { date: new Date(Date.now() - 86400000 * 2).toISOString(), status: 'Absent' },
-  { date: new Date(Date.now() - 86400000 * 1).toISOString(), checkInTime: '07:58', checkOutTime: '17:10', status: 'Present' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(), checkInTime: '08:00', checkOutTime: '17:00', status: 'Present' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 2).toISOString(), checkInTime: '08:00', checkOutTime: '17:00', status: 'Present' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 3).toISOString(), status: 'Absent' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 4).toISOString(), checkInTime: '07:50', checkOutTime: '17:00', status: 'Present' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 5).toISOString(), status: 'Absent' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 10).toISOString(), checkInTime: '08:30', checkOutTime: '17:30', status: 'Late' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 12).toISOString(), checkInTime: '08:00', checkOutTime: '17:00', status: 'Present' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 15).toISOString(), checkInTime: '07:58', checkOutTime: '17:00', status: 'Present' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 17).toISOString(), checkInTime: '07:55', checkOutTime: '16:55', status: 'Present' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 20).toISOString(), status: 'Absent' },
-  { date: new Date(new Date().getFullYear(), new Date().getMonth(), 22).toISOString(), checkInTime: '08:10', checkOutTime: '17:15', status: 'Late' },
-];
 
 const generateMonthlyAttendanceData = (
   startDate: Date,
@@ -47,7 +34,7 @@ const generateMonthlyAttendanceData = (
   const chartData = daysInInterval.map(day => {
     const dayOfMonthStr = format(day, 'd', { locale }); 
     const isoDateString = format(day, 'yyyy-MM-dd');
-    const record = history.find(rec => rec.date.startsWith(isoDateString));
+    const record = history.find(rec => rec.date === isoDateString);
     const isPresent = record && (record.status === 'Present' || record.status === 'Late');
     if (isPresent) {
       presentCount++;
@@ -65,11 +52,13 @@ export default function AttendancePage() {
   const [currentUser, setCurrentUser] = React.useState<UserProfile | null>(null);
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>(mockPastAttendance);
+  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>([]);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
-  const todayISO = new Date().toISOString().split('T')[0];
+  const todayISO = format(new Date(), 'yyyy-MM-dd');
 
   useEffect(() => {
     const userDataString = localStorage.getItem('loggedInUser');
@@ -77,48 +66,100 @@ export default function AttendancePage() {
       try {
         setCurrentUser(JSON.parse(userDataString) as UserProfile);
       } catch (error) { console.error("Error parsing user data for attendance page", error); }
+    } else {
+        setIsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (currentUser?.role !== 'Kurir') return;
+  const fetchAttendanceData = useCallback(async (user: UserProfile) => {
+    setIsLoading(true);
+    try {
+        // Fetch today's record specifically
+        const todayDocId = `${user.uid}_${todayISO}`;
+        const todayDocRef = doc(db, "attendance", todayDocId);
+        const todayDocSnap = await getDoc(todayDocRef);
+        if (todayDocSnap.exists()) {
+            setTodayRecord(todayDocSnap.data() as AttendanceRecord);
+        } else {
+            setTodayRecord({ 
+                id: todayDocId,
+                kurirUid: user.uid,
+                kurirId: user.id,
+                kurirName: user.fullName,
+                date: todayISO, 
+                status: 'Not Checked In' 
+            });
+        }
+        localStorage.setItem('courierCheckedInToday', todayDocSnap.exists() ? todayISO : 'false');
 
-    const existingRecord = attendanceHistory.find(rec => rec.date.startsWith(todayISO));
-    if (existingRecord) {
-      setTodayRecord(existingRecord);
-    } else {
-      setTodayRecord({ date: new Date().toISOString(), status: 'Absent' }); 
+
+        // Fetch historical records for the last 60 days
+        const sixtyDaysAgo = format(subDays(new Date(), 60), 'yyyy-MM-dd');
+        const historyQuery = query(
+            collection(db, "attendance"),
+            where("kurirUid", "==", user.uid),
+            where("date", ">=", sixtyDaysAgo),
+            orderBy("date", "desc")
+        );
+        const querySnapshot = await getDocs(historyQuery);
+        const fetchedHistory: AttendanceRecord[] = [];
+        querySnapshot.forEach((doc) => {
+            fetchedHistory.push(doc.data() as AttendanceRecord);
+        });
+        setAttendanceHistory(fetchedHistory);
+
+    } catch(error) {
+        console.error("Error fetching attendance data:", error);
+        toast({ title: "Error", description: "Gagal memuat data absensi.", variant: "destructive"});
+    } finally {
+        setIsLoading(false);
     }
-  }, [attendanceHistory, todayISO, currentUser]);
+  }, [toast, todayISO]);
+  
+  useEffect(() => {
+    if (currentUser) {
+      fetchAttendanceData(currentUser);
+    }
+  }, [currentUser, fetchAttendanceData]);
 
-  const handleCheckIn = () => {
-    if (todayRecord?.checkInTime) {
+
+  const handleCheckIn = async () => {
+    if (!currentUser || todayRecord?.checkInTime) {
       toast({ title: "Sudah Check-In", description: "Anda sudah melakukan check-in hari ini.", variant: "default" });
       return;
     }
+    setIsSubmitting(true);
     const now = new Date();
+    const docId = `${currentUser.uid}_${todayISO}`;
+    const recordRef = doc(db, "attendance", docId);
+    
     const newRecord: AttendanceRecord = {
-      ...(todayRecord || { date: now.toISOString(), status: 'Absent' }), // Ensure todayRecord is not null
-      date: now.toISOString(),
-      checkInTime: now.toTimeString().slice(0, 5),
-      status: now.getHours() < 9 ? 'Present' : 'Late', 
+      id: docId,
+      kurirUid: currentUser.uid,
+      kurirId: currentUser.id,
+      kurirName: currentUser.fullName,
+      date: todayISO,
+      checkInTime: format(now, 'HH:mm'),
+      status: now.getHours() < 9 ? 'Present' : 'Late',
+      timestamp: Timestamp.fromDate(now),
     };
-    setTodayRecord(newRecord);
-    setAttendanceHistory(prev => {
-      const existingIndex = prev.findIndex(rec => rec.date.startsWith(todayISO));
-      if (existingIndex > -1) {
-        const updatedHistory = [...prev];
-        updatedHistory[existingIndex] = newRecord;
-        return updatedHistory;
-      }
-      return [...prev, newRecord];
-    });
-    localStorage.setItem('courierCheckedInToday', now.toISOString().split('T')[0]);
-    toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Status: ${newRecord.status}.` });
+
+    try {
+        await setDoc(recordRef, newRecord, { merge: true });
+        setTodayRecord(newRecord);
+        setAttendanceHistory(prev => [newRecord, ...prev.filter(r => r.date !== todayISO)]);
+        localStorage.setItem('courierCheckedInToday', todayISO);
+        toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Status: ${newRecord.status}.` });
+    } catch (error) {
+        console.error("Error during check-in: ", error);
+        toast({ title: "Check-In Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
-  const handleCheckOut = () => {
-    if (!todayRecord?.checkInTime) {
+  const handleCheckOut = async () => {
+    if (!currentUser || !todayRecord?.checkInTime) {
       toast({ title: "Belum Check-In", description: "Anda harus check-in terlebih dahulu.", variant: "destructive" });
       return;
     }
@@ -126,24 +167,29 @@ export default function AttendancePage() {
       toast({ title: "Sudah Check-Out", description: "Anda sudah melakukan check-out hari ini.", variant: "default" });
       return;
     }
+    setIsSubmitting(true);
     const now = new Date();
-    const newRecord: AttendanceRecord = {
-      ...todayRecord!,
-      checkOutTime: now.toTimeString().slice(0, 5),
-    };
-    setTodayRecord(newRecord);
-    setAttendanceHistory(prev => {
-      const existingIndex = prev.findIndex(rec => rec.date.startsWith(todayISO));
-      if (existingIndex > -1) {
-        const updatedHistory = [...prev];
-        updatedHistory[existingIndex] = newRecord;
-        return updatedHistory;
-      }
-      // This case should ideally not happen if check-in is required first
-      return [...prev, newRecord]; 
-    });
-    toast({ title: "Check-Out Berhasil", description: `Anda check-out pukul ${newRecord.checkOutTime}.` });
+    const docId = `${currentUser.uid}_${todayISO}`;
+    const recordRef = doc(db, "attendance", docId);
+    const checkOutTime = format(now, 'HH:mm');
+
+    try {
+        await updateDoc(recordRef, {
+            checkOutTime: checkOutTime,
+            timestamp: Timestamp.fromDate(now),
+        });
+        const updatedRecord = { ...todayRecord, checkOutTime };
+        setTodayRecord(updatedRecord);
+        setAttendanceHistory(prev => prev.map(r => r.date === todayISO ? updatedRecord : r));
+        toast({ title: "Check-Out Berhasil", description: `Anda check-out pukul ${checkOutTime}.` });
+    } catch(error) {
+        console.error("Error during check-out:", error);
+        toast({ title: "Check-Out Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
   };
+
 
   const calculateWorkDuration = (checkInTime?: string, checkOutTime?: string): string | null => {
     if (!checkInTime || !checkOutTime) {
@@ -181,10 +227,10 @@ export default function AttendancePage() {
     return durationString.trim() || null;
   };
 
-  const selectedRecord = attendanceHistory.find(rec => selectedDate && rec.date.startsWith(selectedDate.toISOString().split('T')[0]));
+  const selectedRecord = attendanceHistory.find(rec => selectedDate && rec.date === format(selectedDate, 'yyyy-MM-dd'));
   const workDuration = selectedRecord ? calculateWorkDuration(selectedRecord.checkInTime, selectedRecord.checkOutTime) : null;
 
-  const totalDaysTracked = attendanceHistory.length;
+  const totalDaysTracked = attendanceHistory.filter(r => r.status !== 'Not Checked In').length;
   const presentDaysOverall = attendanceHistory.filter(r => r.status === 'Present' || r.status === 'Late').length;
   const attendanceRate = totalDaysTracked > 0 ? (presentDaysOverall / totalDaysTracked) * 100 : 0;
   
@@ -200,8 +246,14 @@ export default function AttendancePage() {
   const { chartData: firstHalfMonthAttendance, presentDays: presentDaysFirstHalf } = generateMonthlyAttendanceData(firstDayCurrentMonth, fifteenthCurrentMonth, attendanceHistory, indonesiaLocale);
   const { chartData: secondHalfMonthAttendance, presentDays: presentDaysSecondHalf } = generateMonthlyAttendanceData(sixteenthCurrentMonth, lastDayCurrentMonth, attendanceHistory, indonesiaLocale);
 
-  if (!currentUser) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  if (isLoading || !currentUser) {
+    return (
+        <div className="space-y-6">
+            <Card className="shadow-lg"><CardHeader><Skeleton className="h-8 w-3/4" /></CardHeader><CardContent className="space-y-4"><Skeleton className="h-10 w-full"/><Skeleton className="h-10 w-full"/></CardContent></Card>
+            <Card className="shadow-lg"><CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader><CardContent className="flex flex-col md:flex-row gap-6"><Skeleton className="h-10 w-full md:w-[280px]"/><div className="flex-1"><Skeleton className="h-24 w-full"/></div></CardContent></Card>
+            <Card className="shadow-lg"><CardHeader><Skeleton className="h-8 w-3/4" /></CardHeader><CardContent className="space-y-6"><Skeleton className="h-20 w-full"/><div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><Skeleton className="h-64 w-full"/><Skeleton className="h-64 w-full"/></div></CardContent></Card>
+        </div>
+    );
   }
 
   if (currentUser.role !== 'Kurir') {
@@ -251,18 +303,18 @@ export default function AttendancePage() {
             <Button 
               variant="default"
               onClick={handleCheckIn} 
-              disabled={!!todayRecord?.checkInTime}
+              disabled={!!todayRecord?.checkInTime || isSubmitting}
               className="flex-1"
             >
-              <CheckCircle className="mr-2 h-4 w-4" /> Check In
+              {isSubmitting ? 'Memproses...' : <><CheckCircle className="mr-2 h-4 w-4" /> Check In</>}
             </Button>
             <Button 
               variant="destructive"
               onClick={handleCheckOut} 
-              disabled={!todayRecord?.checkInTime || !!todayRecord?.checkOutTime}
+              disabled={!todayRecord?.checkInTime || !!todayRecord?.checkOutTime || isSubmitting}
               className="flex-1"
             >
-              <XCircle className="mr-2 h-4 w-4" /> Check Out
+              {isSubmitting ? 'Memproses...' : <><XCircle className="mr-2 h-4 w-4" /> Check Out</>}
             </Button>
           </div>
         </CardContent>
@@ -410,4 +462,3 @@ export default function AttendancePage() {
     </div>
   );
 }
-

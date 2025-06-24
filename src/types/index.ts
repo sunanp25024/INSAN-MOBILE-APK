@@ -1,4 +1,5 @@
 
+
 export type UserRole = 'MasterAdmin' | 'Admin' | 'PIC' | 'Kurir';
 
 export interface UserProfile {
@@ -93,10 +94,15 @@ export interface ApprovalRequest {
 
 
 export interface AttendanceRecord {
-  date: string; 
-  checkInTime?: string; 
-  checkOutTime?: string; 
-  status: 'Present' | 'Absent' | 'Late';
+  id: string; // Firestore document ID, e.g., {kurirUid}_{yyyy-MM-dd}
+  kurirUid: string;
+  kurirId: string;
+  kurirName: string;
+  date: string; // ISO string 'yyyy-MM-dd'
+  checkInTime?: string; // 'HH:mm'
+  checkOutTime?: string; // 'HH:mm'
+  status: 'Present' | 'Absent' | 'Late' | 'Not Checked In';
+  timestamp?: any; // Firestore ServerTimestamp for sorting or Date object
 }
 
 export interface DailyPerformance {
