@@ -128,15 +128,12 @@ export default function PerformancePage() {
 
   const filteredDailyPerformance = useMemo(() => {
     if (!performanceData) return [];
+    const thirtyDaysAgo = subDays(new Date(), 30);
     return performanceData.daily.filter(item => {
       const itemDate = parseISO(item.date);
-      const from = dateRange.from ? startOfDay(dateRange.from) : null;
-      const to = dateRange.to ? startOfDay(dateRange.to) : null;
-      if (from && itemDate < from) return false;
-      if (to && itemDate > to) return false;
-      return true;
-    }).map(d => ({...d, name: format(new Date(d.date), 'dd/MM')}));
-  }, [performanceData, dateRange]);
+      return itemDate >= thirtyDaysAgo;
+    }).map(d => ({...d, name: format(new Date(d.date), 'dd/MM')})).reverse();
+  }, [performanceData]);
 
 
   const selectedDayPerformance = useMemo(() => {
