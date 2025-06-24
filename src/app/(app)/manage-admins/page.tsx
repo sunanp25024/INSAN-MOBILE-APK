@@ -13,10 +13,10 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile } from '@/types';
+import type { UserProfile, ApprovalRequest } from '@/types';
 import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createUserAccount, deleteUserAccount, importUsers } from '@/lib/firebaseAdminActions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -29,7 +29,7 @@ const adminSchema = z.object({
   passwordValue: z.string().min(6, "Password minimal 6 karakter").optional().or(z.literal('')),
 });
 
-const editAdminSchema = adminSchema.omit({ passwordValue: true });
+const editAdminSchema = adminSchema.omit({ passwordValue: true, id: true });
 
 type AdminFormData = z.infer<typeof adminSchema>;
 type EditAdminFormData = z.infer<typeof editAdminSchema>;
@@ -91,13 +91,9 @@ export default function ManageAdminsPage() {
 
   const handleAddAdmin: SubmitHandler<AdminFormData> = async (data) => {
     setIsSubmitting(true);
+    if (!currentUser) return; // Should not happen if page is guarded
     if (!data.passwordValue) {
       toast({ title: "Password Dibutuhkan", description: "Password awal wajib diisi untuk admin baru.", variant: "destructive" });
-      setIsSubmitting(false);
-      return;
-    }
-    if (!currentUser) {
-      toast({ title: "Error", description: "Tidak dapat memverifikasi pengguna saat ini.", variant: "destructive" });
       setIsSubmitting(false);
       return;
     }
@@ -121,6 +117,7 @@ export default function ManageAdminsPage() {
     };
 
     try {
+      // MasterAdmin creates directly
       const result = await createUserAccount(data.email, data.passwordValue, newAdminProfile);
 
       if (result.success) {
@@ -145,40 +142,34 @@ export default function ManageAdminsPage() {
 
   const handleOpenEditDialog = (admin: UserProfile) => {
     setCurrentEditingAdmin(admin);
-    setValueEdit('id', admin.id);
     setValueEdit('fullName', admin.fullName);
     setValueEdit('email', admin.email || '');
     setIsEditAdminDialogOpen(true);
   };
 
   const handleEditAdmin: SubmitHandler<EditAdminFormData> = async (data) => {
-    if (!currentEditingAdmin || !currentEditingAdmin.uid) return;
+    if (!currentEditingAdmin || !currentEditingAdmin.uid || !currentUser) return;
     setIsSubmitting(true);
     
-    if (data.id && data.id !== currentEditingAdmin.id && admins.some(admin => admin.id === data.id && admin.uid !== currentEditingAdmin.uid)) {
-      toast({ title: "Gagal Memperbarui", description: `ID Aplikasi Admin ${data.id} sudah digunakan oleh admin lain.`, variant: "destructive"});
-      setIsSubmitting(false);
-      return;
-    }
     if (data.email && data.email !== currentEditingAdmin.email && admins.some(admin => admin.email === data.email && admin.uid !== currentEditingAdmin.uid)) {
         toast({ title: "Gagal Memperbarui", description: `Email ${data.email} sudah digunakan oleh admin lain.`, variant: "destructive"});
         setIsSubmitting(false);
         return;
     }
-
-    try {
-      const adminDocRef = doc(db, "users", currentEditingAdmin.uid);
-      const updatedData: Partial<UserProfile> = {
+    
+    const updatedData: Partial<UserProfile> = {
         fullName: data.fullName,
         email: data.email,
         updatedAt: new Date().toISOString(),
-        updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
+        updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role }
       };
-      
+
+    try {
+      const adminDocRef = doc(db, "users", currentEditingAdmin.uid);
       await updateDoc(adminDocRef, updatedData);
       toast({ title: "Admin Diperbarui", description: `Data Admin ${data.fullName} berhasil diperbarui.` });
       fetchAdmins();
-      resetEdit({ id: '', fullName: '', email: '' });
+      resetEdit({ fullName: '', email: '' });
       setIsEditAdminDialogOpen(false);
       setCurrentEditingAdmin(null);
     } catch (error: any) {
@@ -191,6 +182,7 @@ export default function ManageAdminsPage() {
   
   const handleDeleteAdmin = async (adminToDelete: UserProfile) => {
     if (!adminToDelete.uid || !currentUser || currentUser.role !== 'MasterAdmin') {
+        toast({ title: "Akses Ditolak", description: "Hanya MasterAdmin yang dapat menghapus.", variant: "destructive"});
         return;
     }
     if (!window.confirm(`Apakah Anda yakin ingin menghapus Admin ${adminToDelete.fullName}? Tindakan ini akan menghapus akun login dan profil secara permanen.`)) {
@@ -210,13 +202,9 @@ export default function ManageAdminsPage() {
 };
 
   const handleFileSelectAndImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (isImporting) return;
+    if (isImporting || !currentUser) return;
     if (!event.target.files || event.target.files.length === 0) return;
-    if (!currentUser) {
-        toast({ title: "Error", description: "Pengguna saat ini tidak terverifikasi.", variant: "destructive"});
-        return;
-    }
-
+    
     const file = event.target.files[0];
     setIsImporting(true);
     toast({ title: "Memulai Impor", description: `Memproses file ${file.name}...` });
@@ -230,15 +218,15 @@ export default function ManageAdminsPage() {
             const workbook = XLSX.read(data, { type: 'binary' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet);
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-            if (json.length === 0) {
+            if (jsonData.length === 0) {
               toast({ title: "File Kosong", description: "File Excel yang Anda unggah tidak berisi data.", variant: "destructive" });
               return;
             }
 
             const creatorProfile = { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role };
-            const result = await importUsers(JSON.parse(JSON.stringify(json)), 'Admin', creatorProfile);
+            const result = await importUsers(JSON.parse(JSON.stringify(jsonData)), 'Admin', creatorProfile);
 
             if (result.success) {
                 toast({
@@ -249,7 +237,7 @@ export default function ManageAdminsPage() {
                 if (result.errors && result.errors.length > 0) {
                     console.error("Import Errors:", result.errors);
                 }
-                fetchAdmins(); // Refresh the list
+                fetchAdmins();
             } else {
                 toast({
                     title: "Impor Gagal Total",
@@ -286,18 +274,18 @@ export default function ManageAdminsPage() {
 
 
   const handleStatusChange = async (adminToUpdate: UserProfile, newStatusActive: boolean) => {
-    if (!adminToUpdate.uid) {
-      toast({ title: "Error", description: "UID Admin tidak ditemukan.", variant: "destructive" });
-      return;
-    }
+    if (!adminToUpdate.uid || !currentUser || currentUser.role !== 'MasterAdmin') return;
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
     try {
       const adminDocRef = doc(db, "users", adminToUpdate.uid);
       await updateDoc(adminDocRef, { 
           status: newStatus,
           updatedAt: new Date().toISOString(),
-          updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
+          updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role }
       });
+      // Also update Firebase Auth user disabled status
+      await adminAuth.updateUser(adminToUpdate.uid, { disabled: !newStatusActive });
+
       toast({
         title: "Status Admin Diperbarui",
         description: `Status admin ${adminToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
@@ -314,6 +302,17 @@ export default function ManageAdminsPage() {
     admin.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (admin.email && admin.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+  
+  if (currentUser?.role !== 'MasterAdmin') {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-destructive">Akses Ditolak</CardTitle>
+                <CardDescription>Halaman ini hanya bisa diakses oleh MasterAdmin.</CardDescription>
+            </CardHeader>
+        </Card>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -406,53 +405,26 @@ export default function ManageAdminsPage() {
                       <TableCell>{admin.fullName}</TableCell>
                       <TableCell>{admin.email}</TableCell>
                       <TableCell>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span tabIndex={0}>
-                                <Switch
-                                  checked={admin.status === 'Aktif'}
-                                  onCheckedChange={(newStatus) => handleStatusChange(admin, newStatus)}
-                                  aria-label={`Status admin ${admin.fullName}`}
-                                  disabled={currentUser?.role !== 'MasterAdmin'}
-                                />
-                              </span>
-                            </TooltipTrigger>
-                            {currentUser?.role !== 'MasterAdmin' && (
-                              <TooltipContent>
-                                <p>Hanya MasterAdmin yang dapat mengubah status.</p>
-                              </TooltipContent>
-                            )}
-                          </Tooltip>
-                        </TooltipProvider>
+                        <Switch
+                            checked={admin.status === 'Aktif'}
+                            onCheckedChange={(newStatus) => handleStatusChange(admin, newStatus)}
+                            aria-label={`Status admin ${admin.fullName}`}
+                        />
                         <span className={`ml-2 text-xs ${admin.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
                           {admin.status}
                         </span>
                       </TableCell>
                       <TableCell className="text-center space-x-1">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(admin)}><Edit size={16}/></Button>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span tabIndex={0}>
-                                <Button 
-                                  variant="destructive" 
-                                  size="icon" 
-                                  className="h-8 w-8" 
-                                  onClick={() => handleDeleteAdmin(admin)} 
-                                  disabled={isSubmitting || currentUser?.role !== 'MasterAdmin'}
-                                >
-                                  <Trash2 size={16}/>
-                                </Button>
-                              </span>
-                            </TooltipTrigger>
-                            {currentUser?.role !== 'MasterAdmin' && (
-                              <TooltipContent>
-                                <p>Hanya MasterAdmin yang dapat menghapus.</p>
-                              </TooltipContent>
-                            )}
-                          </Tooltip>
-                        </TooltipProvider>
+                        <Button 
+                            variant="destructive" 
+                            size="icon" 
+                            className="h-8 w-8" 
+                            onClick={() => handleDeleteAdmin(admin)} 
+                            disabled={isSubmitting}
+                        >
+                            <Trash2 size={16}/>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   )) : (
@@ -478,14 +450,9 @@ export default function ManageAdminsPage() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit Admin: {currentEditingAdmin?.fullName}</DialogTitle>
-            <DialogDescription>Perbarui detail Admin. ID Aplikasi dan Email dapat diubah. Perubahan email di sini hanya di profil Firestore, tidak mengubah email login Firebase Auth.</DialogDescription>
+            <DialogDescription>Perbarui detail Admin. ID Aplikasi tidak dapat diubah.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmitEdit(handleEditAdmin)} className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="editAdminAppId">ID Aplikasi Admin</Label>
-              <Input id="editAdminAppId" {...registerEdit("id")} />
-              {errorsEdit.id && <p className="text-destructive text-sm mt-1">{errorsEdit.id.message}</p>}
-            </div>
             <div>
               <Label htmlFor="editAdminFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
               <Input id="editAdminFullName" {...registerEdit("fullName")} />

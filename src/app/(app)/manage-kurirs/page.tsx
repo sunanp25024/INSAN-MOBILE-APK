@@ -13,14 +13,14 @@ import { useForm, SubmitHandler, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile } from '@/types';
+import type { UserProfile, ApprovalRequest } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createUserAccount, deleteUserAccount, importUsers } from '@/lib/firebaseAdminActions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -42,10 +42,12 @@ const kurirSchema = z.object({
   bankAccountNumber: z.string().min(5, "Nomor rekening minimal 5 digit").regex(/^\d+$/, "Nomor rekening hanya boleh berisi angka").optional().or(z.literal('')),
   bankRecipientName: z.string().min(3, "Nama pemilik rekening minimal 3 karakter").optional().or(z.literal('')),
   email: z.string().email("Format email tidak valid").optional().or(z.literal('')),
-  status: z.enum(['Aktif', 'Nonaktif']).default('Aktif').optional(),
+  status: z.enum(['Aktif', 'Nonaktif', 'PendingApproval']).default('Aktif').optional(),
 });
 
 type KurirFormData = z.infer<typeof kurirSchema>;
+const editKurirSchema = kurirSchema.omit({ passwordValue: true, id: true, nik: true });
+type EditKurirFormData = z.infer<typeof editKurirSchema>;
 
 export default function ManageKurirsPage() {
   const { toast } = useToast();
@@ -70,13 +72,17 @@ export default function ManageKurirsPage() {
     }
   }, []);
 
-  const { register, handleSubmit, reset, control, formState: { errors }, setValue, watch } = useForm<KurirFormData>({
+  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<KurirFormData>({
     resolver: zodResolver(kurirSchema),
     defaultValues: {
       wilayah: '', area: '', workLocation: '', passwordValue: '', contractStatus: '',
       bankName: '', bankAccountNumber: '', bankRecipientName: '', email: '',
       status: 'Aktif',
     }
+  });
+
+  const { register: registerEdit, handleSubmit: handleSubmitEdit, reset: resetEdit, control: controlEdit, formState: { errors: errorsEdit }, setValue: setValueEdit, watch: watchEdit } = useForm<EditKurirFormData>({
+    resolver: zodResolver(editKurirSchema)
   });
 
   const fetchKurirs = async () => {
@@ -103,14 +109,11 @@ export default function ManageKurirsPage() {
   }, []);
 
   const handleAddKurirSubmit: SubmitHandler<KurirFormData> = async (data) => {
+    if (!currentUser) return;
     setIsSubmitting(true);
+    
     if (!data.passwordValue) {
       toast({ title: "Password Dibutuhkan", description: "Password awal wajib diisi untuk kurir baru.", variant: "destructive" });
-      setIsSubmitting(false);
-      return;
-    }
-    if (!currentUser) {
-      toast({ title: "Error", description: "Tidak dapat memverifikasi pengguna saat ini.", variant: "destructive" });
       setIsSubmitting(false);
       return;
     }
@@ -124,7 +127,7 @@ export default function ManageKurirsPage() {
       return;
     }
 
-    const newKurirProfile: Omit<UserProfile, 'uid'> = {
+    const newKurirProfile: Omit<UserProfile, 'uid'> & {passwordValue: string} = {
       id: appKurirId,
       fullName: data.fullName,
       nik: data.nik,
@@ -141,71 +144,74 @@ export default function ManageKurirsPage() {
       bankRecipientName: data.bankRecipientName || '',
       status: 'Aktif',
       createdBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
+      passwordValue: data.passwordValue
     };
 
-    try {
-        const result = await createUserAccount(emailForAuth, data.passwordValue, newKurirProfile);
-
+    if (currentUser.role === 'Admin') {
+       newKurirProfile.status = 'PendingApproval';
+       const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+        type: 'NEW_USER_KURIR',
+        status: 'pending',
+        requestedByUid: currentUser.uid,
+        requestedByName: currentUser.fullName,
+        requestedByRole: currentUser.role,
+        requestTimestamp: serverTimestamp(),
+        targetEntityType: 'USER_PROFILE_DATA',
+        targetEntityId: appKurirId,
+        targetEntityName: data.fullName,
+        payload: newKurirProfile,
+        notesFromRequester: "Pengajuan kurir baru.",
+      };
+      try {
+        await addDoc(collection(db, "approval_requests"), approvalRequest);
+        toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan kurir ${data.fullName} telah dikirim.` });
+        reset();
+        setIsAddKurirDialogOpen(false);
+      } catch (error: any) {
+        toast({ title: "Error Pengajuan", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
+      }
+    } else if (currentUser.role === 'MasterAdmin') {
+        const { passwordValue, ...profileToCreate } = newKurirProfile;
+        const result = await createUserAccount(emailForAuth, passwordValue, profileToCreate);
         if (result.success) {
             toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} berhasil ditambahkan.` });
             fetchKurirs();
             reset();
             setIsAddKurirDialogOpen(false);
         } else {
-            let errorMessage = result.message || "Gagal menambahkan kurir.";
-            if (result.errorCode === 'auth/email-already-in-use') {
-                errorMessage = "Email ini sudah terdaftar. Gunakan email lain.";
-            }
-            toast({ title: "Error", description: errorMessage, variant: "destructive" });
+            toast({ title: "Error", description: result.message || "Gagal menambah kurir", variant: "destructive" });
         }
-    } catch (error) {
-        console.error("Error creating kurir:", error);
-        toast({ title: "Error", description: "Terjadi kesalahan saat membuat akun.", variant: "destructive" });
-    } finally {
-        setIsSubmitting(false);
     }
+    setIsSubmitting(false);
   };
 
   const handleOpenEditDialog = (kurir: UserProfile) => {
     setCurrentEditingKurir(kurir);
     const joinDateObj = kurir.joinDate ? parseISO(kurir.joinDate) : new Date();
     
-    reset({
-        uid: kurir.uid,
-        id: kurir.id,
-        fullName: kurir.fullName,
-        nik: kurir.nik || '',
-        passwordValue: '',
-        jabatan: kurir.position || '',
-        wilayah: kurir.wilayah || '',
-        area: kurir.area || '',
-        workLocation: kurir.workLocation || '',
-        joinDate: isValid(joinDateObj) ? joinDateObj : new Date(),
-        contractStatus: kurir.contractStatus || '',
-        bankName: kurir.bankName || '',
-        bankAccountNumber: kurir.bankAccountNumber || '',
-        bankRecipientName: kurir.bankRecipientName || '',
-        email: kurir.email || '',
-        status: kurir.status || 'Aktif',
-    });
+    setValueEdit('uid', kurir.uid);
+    setValueEdit('fullName', kurir.fullName);
+    setValueEdit('jabatan', kurir.position || '');
+    setValueEdit('wilayah', kurir.wilayah || '');
+    setValueEdit('area', kurir.area || '');
+    setValueEdit('workLocation', kurir.workLocation || '');
+    setValueEdit('joinDate', isValid(joinDateObj) ? joinDateObj : new Date());
+    setValueEdit('contractStatus', kurir.contractStatus || '');
+    setValueEdit('bankName', kurir.bankName || '');
+    setValueEdit('bankAccountNumber', kurir.bankAccountNumber || '');
+    setValueEdit('bankRecipientName', kurir.bankRecipientName || '');
+    setValueEdit('email', kurir.email || '');
+    setValueEdit('status', kurir.status || 'Aktif');
+    
     setIsEditKurirDialogOpen(true);
   };
 
-  const handleEditKurirSubmit: SubmitHandler<KurirFormData> = async (data) => {
-    if (!currentEditingKurir || !currentEditingKurir.uid) return;
+  const handleEditKurirSubmit: SubmitHandler<EditKurirFormData> = async (data) => {
+    if (!currentEditingKurir || !currentEditingKurir.uid || !currentUser) return;
     setIsSubmitting(true);
 
-    if (data.email && data.email !== currentEditingKurir.email && kurirs.some(k => k.email === data.email && k.uid !== currentEditingKurir.uid)) {
-        toast({ title: "Gagal Memperbarui", description: `Email ${data.email} sudah digunakan oleh kurir lain.`, variant: "destructive"});
-        setIsSubmitting(false);
-        return;
-    }
-
-    try {
-      const kurirDocRef = doc(db, "users", currentEditingKurir.uid);
-      const updatedData: Partial<UserProfile> = {
+    const updatePayload: Partial<UserProfile> = {
         fullName: data.fullName,
-        nik: data.nik,
         email: data.email,
         position: data.jabatan,
         wilayah: data.wilayah,
@@ -216,27 +222,58 @@ export default function ManageKurirsPage() {
         bankName: data.bankName,
         bankAccountNumber: data.bankAccountNumber,
         bankRecipientName: data.bankRecipientName,
-        status: data.status,
         updatedAt: new Date().toISOString(),
-        updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
+        updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role }
       };
-
-      await updateDoc(kurirDocRef, updatedData);
-      toast({ title: "Kurir Diperbarui", description: `Data Kurir ${data.fullName} berhasil diperbarui.` });
-      fetchKurirs();
-      reset();
-      setIsEditKurirDialogOpen(false);
-      setCurrentEditingKurir(null);
-    } catch (error: any) {
-      console.error("Error updating kurir: ", error);
-      toast({ title: "Error", description: `Gagal memperbarui kurir: ${error.message}`, variant: "destructive" });
-    } finally {
-        setIsSubmitting(false);
+      
+    const oldPayload = {
+        fullName: currentEditingKurir.fullName,
+        email: currentEditingKurir.email,
+        position: currentEditingKurir.position,
+        workLocation: currentEditingKurir.workLocation,
     }
+
+    if (currentUser.role === 'Admin') {
+        const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+            type: 'UPDATE_USER_PROFILE',
+            status: 'pending',
+            requestedByUid: currentUser.uid,
+            requestedByName: currentUser.fullName,
+            requestedByRole: currentUser.role,
+            requestTimestamp: serverTimestamp(),
+            targetEntityType: 'USER_PROFILE_DATA',
+            targetEntityId: currentEditingKurir.uid,
+            targetEntityName: currentEditingKurir.fullName,
+            payload: updatePayload,
+            oldPayload: oldPayload,
+            notesFromRequester: `Pengajuan perubahan data untuk Kurir ID: ${currentEditingKurir.id}`,
+        };
+        try {
+            await addDoc(collection(db, "approval_requests"), approvalRequest);
+            toast({ title: "Permintaan Perubahan Diajukan", description: `Permintaan perubahan data kurir ${data.fullName} telah dikirim.` });
+        } catch (error: any) {
+            toast({ title: "Error Pengajuan Update", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
+        }
+
+    } else if (currentUser.role === 'MasterAdmin') {
+        try {
+            const kurirDocRef = doc(db, "users", currentEditingKurir.uid);
+            await updateDoc(kurirDocRef, updatePayload);
+            toast({ title: "Kurir Diperbarui", description: `Data Kurir ${data.fullName} berhasil diperbarui.` });
+            fetchKurirs();
+        } catch (error: any) {
+            toast({ title: "Error Update", description: `Gagal memperbarui kurir: ${error.message}`, variant: "destructive" });
+        }
+    }
+    
+    setIsEditKurirDialogOpen(false);
+    setCurrentEditingKurir(null);
+    setIsSubmitting(false);
   };
   
   const handleDeleteKurir = async (kurirToDelete: UserProfile) => {
     if (!kurirToDelete.uid || !currentUser || currentUser.role !== 'MasterAdmin') {
+        toast({ title: "Akses Ditolak", description: "Hanya MasterAdmin yang bisa menghapus.", variant: "destructive" });
         return;
     }
     if (!window.confirm(`Apakah Anda yakin ingin menghapus Kurir ${kurirToDelete.fullName}? Tindakan ini akan menghapus akun login dan profil secara permanen.`)) {
@@ -256,12 +293,8 @@ export default function ManageKurirsPage() {
   };
 
   const handleFileSelectAndImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (isImporting) return;
+    if (isImporting || !currentUser) return;
     if (!event.target.files || event.target.files.length === 0) return;
-    if (!currentUser) {
-        toast({ title: "Error", description: "Pengguna saat ini tidak terverifikasi.", variant: "destructive"});
-        return;
-    }
 
     const file = event.target.files[0];
     setIsImporting(true);
@@ -276,17 +309,17 @@ export default function ManageKurirsPage() {
             const workbook = XLSX.read(data, { type: 'binary' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet);
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-            if (json.length === 0) {
-              toast({ title: "File Kosong", description: "File Excel yang Anda unggah tidak berisi data.", variant: "destructive" });
+            if (jsonData.length === 0) {
+              toast({ title: "File Kosong", variant: "destructive" });
               return;
             }
             
             const creatorProfile = { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role };
-            const result = await importUsers(JSON.parse(JSON.stringify(json)), 'Kurir', creatorProfile);
+            const result = await importUsers(JSON.parse(JSON.stringify(jsonData)), 'Kurir', creatorProfile);
 
-            if (result.success) {
+            if (result.success || result.createdCount > 0) {
                 toast({
                     title: "Impor Selesai",
                     description: `${result.createdCount} dari ${result.totalRows} kurir berhasil ditambahkan. ${result.failedCount > 0 ? `${result.failedCount} gagal.` : ''}`,
@@ -295,7 +328,7 @@ export default function ManageKurirsPage() {
                 if (result.errors && result.errors.length > 0) {
                     console.error("Import Errors:", result.errors);
                 }
-                fetchKurirs(); // Refresh the list
+                fetchKurirs();
             } else {
                 toast({
                     title: "Impor Gagal Total",
@@ -336,26 +369,46 @@ export default function ManageKurirsPage() {
   };
   
   const handleStatusChange = async (kurirToUpdate: UserProfile, newStatusActive: boolean) => {
-    if (!kurirToUpdate.uid) {
-      toast({ title: "Error", description: "UID Kurir tidak ditemukan.", variant: "destructive" });
-      return;
-    }
+    if (!kurirToUpdate.uid || !currentUser) return;
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
-    try {
-      const kurirDocRef = doc(db, "users", kurirToUpdate.uid);
-      await updateDoc(kurirDocRef, { 
-          status: newStatus,
-          updatedAt: new Date().toISOString(),
-          updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
-      });
-      toast({
-        title: "Status Kurir Diperbarui",
-        description: `Status kurir ${kurirToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
-      });
-      fetchKurirs();
-    } catch (error: any) {
-      console.error("Error updating kurir status: ", error);
-      toast({ title: "Error", description: `Gagal memperbarui status kurir: ${error.message}`, variant: "destructive" });
+    const payloadForApproval = { status: newStatus };
+
+    if (currentUser.role === 'Admin') {
+        const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+            type: newStatusActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
+            status: 'pending',
+            requestedByUid: currentUser.uid,
+            requestedByName: currentUser.fullName,
+            requestedByRole: currentUser.role,
+            requestTimestamp: serverTimestamp(),
+            targetEntityType: 'USER_PROFILE_DATA',
+            targetEntityId: kurirToUpdate.uid,
+            targetEntityName: kurirToUpdate.fullName,
+            payload: payloadForApproval,
+            notesFromRequester: `Pengajuan perubahan status Kurir ID ${kurirToUpdate.id} menjadi ${newStatus}.`,
+        };
+         try {
+            await addDoc(collection(db, "approval_requests"), approvalRequest);
+            toast({ title: "Permintaan Perubahan Status Diajukan", description: `Permintaan perubahan status kurir ${kurirToUpdate.fullName} menjadi ${newStatus} telah dikirim.` });
+        } catch (error: any) {
+            toast({ title: "Error Pengajuan", description: `Gagal mengajukan perubahan status: ${error.message}`, variant: "destructive" });
+        }
+    } else if (currentUser.role === 'MasterAdmin') {
+        try {
+            const kurirDocRef = doc(db, "users", kurirToUpdate.uid);
+            await updateDoc(kurirDocRef, { 
+                status: newStatus,
+                updatedAt: new Date().toISOString(),
+                updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role }
+            });
+            toast({
+                title: "Status Kurir Diperbarui",
+                description: `Status kurir ${kurirToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
+            });
+            fetchKurirs();
+        } catch (error: any) {
+            toast({ title: "Error", description: `Gagal memperbarui status kurir: ${error.message}`, variant: "destructive" });
+        }
     }
   };
 
@@ -369,7 +422,7 @@ export default function ManageKurirsPage() {
     (kurir.area && kurir.area.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const KurirFormFields = ({ isEdit = false }: { isEdit?: boolean }) => (
+  const KurirFormFields = ({ control, register, errors, isEdit = false }: { control: any, register: any, errors: any, isEdit?: boolean }) => (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {!isEdit && (
@@ -382,7 +435,7 @@ export default function ManageKurirsPage() {
         {isEdit && (
              <div>
             <Label htmlFor="editKurirId" className="mb-1 block">ID Kurir</Label>
-            <Input id="editKurirId" {...register("id")} readOnly className="bg-muted/50"/>
+            <Input id="editKurirId" value={currentEditingKurir?.id || ''} readOnly className="bg-muted/50"/>
             </div>
         )}
         <div>
@@ -392,16 +445,15 @@ export default function ManageKurirsPage() {
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirNik" : "addKurirNik"} className="mb-1 block">NIK <span className="text-destructive">*</span></Label>
-          <Input id={isEdit ? "editKurirNik" : "addKurirNik"} {...register("nik")} placeholder="16 digit NIK" />
+          <Input id={isEdit ? "editKurirNik" : "addKurirNik"} {...register("nik")} placeholder="16 digit NIK" readOnly={isEdit} className={isEdit ? 'bg-muted/50' : ''}/>
           {errors.nik && <p className="text-destructive text-sm mt-1">{errors.nik.message}</p>}
         </div>
+          {!isEdit && (
           <div>
-          <Label htmlFor={isEdit ? "editKurirPassword" : "addKurirPassword"} className="mb-1 block">
-            {isEdit ? "Password Baru (Opsional)" : "Password Awal *"}
-          </Label>
-          <Input id={isEdit ? "editKurirPassword" : "addKurirPassword"} type="password" {...register("passwordValue")} placeholder={isEdit ? "Kosongkan jika tidak diubah" : ""} />
+          <Label htmlFor="addKurirPassword" className="mb-1 block">Password Awal <span className="text-destructive">*</span></Label>
+          <Input id="addKurirPassword" type="password" {...register("passwordValue")} />
           {errors.passwordValue && errors.passwordValue.message && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
-        </div>
+        </div>)}
         <div>
           <Label htmlFor={isEdit ? "editKurirJabatan" : "addKurirJabatan"} className="mb-1 block">Jabatan <span className="text-destructive">*</span></Label>
           <Input id={isEdit ? "editKurirJabatan" : "addKurirJabatan"} {...register("jabatan")} placeholder="cth: Kurir, Kurir Motor" />
@@ -435,7 +487,7 @@ export default function ManageKurirsPage() {
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <div>
-          <Label htmlFor={isEdit ? "editKurirJoinDate" : "addKurirJoinDate"} className="mb-1 block">Tanggal Join <span className="text-destructive">*</span></Label>
+          <Label className="mb-1 block">Tanggal Join <span className="text-destructive">*</span></Label>
           <Controller
             name="joinDate"
             control={control}
@@ -491,26 +543,6 @@ export default function ManageKurirsPage() {
           {errors.bankRecipientName && errors.bankRecipientName.message && <p className="text-destructive text-sm mt-1">{errors.bankRecipientName.message}</p>}
         </div>
       </div>
-       {isEdit && (
-        <div className="mt-4">
-            <Label htmlFor="editStatus" className="mb-1 block">Status Akun</Label>
-            <Controller
-                name="status"
-                control={control}
-                render={({ field }) => (
-                    <Switch
-                        id="editStatus"
-                        checked={field.value === 'Aktif'}
-                        onCheckedChange={(checked) => field.onChange(checked ? 'Aktif' : 'Nonaktif')}
-                    />
-                )}
-            />
-            <span className={`ml-2 text-sm ${watch("status") === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
-                {watch("status")}
-            </span>
-             {errors.status && <p className="text-destructive text-sm mt-1">{errors.status.message}</p>}
-        </div>
-      )}
     </>
   );
 
@@ -524,33 +556,25 @@ export default function ManageKurirsPage() {
               Manajemen Akun Kurir
             </CardTitle>
             <CardDescription>
-              Kelola akun Kurir. Data disimpan di Firebase.
+              Kelola akun Kurir. Perubahan oleh Admin memerlukan persetujuan MasterAdmin.
             </CardDescription>
           </div>
           <Dialog open={isAddKurirDialogOpen} onOpenChange={setIsAddKurirDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="mt-2 sm:mt-0 w-full sm:w-auto" onClick={() => {
-                  reset({
-                    id: '', fullName: '', nik: '', passwordValue: '', jabatan: '',
-                    wilayah: '', area: '', workLocation: '',
-                    joinDate: undefined, contractStatus: '', 
-                    bankName: '', bankAccountNumber: '', bankRecipientName: '', email: '',
-                    status: 'Aktif',
-                  });
-                }}>
+              <Button className="mt-2 sm:mt-0 w-full sm:w-auto" onClick={() => reset()}>
                 <UserPlus className="mr-2 h-4 w-4" /> Tambah Kurir Baru
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Tambah Kurir Baru</DialogTitle>
-                <DialogDescription>Isi detail lengkap untuk Kurir baru. Akun akan dibuat di Firebase.</DialogDescription>
+                <DialogDescription>Isi detail lengkap untuk Kurir baru.</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit(handleAddKurirSubmit)} className="space-y-4 py-4">
-                <KurirFormFields />
+                <KurirFormFields control={control} register={register} errors={errors} />
                 <DialogFooter className="pt-6">
-                  <Button type="button" variant="outline" onClick={() => { reset(); setIsAddKurirDialogOpen(false); }}>Batal</Button>
-                  <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Menyimpan...' : 'Simpan Kurir'}</Button>
+                  <Button type="button" variant="outline" onClick={() => setIsAddKurirDialogOpen(false)}>Batal</Button>
+                  <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : (currentUser?.role === 'Admin' ? 'Ajukan Penambahan' : 'Simpan Kurir')}</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -661,23 +685,17 @@ export default function ManageKurirsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={isEditKurirDialogOpen} onOpenChange={(open) => {
-        if (!open) {
-          setCurrentEditingKurir(null);
-          reset(); 
-        }
-        setIsEditKurirDialogOpen(open);
-      }}>
+      <Dialog open={isEditKurirDialogOpen} onOpenChange={setIsEditKurirDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Kurir: {currentEditingKurir?.fullName}</DialogTitle>
-            <DialogDescription>Perbarui detail Kurir. ID Kurir tidak dapat diubah.</DialogDescription>
+            <DialogDescription>Perbarui detail Kurir. ID dan NIK tidak dapat diubah.</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit(handleEditKurirSubmit)} className="space-y-4 py-4">
-            <KurirFormFields isEdit={true}/>
+          <form onSubmit={handleSubmitEdit(handleEditKurirSubmit)} className="space-y-4 py-4">
+            <KurirFormFields control={controlEdit} register={registerEdit} errors={errorsEdit} isEdit={true}/>
             <DialogFooter className="pt-6">
-              <Button type="button" variant="outline" onClick={() => { reset(); setIsEditKurirDialogOpen(false); setCurrentEditingKurir(null);}}>Batal</Button>
-              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>
+              <Button type="button" variant="outline" onClick={() => setIsEditKurirDialogOpen(false)}>Batal</Button>
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : (currentUser?.role === 'Admin' ? 'Ajukan Perubahan' : 'Simpan Perubahan')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

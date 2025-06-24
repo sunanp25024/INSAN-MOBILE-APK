@@ -1,8 +1,8 @@
 
 'use server';
 
-import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
-import type { UserProfile, UserRole } from '@/types';
+import { admin, adminAuth, adminDb } from '@/lib/firebaseAdmin';
+import type { UserProfile, UserRole, ApprovalRequest } from '@/types';
 
 /**
  * Creates a user account in Firebase Auth and their profile in Firestore
@@ -40,6 +40,11 @@ export async function createUserAccount(
     return { success: true, message: 'User created successfully.', uid: userRecord.uid };
   } catch (error: any) {
     console.error('Error in createUserAccount server action:', error);
+    
+    // If user was created in Auth but Firestore failed, we should delete the Auth user to prevent orphans.
+    if (error.code !== 'auth/email-already-exists' && error.uid) {
+        await adminAuth.deleteUser(error.uid);
+    }
     
     return {
       success: false,
@@ -174,14 +179,14 @@ export async function importUsers(
           // Specific content validation for Kurir
           const nik = String(userData.nik).trim();
           if (!/^\d{16}$/.test(nik)) {
-              errors.push(`Baris ${rowNum}: NIK harus 16 digit angka.`);
+              errors.push(`Baris ${rowNum}: NIK '${nik}' tidak valid, harus 16 digit angka.`);
               failedCount++;
               continue;
           }
 
           const bankAccNumber = userData.bankAccountNumber ? String(userData.bankAccountNumber).trim() : '';
           if (bankAccNumber && !/^\d+$/.test(bankAccNumber)) {
-              errors.push(`Baris ${rowNum}: Nomor Rekening hanya boleh berisi angka.`);
+              errors.push(`Baris ${rowNum}: Nomor Rekening '${bankAccNumber}' tidak valid, hanya boleh berisi angka.`);
               failedCount++;
               continue;
           }
@@ -248,4 +253,79 @@ export async function importUsers(
     totalRows: usersData.length,
     errors,
   };
+}
+
+
+export async function handleApprovalRequest(
+  requestId: string,
+  decision: 'approved' | 'rejected',
+  handlerProfile: { uid: string; name: string; role: UserRole },
+  notesFromHandler?: string
+) {
+  if (handlerProfile.role !== 'MasterAdmin') {
+    return { success: false, message: 'Hanya MasterAdmin yang dapat memproses persetujuan.' };
+  }
+
+  const requestDocRef = adminDb.collection('approval_requests').doc(requestId);
+
+  try {
+    await adminDb.runTransaction(async (transaction) => {
+      const requestDoc = await transaction.get(requestDocRef);
+      if (!requestDoc.exists) {
+        throw new Error('Permintaan persetujuan tidak ditemukan.');
+      }
+      const requestData = requestDoc.data() as ApprovalRequest;
+      if (requestData.status !== 'pending') {
+        throw new Error(`Permintaan ini sudah diproses dengan status: ${requestData.status}.`);
+      }
+
+      const updateDataForRequest = {
+        status: decision,
+        handledByUid: handlerProfile.uid,
+        handledByName: handlerProfile.name,
+        actionTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+        notesFromHandler: notesFromHandler || '',
+      };
+
+      if (decision === 'approved') {
+        const { type, payload, targetEntityId } = requestData;
+        
+        switch (type) {
+          case 'NEW_USER_PIC':
+          case 'NEW_USER_ADMIN':
+          case 'NEW_USER_KURIR':
+            const { passwordValue, ...profilePayload } = payload;
+            if (!passwordValue) {
+                throw new Error('Password tidak ditemukan dalam payload untuk user baru.');
+            }
+            await createUserAccount(profilePayload.email, passwordValue, profilePayload);
+            break;
+
+          case 'UPDATE_USER_PROFILE':
+            if (!targetEntityId) throw new Error('Target UID untuk update tidak ditemukan.');
+            const userToUpdateRef = adminDb.collection('users').doc(targetEntityId);
+            transaction.update(userToUpdateRef, { ...payload, status: 'Aktif' }); // Ensure status is active on update
+            break;
+            
+          case 'ACTIVATE_USER':
+          case 'DEACTIVATE_USER':
+            if (!targetEntityId) throw new Error('Target UID untuk perubahan status tidak ditemukan.');
+            const userToChangeStatusRef = adminDb.collection('users').doc(targetEntityId);
+            transaction.update(userToChangeStatusRef, { status: payload.status });
+            await adminAuth.updateUser(targetEntityId, { disabled: payload.status === 'Nonaktif' });
+            break;
+            
+          default:
+            throw new Error(`Jenis persetujuan tidak dikenal: ${type}`);
+        }
+      } 
+
+      transaction.update(requestDocRef, updateDataForRequest);
+    });
+
+    return { success: true, message: `Permintaan berhasil di-${decision}.` };
+  } catch (error: any) {
+    console.error('Error handling approval request:', error);
+    return { success: false, message: error.message };
+  }
 }
