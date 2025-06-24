@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, FileUp, UserPlus, Edit, Trash2, CalendarIcon as LucideCalendarIcon } from 'lucide-react';
+import { Users, FileUp, UserPlus, Edit, Trash2, CalendarIcon as LucideCalendarIcon, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,14 +19,13 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import { Switch } from '@/components/ui/switch';
-import { auth, db } from '@/lib/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { collection, addDoc, getDocs, doc, setDoc, updateDoc, deleteDoc, query, where, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { createUserAccount } from '@/lib/firebaseAdminActions';
 
 const kurirSchema = z.object({
-  uid: z.string().optional(), // Firebase Auth UID, not part of form for add/edit but good for state
+  uid: z.string().optional(),
   id: z.string().min(1, "ID Kurir wajib diisi, cth: PISTESTXXXX").optional(),
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
   nik: z.string().length(16, "NIK harus 16 digit").regex(/^\d+$/, "NIK hanya boleh berisi angka"),
@@ -50,11 +49,22 @@ export default function ManageKurirsPage() {
   const { toast } = useToast();
   const [kurirs, setKurirs] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddKurirDialogOpen, setIsAddKurirDialogOpen] = useState(false);
   const [isEditKurirDialogOpen, setIsEditKurirDialogOpen] = useState(false);
   const [currentEditingKurir, setCurrentEditingKurir] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [firebaseError, setFirebaseError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
+   useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      try {
+        setCurrentUser(JSON.parse(userDataString) as UserProfile);
+      } catch (error) { console.error("Error parsing user data for manage kurirs page", error); }
+    }
+  }, []);
 
   const { register, handleSubmit, reset, control, formState: { errors }, setValue, watch } = useForm<KurirFormData>({
     resolver: zodResolver(kurirSchema),
@@ -89,100 +99,101 @@ export default function ManageKurirsPage() {
   }, []);
 
   const handleAddKurirSubmit: SubmitHandler<KurirFormData> = async (data) => {
+    setIsSubmitting(true);
     if (!data.passwordValue) {
       toast({ title: "Password Dibutuhkan", description: "Password awal wajib diisi untuk kurir baru.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
+    if (!currentUser) {
+      toast({ title: "Error", description: "Tidak dapat memverifikasi pengguna saat ini.", variant: "destructive" });
+      setIsSubmitting(false);
       return;
     }
 
     const appKurirId = data.id && data.id.trim() !== '' ? data.id.trim() : `K${String(Date.now()).slice(-7)}`;
     const emailForAuth = data.email && data.email.trim() !== '' ? data.email.trim() : `${appKurirId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`;
 
-    // Check if app-specific ID already exists in current list (basic check)
-    if (kurirs.some(k => k.id === appKurirId)) {
-      toast({ title: "Gagal Menambahkan", description: `ID Kurir ${appKurirId} sudah ada.`, variant: "destructive"});
+    if (kurirs.some(k => k.id === appKurirId || k.email === emailForAuth)) {
+      toast({ title: "Gagal Menambahkan", description: `ID Kurir atau Email sudah ada.`, variant: "destructive"});
+      setIsSubmitting(false);
       return;
     }
-    // Check if email already used (basic check)
-    if (kurirs.some(k => k.email === emailForAuth)) {
-        toast({ title: "Gagal Menambahkan", description: `Email ${emailForAuth} sudah terdaftar.`, variant: "destructive"});
-        return;
-    }
+
+    const newKurirProfile: Omit<UserProfile, 'uid'> = {
+      id: appKurirId,
+      fullName: data.fullName,
+      nik: data.nik,
+      email: emailForAuth,
+      role: 'Kurir',
+      jabatan: data.jabatan,
+      wilayah: data.wilayah,
+      area: data.area,
+      workLocation: data.workLocation,
+      joinDate: data.joinDate.toISOString(),
+      contractStatus: data.contractStatus,
+      bankName: data.bankName || '',
+      bankAccountNumber: data.bankAccountNumber || '',
+      bankRecipientName: data.bankRecipientName || '',
+      status: 'Aktif',
+      createdBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
+    };
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, emailForAuth, data.passwordValue);
-      const firebaseUser = userCredential.user;
+        const result = await createUserAccount(emailForAuth, data.passwordValue, newKurirProfile);
 
-      if (firebaseUser) {
-        const newKurirProfile: UserProfile = {
-          uid: firebaseUser.uid,
-          id: appKurirId,
-          fullName: data.fullName,
-          nik: data.nik,
-          email: emailForAuth,
-          role: 'Kurir',
-          jabatan: data.jabatan,
-          wilayah: data.wilayah,
-          area: data.area,
-          workLocation: data.workLocation,
-          joinDate: data.joinDate.toISOString(),
-          contractStatus: data.contractStatus,
-          bankName: data.bankName || '',
-          bankAccountNumber: data.bankAccountNumber || '',
-          bankRecipientName: data.bankRecipientName || '',
-          status: 'Aktif',
-          // avatarUrl and photoIdUrl can be added later or through a separate upload process
-        };
-
-        await setDoc(doc(db, "users", firebaseUser.uid), newKurirProfile);
-
-        toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} (ID: ${appKurirId}) berhasil ditambahkan.` });
-        fetchKurirs();
-        reset();
-        setIsAddKurirDialogOpen(false);
-      }
-    } catch (error: any) {
-      console.error("Error adding kurir: ", error);
-      let errorMessage = "Gagal menambahkan kurir.";
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "Email ini sudah terdaftar di Firebase Authentication. Gunakan email lain.";
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = "Password terlalu lemah. Gunakan minimal 6 karakter.";
-      }
-      toast({ title: "Error", description: errorMessage, variant: "destructive" });
+        if (result.success) {
+            toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} berhasil ditambahkan.` });
+            fetchKurirs();
+            reset();
+            setIsAddKurirDialogOpen(false);
+        } else {
+            let errorMessage = result.message || "Gagal menambahkan kurir.";
+            if (result.errorCode === 'auth/email-already-in-use') {
+                errorMessage = "Email ini sudah terdaftar. Gunakan email lain.";
+            }
+            toast({ title: "Error", description: errorMessage, variant: "destructive" });
+        }
+    } catch (error) {
+        console.error("Error creating kurir:", error);
+        toast({ title: "Error", description: "Terjadi kesalahan saat membuat akun.", variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
   const handleOpenEditDialog = (kurir: UserProfile) => {
     setCurrentEditingKurir(kurir);
-    setValue('uid', kurir.uid);
-    setValue('id', kurir.id); // App-specific ID
-    setValue('fullName', kurir.fullName);
-    setValue('nik', kurir.nik || '');
-    setValue('passwordValue', ''); 
-    setValue('jabatan', kurir.jabatan || '');
-    setValue('wilayah', kurir.wilayah || '');
-    setValue('area', kurir.area || '');
-    setValue('workLocation', kurir.workLocation || '');
     const joinDateObj = kurir.joinDate ? parseISO(kurir.joinDate) : new Date();
-    setValue('joinDate', isValid(joinDateObj) ? joinDateObj : new Date());
-    setValue('contractStatus', kurir.contractStatus || '');
-    setValue('bankName', kurir.bankName || '');
-    setValue('bankAccountNumber', kurir.bankAccountNumber || '');
-    setValue('bankRecipientName', kurir.bankRecipientName || '');
-    setValue('email', kurir.email || '');
-    setValue('status', kurir.status || 'Aktif');
+    
+    reset({
+        uid: kurir.uid,
+        id: kurir.id,
+        fullName: kurir.fullName,
+        nik: kurir.nik || '',
+        passwordValue: '',
+        jabatan: kurir.jabatan || '',
+        wilayah: kurir.wilayah || '',
+        area: kurir.area || '',
+        workLocation: kurir.workLocation || '',
+        joinDate: isValid(joinDateObj) ? joinDateObj : new Date(),
+        contractStatus: kurir.contractStatus || '',
+        bankName: kurir.bankName || '',
+        bankAccountNumber: kurir.bankAccountNumber || '',
+        bankRecipientName: kurir.bankRecipientName || '',
+        email: kurir.email || '',
+        status: kurir.status || 'Aktif',
+    });
     setIsEditKurirDialogOpen(true);
   };
 
   const handleEditKurirSubmit: SubmitHandler<KurirFormData> = async (data) => {
     if (!currentEditingKurir || !currentEditingKurir.uid) return;
+    setIsSubmitting(true);
 
-    // Check if new app-specific ID conflicts (if it's being changed and editable - currently ID is readOnly in edit)
-    // if (data.id && data.id !== currentEditingKurir.id && kurirs.some(k => k.id === data.id && k.uid !== currentEditingKurir.uid)) { ... }
-    
-    // Check if new email conflicts with other users (excluding the current user)
     if (data.email && data.email !== currentEditingKurir.email && kurirs.some(k => k.email === data.email && k.uid !== currentEditingKurir.uid)) {
         toast({ title: "Gagal Memperbarui", description: `Email ${data.email} sudah digunakan oleh kurir lain.`, variant: "destructive"});
+        setIsSubmitting(false);
         return;
     }
 
@@ -191,7 +202,7 @@ export default function ManageKurirsPage() {
       const updatedData: Partial<UserProfile> = {
         fullName: data.fullName,
         nik: data.nik,
-        email: data.email, // Note: Changing email in Firestore should ideally be synced with Firebase Auth email change
+        email: data.email,
         jabatan: data.jabatan,
         wilayah: data.wilayah,
         area: data.area,
@@ -202,9 +213,9 @@ export default function ManageKurirsPage() {
         bankAccountNumber: data.bankAccountNumber,
         bankRecipientName: data.bankRecipientName,
         status: data.status,
+        updatedAt: Timestamp.now().toDate().toISOString(),
+        updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
       };
-      // Password change is not handled here directly for simplicity. 
-      // It would typically involve re-authentication or Admin SDK.
 
       await updateDoc(kurirDocRef, updatedData);
       toast({ title: "Kurir Diperbarui", description: `Data Kurir ${data.fullName} berhasil diperbarui.` });
@@ -215,6 +226,8 @@ export default function ManageKurirsPage() {
     } catch (error: any) {
       console.error("Error updating kurir: ", error);
       toast({ title: "Error", description: `Gagal memperbarui kurir: ${error.message}`, variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
     }
   };
   
@@ -223,7 +236,7 @@ export default function ManageKurirsPage() {
         toast({ title: "Error", description: "UID Kurir tidak ditemukan.", variant: "destructive" });
         return;
     }
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus Kurir ${kurirToDelete.fullName}? Akun login Firebase terkait TIDAK akan dihapus secara otomatis melalui form ini.`)) {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus Kurir ${kurirToDelete.fullName}? Profil Firestore akan dihapus. Akun login di Authentication TIDAK terhapus.`)) {
         return;
     }
     try {
@@ -248,7 +261,11 @@ export default function ManageKurirsPage() {
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
     try {
       const kurirDocRef = doc(db, "users", kurirToUpdate.uid);
-      await updateDoc(kurirDocRef, { status: newStatus });
+      await updateDoc(kurirDocRef, { 
+          status: newStatus,
+          updatedAt: Timestamp.now().toDate().toISOString(),
+          updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
+      });
       toast({
         title: "Status Kurir Diperbarui",
         description: `Status kurir ${kurirToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
@@ -451,7 +468,7 @@ export default function ManageKurirsPage() {
                 <KurirFormFields />
                 <DialogFooter className="pt-6">
                   <Button type="button" variant="outline" onClick={() => { reset(); setIsAddKurirDialogOpen(false); }}>Batal</Button>
-                  <Button type="submit">Simpan Kurir</Button>
+                  <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Menyimpan...' : 'Simpan Kurir'}</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -543,7 +560,7 @@ export default function ManageKurirsPage() {
             <KurirFormFields isEdit={true}/>
             <DialogFooter className="pt-6">
               <Button type="button" variant="outline" onClick={() => { reset(); setIsEditKurirDialogOpen(false); setCurrentEditingKurir(null);}}>Batal</Button>
-              <Button type="submit">Simpan Perubahan</Button>
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -576,6 +593,3 @@ export default function ManageKurirsPage() {
     </div>
   );
 }
-    
-
-    

@@ -16,19 +16,18 @@ import { useToast } from '@/hooks/use-toast';
 import type { UserProfile, ApprovalRequest } from '@/types';
 import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createUserAccount } from '@/lib/firebaseAdminActions';
 
 const picSchema = z.object({
-  id: z.string().min(1, "ID PIC tidak boleh kosong").optional(), // App-specific ID
+  id: z.string().min(1, "ID PIC tidak boleh kosong").optional(),
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
   passwordValue: z.string().min(6, "Password minimal 6 karakter").optional().or(z.literal('')),
   workLocation: z.string().min(3, "Area tanggung jawab minimal 3 karakter"),
 });
 
-// For edit, password is not directly changed here.
 const editPicSchema = picSchema.omit({ passwordValue: true });
 
 type PICFormData = z.infer<typeof picSchema>;
@@ -38,6 +37,7 @@ export default function ManagePICsPage() {
   const { toast } = useToast();
   const [pics, setPics] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddPICDialogOpen, setIsAddPICDialogOpen] = useState(false);
   const [isEditPICDialogOpen, setIsEditPICDialogOpen] = useState(false);
   const [currentEditingPIC, setCurrentEditingPIC] = useState<UserProfile | null>(null);
@@ -77,35 +77,38 @@ export default function ManagePICsPage() {
     fetchPICs();
   }, []);
 
-  const { register, handleSubmit, reset, formState: { errors }, setValue } = useForm<PICFormData>({
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<PICFormData>({
     resolver: zodResolver(picSchema),
   });
   
-  const { register: registerEdit, handleSubmit: handleSubmitEdit, reset: resetEdit, formState: { errors: errorsEdit }, setValue: setValueEdit } = useForm<EditPICFormData>({
+  const { register: registerEdit, handleSubmit: handleSubmitEdit, reset: resetEdit, formState: { errors: errorsEdit } } = useForm<EditPICFormData>({
     resolver: zodResolver(editPicSchema),
   });
 
   const handleAddPIC: SubmitHandler<PICFormData> = async (data) => {
+    setIsSubmitting(true);
     if (!currentUser || !currentUser.uid) {
       toast({ title: "Error", description: "Pengguna tidak terautentikasi.", variant: "destructive" });
+      setIsSubmitting(false);
       return;
     }
     if (!data.passwordValue) {
-        const roleName = currentUser.role === 'Admin' ? 'pengajuan' : 'PIC';
-        toast({ title: "Password Dibutuhkan", description: `Password awal wajib diisi untuk ${roleName} baru.`, variant: "destructive" });
+        toast({ title: "Password Dibutuhkan", description: `Password awal wajib diisi untuk PIC baru.`, variant: "destructive" });
+        setIsSubmitting(false);
         return;
     }
 
     const appPICId = data.id && data.id.trim() !== '' ? data.id.trim() : `PIC${String(Date.now()).slice(-6)}`;
     const emailForAuth = data.email.trim();
 
+    if (pics.some(pic => pic.id === appPICId || pic.email === emailForAuth)) {
+      toast({ title: "Gagal Menambahkan", description: `ID Aplikasi PIC atau Email sudah ada.`, variant: "destructive"});
+      setIsSubmitting(false);
+      return;
+    }
+
     if (currentUser.role === 'Admin') {
-      // Admin mengajukan permintaan persetujuan
-      if (pics.some(pic => pic.id === appPICId || pic.email === emailForAuth)) {
-        toast({ title: "Gagal Mengajukan", description: `ID Aplikasi PIC atau Email sudah ada atau sedang diajukan.`, variant: "destructive"});
-        return;
-      }
-      
+      // Admin submits an approval request
       const approvalPayload: Partial<UserProfile> & { passwordValue?: string } = {
         id: appPICId,
         fullName: data.fullName,
@@ -113,8 +116,7 @@ export default function ManagePICsPage() {
         role: 'PIC',
         status: 'PendingApproval',
         workLocation: data.workLocation,
-        passwordValue: data.passwordValue, // Password to be used by MasterAdmin for Auth creation
-        createdAt: new Date().toISOString(),
+        passwordValue: data.passwordValue,
         createdBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
       };
 
@@ -134,22 +136,18 @@ export default function ManagePICsPage() {
 
       try {
         await addDoc(collection(db, "approval_requests"), approvalRequest);
-        toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan PIC ${data.fullName} (ID: ${appPICId}) telah dikirim ke MasterAdmin untuk persetujuan.` });
+        toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan PIC ${data.fullName} telah dikirim ke MasterAdmin.` });
         reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
         setIsAddPICDialogOpen(false);
       } catch (error: any) {
         console.error("Error submitting approval request:", error);
         toast({ title: "Error Pengajuan", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
+      } finally {
+        setIsSubmitting(false);
       }
 
     } else if (currentUser.role === 'MasterAdmin') {
-        // MasterAdmin langsung menambahkan PIC menggunakan server action
-        if (pics.some(pic => pic.id === appPICId || pic.email === emailForAuth)) {
-            toast({ title: "Gagal Menambahkan", description: `ID Aplikasi PIC atau Email sudah ada.`, variant: "destructive"});
-            return;
-        }
-
-        const profileToCreate: Omit<UserProfile, 'uid' | 'createdAt'> = {
+        const profileToCreate: Omit<UserProfile, 'uid'> = {
             id: appPICId,
             fullName: data.fullName,
             email: emailForAuth,
@@ -164,7 +162,7 @@ export default function ManagePICsPage() {
             const result = await createUserAccount(emailForAuth, data.passwordValue, profileToCreate);
 
             if (result.success) {
-                toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} (ID: ${appPICId}) berhasil ditambahkan.` });
+                toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} berhasil ditambahkan.` });
                 fetchPICs();
                 reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
                 setIsAddPICDialogOpen(false);
@@ -178,25 +176,30 @@ export default function ManagePICsPage() {
         } catch (error) {
             console.error("Error creating PIC:", error);
             toast({ title: "Error", description: "Terjadi kesalahan saat membuat akun.", variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
         }
     }
   };
 
   const handleOpenEditDialog = (pic: UserProfile) => {
     setCurrentEditingPIC(pic);
-    setValueEdit('id', pic.id);
-    setValueEdit('fullName', pic.fullName);
-    setValueEdit('email', pic.email || '');
-    setValueEdit('workLocation', pic.workLocation || '');
-    // Password is not edited here
+    resetEdit({
+        id: pic.id,
+        fullName: pic.fullName,
+        email: pic.email || '',
+        workLocation: pic.workLocation || ''
+    });
     setIsEditPICDialogOpen(true);
   };
 
   const handleEditPIC: SubmitHandler<EditPICFormData> = async (data) => {
     if (!currentEditingPIC || !currentEditingPIC.uid || !currentUser || !currentUser.uid) return;
+    setIsSubmitting(true);
 
     if (data.email && data.email !== currentEditingPIC.email && pics.some(p => p.email === data.email && p.uid !== currentEditingPIC.uid)) {
         toast({ title: "Gagal Memperbarui", description: `Email ${data.email} sudah digunakan oleh PIC lain.`, variant: "destructive"});
+        setIsSubmitting(false);
         return;
     }
     
@@ -225,7 +228,7 @@ export default function ManagePICsPage() {
       };
       try {
         await addDoc(collection(db, "approval_requests"), approvalRequest);
-        toast({ title: "Permintaan Perubahan Diajukan", description: `Permintaan perubahan data PIC ${data.fullName} (ID: ${currentEditingPIC.id}) telah dikirim ke MasterAdmin.` });
+        toast({ title: "Permintaan Perubahan Diajukan", description: `Permintaan perubahan data PIC ${data.fullName} telah dikirim ke MasterAdmin.` });
       } catch (error: any) {
         toast({ title: "Error Pengajuan Update", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
       }
@@ -239,9 +242,10 @@ export default function ManagePICsPage() {
         toast({ title: "Error Update", description: `Gagal memperbarui PIC: ${error.message}`, variant: "destructive" });
       }
     }
-    resetEdit({id: '', fullName: '', email: '', workLocation: ''});
+    
     setIsEditPICDialogOpen(false);
     setCurrentEditingPIC(null);
+    setIsSubmitting(false);
   };
   
   const handleDeletePIC = async (picToDelete: UserProfile) => {
@@ -263,12 +267,12 @@ export default function ManagePICsPage() {
         };
         try {
             await addDoc(collection(db, "approval_requests"), approvalRequest);
-            toast({title: "Permintaan Diajukan", description: `Permintaan penonaktifan/penghapusan PIC ${picToDelete.fullName} telah dikirim ke MasterAdmin.`});
+            toast({title: "Permintaan Diajukan", description: `Permintaan penonaktifan/penghapusan PIC ${picToDelete.fullName} telah dikirim.`});
         } catch (error: any) {
             toast({ title: "Error Pengajuan", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
         }
     } else if (currentUser.role === 'MasterAdmin') {
-        if (!window.confirm(`Apakah Anda yakin ingin menghapus PIC ${picToDelete.fullName}? Profil Firestore akan dihapus, namun akun login Firebase Auth tidak akan terhapus otomatis dari sini.`)) {
+        if (!window.confirm(`Apakah Anda yakin ingin menghapus PIC ${picToDelete.fullName}? Profil Firestore akan dihapus. Akun login di Authentication TIDAK terhapus.`)) {
             return;
         }
         try {
@@ -394,8 +398,8 @@ export default function ManagePICsPage() {
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => { reset(); setIsAddPICDialogOpen(false); }}>Batal</Button>
-                  <Button type="submit">
-                    {currentUser.role === 'Admin' ? 'Ajukan Penambahan' : 'Simpan PIC'}
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? 'Memproses...' : (currentUser.role === 'Admin' ? 'Ajukan Penambahan' : 'Simpan PIC')}
                   </Button>
                 </DialogFooter>
               </form>
@@ -444,12 +448,7 @@ export default function ManagePICsPage() {
                             checked={pic.status === 'Aktif'}
                             onCheckedChange={(newStatusChecked) => handleStatusChange(pic, newStatusChecked)}
                             aria-label={`Status PIC ${pic.fullName}`}
-                            onClick={(e) => {
-                              if (currentUser.role === 'Admin') {
-                                e.preventDefault(); 
-                                handleStatusChange(pic, !(pic.status === 'Aktif'));
-                              }
-                            }}
+                            disabled={currentUser?.role !== 'MasterAdmin'}
                           />
                           <span className={`ml-2 text-xs ${pic.status === 'Aktif' ? 'text-green-600' : pic.status === 'PendingApproval' ? 'text-yellow-600' : 'text-red-600'}`}>
                             {pic.status}
@@ -479,7 +478,7 @@ export default function ManagePICsPage() {
       <Dialog open={isEditPICDialogOpen} onOpenChange={(open) => {
         if (!open) {
           setCurrentEditingPIC(null);
-          resetEdit({id: '', fullName: '', email: '', workLocation: ''});
+          resetEdit();
         }
         setIsEditPICDialogOpen(open);
       }}>
@@ -502,7 +501,7 @@ export default function ManagePICsPage() {
               <Label htmlFor="editPicEmail">Email <span className="text-destructive">*</span></Label>
               <Input id="editPicEmail" type="email" {...registerEdit("email")} />
               {errorsEdit.email && <p className="text-destructive text-sm mt-1">{errorsEdit.email.message}</p>}
-               <p className="text-xs text-muted-foreground mt-1">Mengubah email di sini hanya mempengaruhi profil Firestore. Untuk mengubah email login Firebase Auth, perlu proses terpisah.</p>
+               <p className="text-xs text-muted-foreground mt-1">Mengubah email di sini hanya mempengaruhi profil Firestore.</p>
             </div>
             <div>
               <Label htmlFor="editPicWorkLocation">Area Tanggung Jawab <span className="text-destructive">*</span></Label>
@@ -510,9 +509,9 @@ export default function ManagePICsPage() {
               {errorsEdit.workLocation && <p className="text-destructive text-sm mt-1">{errorsEdit.workLocation.message}</p>}
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { resetEdit({id: '', fullName: '', email: '', workLocation: ''}); setIsEditPICDialogOpen(false); setCurrentEditingPIC(null);}}>Batal</Button>
-              <Button type="submit">
-                 {currentUser.role === 'Admin' ? 'Ajukan Perubahan' : 'Simpan Perubahan'}
+              <Button type="button" variant="outline" onClick={() => { setIsEditPICDialogOpen(false); }}>Batal</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                 {isSubmitting ? 'Memproses...' : (currentUser?.role === 'Admin' ? 'Ajukan Perubahan' : 'Simpan Perubahan')}
               </Button>
             </DialogFooter>
           </form>

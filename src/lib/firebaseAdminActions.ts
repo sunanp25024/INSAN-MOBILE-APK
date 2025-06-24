@@ -1,12 +1,12 @@
 'use server';
 
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
-import { getFirestore, setDoc, doc } from "firebase/firestore";
+import { getFirestore, setDoc, doc, Timestamp } from "firebase/firestore";
 import type { UserProfile } from "@/types";
 
-// A unique name for the secondary app to avoid conflicts with the primary app.
-const secondaryAppName = "secondary-auth-app";
+// A unique name for the secondary app to avoid conflicts with the primary client-side app.
+const secondaryAppName = "secondary-auth-app-for-creation";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -18,7 +18,7 @@ const firebaseConfig = {
 };
 
 // Safely initialize the secondary app. If it's already initialized, use the existing one.
-const secondaryApp = getApps().find(app => app.name === secondaryAppName) 
+const secondaryApp: FirebaseApp = getApps().find(app => app.name === secondaryAppName) 
     ? getApp(secondaryAppName) 
     : initializeApp(firebaseConfig, secondaryAppName);
 
@@ -36,7 +36,7 @@ const secondaryDb = getFirestore(secondaryApp);
 export async function createUserAccount(
     email: string, 
     password: string, 
-    profileData: Omit<UserProfile, 'uid' | 'createdAt' | 'joinDate'> & { joinDate?: string }
+    profileData: Omit<UserProfile, 'uid'>
 ) {
     try {
         // 1. Create the user in Firebase Authentication using the secondary app
@@ -51,12 +51,10 @@ export async function createUserAccount(
         const fullProfile: UserProfile = {
             ...profileData,
             uid: newUser.uid,
-            createdAt: new Date().toISOString(),
-            joinDate: profileData.joinDate || new Date().toISOString(),
+            createdAt: Timestamp.now().toDate().toISOString(), // Use server timestamp for consistency
         };
 
         // 3. Save the complete user profile to the 'users' collection in Firestore
-        // This uses the secondary Firestore instance.
         await setDoc(doc(secondaryDb, "users", newUser.uid), fullProfile);
         
         return { success: true, message: "User created successfully.", uid: newUser.uid };
