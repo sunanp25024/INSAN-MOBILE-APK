@@ -7,7 +7,7 @@ import { MailCheck, CheckCircle, XCircle, AlertCircle, Hourglass } from 'lucide-
 import { useToast } from '@/hooks/use-toast';
 import type { ApprovalRequest, UserProfile } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 
 
 const StatusIcon = ({ status }: { status: ApprovalRequest['status'] }) => {
@@ -50,15 +50,20 @@ export default function PendingApprovalsPage() {
     try {
       const q = query(
         collection(db, "approval_requests"), 
-        where("requestedByUid", "==", adminUid),
-        orderBy("requestTimestamp", "desc")
+        where("requestedByUid", "==", adminUid)
       );
       const querySnapshot = await getDocs(q);
       const fetchedRequests: ApprovalRequest[] = [];
       querySnapshot.forEach((doc) => {
         fetchedRequests.push({ id: doc.id, ...doc.data() } as ApprovalRequest);
       });
-      setRequests(fetchedRequests);
+       // Sort on the client-side to avoid needing a composite index
+      const sortedRequests = fetchedRequests.sort((a, b) => {
+        const timeA = (a.requestTimestamp as Timestamp)?.toMillis() || 0;
+        const timeB = (b.requestTimestamp as Timestamp)?.toMillis() || 0;
+        return timeB - timeA;
+      });
+      setRequests(sortedRequests);
     } catch (error) {
       console.error("Error fetching pending approvals: ", error);
       toast({ title: "Error", description: "Gagal memuat daftar status persetujuan.", variant: "destructive" });
