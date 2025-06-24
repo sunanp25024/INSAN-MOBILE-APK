@@ -5,7 +5,7 @@ import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { getFirestore, setDoc, doc, Timestamp } from "firebase/firestore";
 import type { UserProfile } from "@/types";
 
-// A unique name for the secondary app to avoid conflicts with the primary client-side app.
+// Nama unik untuk aplikasi sekunder untuk menghindari konflik dengan aplikasi sisi klien utama.
 const secondaryAppName = "secondary-auth-app-for-creation";
 
 const firebaseConfig = {
@@ -17,7 +17,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Safely initialize the secondary app. If it's already initialized, use the existing one.
+// Menginisialisasi aplikasi sekunder dengan aman. Jika sudah diinisialisasi, gunakan yang sudah ada.
 const secondaryApp: FirebaseApp = getApps().find(app => app.name === secondaryAppName) 
     ? getApp(secondaryAppName) 
     : initializeApp(firebaseConfig, secondaryAppName);
@@ -26,12 +26,12 @@ const secondaryAuth = getAuth(secondaryApp);
 const secondaryDb = getFirestore(secondaryApp);
 
 /**
- * Creates a user account in Firebase Auth and their profile in Firestore
- * using a secondary Firebase app instance to avoid logging out the current admin.
- * @param email The new user's email.
- * @param password The new user's password.
- * @param profileData The user profile data to be stored in Firestore.
- * @returns An object with success status and a message or error.
+ * Membuat akun pengguna di Firebase Auth dan profil mereka di Firestore
+ * menggunakan instance aplikasi Firebase sekunder untuk menghindari logout admin saat ini.
+ * @param email Email pengguna baru.
+ * @param password Password pengguna baru.
+ * @param profileData Data profil pengguna untuk disimpan di Firestore.
+ * @returns Objek dengan status keberhasilan dan pesan atau error.
  */
 export async function createUserAccount(
     email: string, 
@@ -39,31 +39,35 @@ export async function createUserAccount(
     profileData: Omit<UserProfile, 'uid'>
 ) {
     try {
-        // 1. Create the user in Firebase Authentication using the secondary app
+        // 1. Buat pengguna di Firebase Authentication menggunakan aplikasi sekunder
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
         const newUser = userCredential.user;
 
         if (!newUser) {
-            throw new Error("User creation failed in Authentication.");
+            throw new Error("Pembuatan pengguna di Authentication gagal.");
         }
         
-        // 2. Prepare the full profile object with the new UID from Auth
+        // 2. Siapkan objek profil lengkap dengan UID baru dari Auth
         const fullProfile: UserProfile = {
             ...profileData,
             uid: newUser.uid,
-            createdAt: Timestamp.now().toDate().toISOString(), // Use server timestamp for consistency
+            createdAt: new Date().toISOString(), // Gunakan string ISO untuk konsistensi
         };
 
-        // 3. Save the complete user profile to the 'users' collection in Firestore
+        // 3. Simpan profil pengguna lengkap ke koleksi 'users' di Firestore
         await setDoc(doc(secondaryDb, "users", newUser.uid), fullProfile);
         
-        return { success: true, message: "User created successfully.", uid: newUser.uid };
+        return { success: true, message: "Pengguna berhasil dibuat.", uid: newUser.uid };
 
     } catch (error: any) {
-        console.error("Error in createUserAccount server action:", error);
+        console.error("Error di server action createUserAccount:", error);
+        // Hapus pengguna dari Auth jika penyimpanan Firestore gagal untuk menghindari data yatim
+        if (getAuth(secondaryApp).currentUser) {
+            await getAuth(secondaryApp).currentUser?.delete();
+        }
         return { 
             success: false, 
-            message: `Failed to create user: ${error.message}`, 
+            message: `Gagal membuat pengguna: ${error.message}`, 
             errorCode: error.code 
         };
     }

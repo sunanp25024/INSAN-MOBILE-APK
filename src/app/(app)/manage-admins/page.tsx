@@ -167,7 +167,7 @@ export default function ManageAdminsPage() {
       const updatedData: Partial<UserProfile> = {
         fullName: data.fullName,
         email: data.email,
-        updatedAt: Timestamp.now().toDate().toISOString(),
+        updatedAt: new Date().toISOString(),
         updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
       };
       
@@ -218,7 +218,7 @@ export default function ManageAdminsPage() {
       const adminDocRef = doc(db, "users", adminToUpdate.uid);
       await updateDoc(adminDocRef, { 
           status: newStatus,
-          updatedAt: Timestamp.now().toDate().toISOString(),
+          updatedAt: new Date().toISOString(),
           updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
       });
       toast({

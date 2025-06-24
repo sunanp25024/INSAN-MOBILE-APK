@@ -13,7 +13,7 @@ import { UserPlus, ArrowLeft } from 'lucide-react';
 import type { UserProfile } from '@/types';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firestore';
+import { doc, setDoc } from 'firebase/firestore'; // Removed serverTimestamp import
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -46,20 +46,20 @@ export default function SetupAdminPage() {
 
       if (firebaseUser) {
         // 2. Create user profile in Firestore
-        const newAdminProfile: Omit<UserProfile, 'uid' | 'joinDate' | 'createdAt'> = {
+        const newAdminProfile: Omit<UserProfile, 'uid'> = {
           id: data.appId,
           fullName: data.fullName,
           email: data.email,
           role: 'MasterAdmin',
           status: 'Aktif',
+          joinDate: new Date().toISOString(), // Use ISO string
+          createdAt: new Date().toISOString(), // Use ISO string
         };
 
         // Use Firebase Auth UID as document ID in Firestore for consistency
         await setDoc(doc(db, "users", firebaseUser.uid), {
             ...newAdminProfile,
             uid: firebaseUser.uid, // also store uid inside the document
-            joinDate: serverTimestamp(),
-            createdAt: serverTimestamp(),
         });
 
         toast({

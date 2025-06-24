@@ -126,7 +126,7 @@ export default function ManageKurirsPage() {
       nik: data.nik,
       email: emailForAuth,
       role: 'Kurir',
-      jabatan: data.jabatan,
+      position: data.jabatan,
       wilayah: data.wilayah,
       area: data.area,
       workLocation: data.workLocation,
@@ -203,7 +203,7 @@ export default function ManageKurirsPage() {
         fullName: data.fullName,
         nik: data.nik,
         email: data.email,
-        jabatan: data.jabatan,
+        position: data.jabatan,
         wilayah: data.wilayah,
         area: data.area,
         workLocation: data.workLocation,
@@ -213,7 +213,7 @@ export default function ManageKurirsPage() {
         bankAccountNumber: data.bankAccountNumber,
         bankRecipientName: data.bankRecipientName,
         status: data.status,
-        updatedAt: Timestamp.now().toDate().toISOString(),
+        updatedAt: new Date().toISOString(),
         updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
       };
 
@@ -263,7 +263,7 @@ export default function ManageKurirsPage() {
       const kurirDocRef = doc(db, "users", kurirToUpdate.uid);
       await updateDoc(kurirDocRef, { 
           status: newStatus,
-          updatedAt: Timestamp.now().toDate().toISOString(),
+          updatedAt: new Date().toISOString(),
           updatedBy: currentUser ? { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role } : undefined
       });
       toast({
