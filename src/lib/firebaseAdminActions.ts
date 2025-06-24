@@ -1,7 +1,8 @@
+
 'use server';
 
 import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
-import type { UserProfile } from '@/types';
+import type { UserProfile, UserRole } from '@/types';
 
 /**
  * Creates a user account in Firebase Auth and their profile in Firestore
@@ -79,4 +80,141 @@ export async function deleteUserAccount(uid: string) {
       errorCode: error.code,
     };
   }
+}
+
+
+export async function importUsers(
+  usersData: any[],
+  role: UserRole,
+  creatorProfile: { uid: string; fullName: string; role: UserRole }
+) {
+  let createdCount = 0;
+  let failedCount = 0;
+  const errors: string[] = [];
+
+  for (const [index, userData] of usersData.entries()) {
+    const rowNum = index + 2; // Excel rows are 1-based, plus header
+
+    // --- Basic validation ---
+    if (!userData.fullName || !userData.passwordValue) {
+      failedCount++;
+      errors.push(`Baris ${rowNum}: Nama Lengkap dan Password Wajib diisi.`);
+      continue;
+    }
+    
+    let emailForAuth: string;
+    let appUserId: string;
+
+    // --- Role-specific logic & validation ---
+    let profileToCreate: Omit<UserProfile, 'uid'>;
+
+    try {
+      switch (role) {
+        case 'Admin':
+          if (!userData.email) {
+            failedCount++;
+            errors.push(`Baris ${rowNum}: Email wajib diisi untuk Admin.`);
+            continue;
+          }
+          emailForAuth = userData.email.trim();
+          appUserId = userData.id?.toString().trim() || `ADMIN${String(Date.now()).slice(-6) + index}`;
+          profileToCreate = {
+            id: appUserId,
+            fullName: userData.fullName,
+            email: emailForAuth,
+            role: 'Admin',
+            status: 'Aktif',
+            joinDate: new Date().toISOString(),
+            createdBy: creatorProfile,
+          };
+          break;
+
+        case 'PIC':
+           if (!userData.email || !userData.workLocation) {
+            failedCount++;
+            errors.push(`Baris ${rowNum}: Email dan Area Tanggung Jawab wajib diisi untuk PIC.`);
+            continue;
+          }
+          emailForAuth = userData.email.trim();
+          appUserId = userData.id?.toString().trim() || `PIC${String(Date.now()).slice(-6) + index}`;
+          profileToCreate = {
+            id: appUserId,
+            fullName: userData.fullName,
+            email: emailForAuth,
+            role: 'PIC',
+            status: 'Aktif',
+            workLocation: userData.workLocation,
+            joinDate: new Date().toISOString(),
+            createdBy: creatorProfile,
+          };
+          break;
+
+        case 'Kurir':
+          if (!userData.nik || !userData.jabatan || !userData.wilayah || !userData.area || !userData.workLocation || !userData.joinDate || !userData.contractStatus) {
+            failedCount++;
+            errors.push(`Baris ${rowNum}: Semua kolom wajib diisi untuk Kurir (kecuali email dan bank).`);
+            continue;
+          }
+          appUserId = userData.id?.toString().trim() || `K${String(Date.now()).slice(-7) + index}`;
+          emailForAuth = userData.email?.trim() || `${appUserId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`;
+          
+          // Handle Excel date which can be a number
+          let joinDate: Date;
+          if (typeof userData.joinDate === 'number') {
+            // Excel stores dates as serial numbers.
+             joinDate = new Date(Math.round((userData.joinDate - 25569) * 86400 * 1000));
+          } else {
+             joinDate = new Date(userData.joinDate);
+          }
+
+          if (isNaN(joinDate.getTime())) {
+             failedCount++;
+             errors.push(`Baris ${rowNum}: Format Tanggal Join tidak valid. Gunakan YYYY-MM-DD.`);
+             continue;
+          }
+
+          profileToCreate = {
+            id: appUserId,
+            fullName: userData.fullName,
+            nik: String(userData.nik),
+            email: emailForAuth,
+            role: 'Kurir',
+            position: userData.jabatan,
+            wilayah: userData.wilayah,
+            area: userData.area,
+            workLocation: userData.workLocation,
+            joinDate: joinDate.toISOString(),
+            contractStatus: userData.contractStatus,
+            bankName: userData.bankName || '',
+            bankAccountNumber: String(userData.bankAccountNumber || ''),
+            bankRecipientName: userData.bankRecipientName || '',
+            status: 'Aktif',
+            createdBy: creatorProfile,
+          };
+          break;
+        
+        default:
+          throw new Error("Peran tidak valid untuk impor");
+      }
+
+      const result = await createUserAccount(emailForAuth, String(userData.passwordValue), profileToCreate);
+      if (result.success) {
+        createdCount++;
+      } else {
+        failedCount++;
+        errors.push(`Baris ${rowNum} (${userData.fullName}): ${result.message}`);
+      }
+    } catch (e: any) {
+        failedCount++;
+        errors.push(`Baris ${rowNum} (${userData.fullName}): Terjadi error tak terduga - ${e.message}`);
+    }
+  }
+
+  return {
+    success: createdCount > 0,
+    createdCount,
+    failedCount,
+    totalRows: usersData.length,
+    errors,
+  };
 }

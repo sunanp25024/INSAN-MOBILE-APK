@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Briefcase, FileUp, UserPlus, Edit, Trash2, AlertCircle, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount, importUsers } from '@/lib/firebaseAdminActions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import * as XLSX from 'xlsx';
 
@@ -46,6 +46,8 @@ export default function ManagePICsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [firebaseError, setFirebaseError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const userDataString = localStorage.getItem('loggedInUser');
@@ -266,8 +268,70 @@ export default function ManagePICsPage() {
     setIsSubmitting(false);
   };
 
-  const handleImportPICs = () => {
-     toast({ title: "Fitur Dalam Pengembangan", description: "Logika pemrosesan file impor belum diimplementasikan, namun file dapat dipilih." });
+  const handleFileSelectAndImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isImporting) return;
+    if (!event.target.files || event.target.files.length === 0) return;
+    if (!currentUser) {
+        toast({ title: "Error", description: "Pengguna saat ini tidak terverifikasi.", variant: "destructive"});
+        return;
+    }
+
+    const file = event.target.files[0];
+    setIsImporting(true);
+    toast({ title: "Memulai Impor", description: `Memproses file ${file.name}...` });
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const data = e.target?.result;
+            if (!data) throw new Error("Gagal membaca file.");
+            
+            const workbook = XLSX.read(data, { type: 'binary' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet);
+
+            if (json.length === 0) {
+              toast({ title: "File Kosong", description: "File Excel yang Anda unggah tidak berisi data.", variant: "destructive" });
+              return;
+            }
+
+            const creatorProfile = { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role };
+            const result = await importUsers(json, 'PIC', creatorProfile);
+
+            if (result.success) {
+                toast({
+                    title: "Impor Selesai",
+                    description: `${result.createdCount} dari ${result.totalRows} PIC berhasil ditambahkan. ${result.failedCount > 0 ? `${result.failedCount} gagal.` : ''}`,
+                    duration: 9000,
+                });
+                if (result.errors && result.errors.length > 0) {
+                    console.error("Import Errors:", result.errors);
+                }
+                fetchPICs(); // Refresh the list
+            } else {
+                toast({
+                    title: "Impor Gagal Total",
+                    description: `Tidak ada PIC yang berhasil ditambahkan. Error: ${result.errors?.[0] || 'Unknown error'}`,
+                    variant: "destructive",
+                    duration: 9000,
+                });
+            }
+        } catch (error: any) {
+            console.error(error);
+            toast({ title: "Error Memproses File", description: error.message, variant: "destructive" });
+        } finally {
+            setIsImporting(false);
+            if(fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+    reader.onerror = () => {
+      toast({ title: "Error Membaca File", variant: "destructive" });
+      setIsImporting(false);
+    };
+    reader.readAsBinaryString(file);
   };
   
   const handleDownloadTemplate = () => {
@@ -542,14 +606,22 @@ export default function ManagePICsPage() {
         <CardContent className="space-y-4">
           <div>
             <Label htmlFor="excel-file-pic">Pilih File Excel (.xlsx)</Label>
-            <Input id="excel-file-pic" type="file" accept=".xlsx, .xls" className="mt-1" />
+            <Input 
+              id="excel-file-pic" 
+              type="file" 
+              accept=".xlsx, .xls"
+              className="mt-1 hidden"
+              onChange={handleFileSelectAndImport}
+              ref={fileInputRef}
+              disabled={isImporting}
+            />
           </div>
           <p className="text-xs text-muted-foreground">
-            Format kolom yang diharapkan: ID PIC (opsional), Nama Lengkap, Email, Password Awal, Area Tanggung Jawab.
+            Format kolom yang diharapkan: fullName, email, passwordValue, workLocation, id (optional).
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
-            <Button onClick={handleImportPICs} className="w-full sm:w-auto">
-              <FileUp className="mr-2 h-4 w-4" /> Impor Data PIC
+            <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting}>
+              <FileUp className="mr-2 h-4 w-4" /> {isImporting ? 'Mengimpor...' : 'Impor Data PIC'}
             </Button>
             <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto">
                 <Download className="mr-2 h-4 w-4"/> Unduh Template
