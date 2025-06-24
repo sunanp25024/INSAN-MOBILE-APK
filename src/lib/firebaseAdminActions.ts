@@ -95,33 +95,38 @@ export async function importUsers(
   for (const [index, userData] of usersData.entries()) {
     const rowNum = index + 2; // Excel rows are 1-based, plus header
 
-    let emailForAuth: string;
-    let appUserId: string;
-    let profileToCreate: Omit<UserProfile, 'uid'>;
-
     try {
+        let emailForAuth: string;
+        let appUserId: string;
+        let profileToCreate: Omit<UserProfile, 'uid'>;
+
+        // Helper to check for missing fields and return a formatted error string
+        const getMissingFieldsError = (requiredFields: Record<string, string>, data: any): string | null => {
+            const missingFields = Object.entries(requiredFields)
+                .filter(([key]) => !data[key] || String(data[key]).trim() === '')
+                .map(([, value]) => value);
+
+            if (missingFields.length > 0) {
+                return `Baris ${rowNum}: Kolom berikut wajib diisi: ${missingFields.join(', ')}.`;
+            }
+            return null;
+        };
+
       switch (role) {
         case 'Admin':
-          const requiredAdminFields = {
-            fullName: 'Nama Lengkap',
-            email: 'Email',
-            passwordValue: 'Password'
-          };
-          const missingAdminFields = Object.entries(requiredAdminFields)
-            .filter(([key]) => !userData[key])
-            .map(([, value]) => value);
-
-          if (missingAdminFields.length > 0) {
-            failedCount++;
-            errors.push(`Baris ${rowNum}: Kolom berikut wajib diisi: ${missingAdminFields.join(', ')}.`);
-            continue;
+          const requiredAdminFields = { fullName: 'Nama Lengkap', email: 'Email', passwordValue: 'Password' };
+          const adminValidationError = getMissingFieldsError(requiredAdminFields, userData);
+          if (adminValidationError) {
+              errors.push(adminValidationError);
+              failedCount++;
+              continue;
           }
 
-          emailForAuth = userData.email.trim();
+          emailForAuth = String(userData.email).trim();
           appUserId = userData.id?.toString().trim() || `ADMIN${String(Date.now()).slice(-6) + index}`;
           profileToCreate = {
             id: appUserId,
-            fullName: userData.fullName,
+            fullName: String(userData.fullName).trim(),
             email: emailForAuth,
             role: 'Admin',
             status: 'Aktif',
@@ -131,31 +136,23 @@ export async function importUsers(
           break;
 
         case 'PIC':
-          const requiredPicFields = {
-            fullName: 'Nama Lengkap',
-            email: 'Email',
-            passwordValue: 'Password',
-            workLocation: 'Area Tanggung Jawab'
-          };
-           const missingPicFields = Object.entries(requiredPicFields)
-            .filter(([key]) => !userData[key])
-            .map(([, value]) => value);
-
-          if (missingPicFields.length > 0) {
-            failedCount++;
-            errors.push(`Baris ${rowNum}: Kolom berikut wajib diisi: ${missingPicFields.join(', ')}.`);
-            continue;
+          const requiredPicFields = { fullName: 'Nama Lengkap', email: 'Email', passwordValue: 'Password', workLocation: 'Area Tanggung Jawab' };
+          const picValidationError = getMissingFieldsError(requiredPicFields, userData);
+          if (picValidationError) {
+              errors.push(picValidationError);
+              failedCount++;
+              continue;
           }
 
-          emailForAuth = userData.email.trim();
+          emailForAuth = String(userData.email).trim();
           appUserId = userData.id?.toString().trim() || `PIC${String(Date.now()).slice(-6) + index}`;
           profileToCreate = {
             id: appUserId,
-            fullName: userData.fullName,
+            fullName: String(userData.fullName).trim(),
             email: emailForAuth,
             role: 'PIC',
             status: 'Aktif',
-            workLocation: userData.workLocation,
+            workLocation: String(userData.workLocation).trim(),
             joinDate: new Date().toISOString(),
             createdBy: creatorProfile,
           };
@@ -163,58 +160,63 @@ export async function importUsers(
 
         case 'Kurir':
           const requiredKurirFields = {
-            fullName: 'Nama Lengkap',
-            nik: 'NIK',
-            passwordValue: 'Password',
-            jabatan: 'Jabatan',
-            wilayah: 'Wilayah',
-            area: 'Area',
-            workLocation: 'Lokasi Kerja (Hub)',
-            joinDate: 'Tanggal Join',
-            contractStatus: 'Status Kontrak',
+            fullName: 'Nama Lengkap', nik: 'NIK', passwordValue: 'Password', jabatan: 'Jabatan',
+            wilayah: 'Wilayah', area: 'Area', workLocation: 'Lokasi Kerja (Hub)',
+            joinDate: 'Tanggal Join', contractStatus: 'Status Kontrak',
           };
-          
-          const missingKurirFields = Object.entries(requiredKurirFields)
-            .filter(([key]) => !userData[key])
-            .map(([, value]) => value);
+          const kurirValidationError = getMissingFieldsError(requiredKurirFields, userData);
+          if (kurirValidationError) {
+              errors.push(kurirValidationError);
+              failedCount++;
+              continue;
+          }
 
-          if (missingKurirFields.length > 0) {
-            failedCount++;
-            errors.push(`Baris ${rowNum}: Kolom berikut wajib diisi: ${missingKurirFields.join(', ')}.`);
-            continue;
+          // Specific content validation for Kurir
+          const nik = String(userData.nik).trim();
+          if (!/^\d{16}$/.test(nik)) {
+              errors.push(`Baris ${rowNum}: NIK harus 16 digit angka.`);
+              failedCount++;
+              continue;
+          }
+
+          const bankAccNumber = userData.bankAccountNumber ? String(userData.bankAccountNumber).trim() : '';
+          if (bankAccNumber && !/^\d+$/.test(bankAccNumber)) {
+              errors.push(`Baris ${rowNum}: Nomor Rekening hanya boleh berisi angka.`);
+              failedCount++;
+              continue;
+          }
+
+          let joinDate: Date;
+          if (typeof userData.joinDate === 'number') {
+             joinDate = new Date(Math.round((userData.joinDate - 25569) * 86400 * 1000));
+          } else {
+             joinDate = new Date(String(userData.joinDate).trim());
+          }
+
+          if (isNaN(joinDate.getTime())) {
+             errors.push(`Baris ${rowNum}: Format Tanggal Join tidak valid. Gunakan YYYY-MM-DD.`);
+             failedCount++;
+             continue;
           }
 
           appUserId = userData.id?.toString().trim() || `K${String(Date.now()).slice(-7) + index}`;
           emailForAuth = userData.email?.trim() || `${appUserId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`;
           
-          let joinDate: Date;
-          if (typeof userData.joinDate === 'number') {
-             joinDate = new Date(Math.round((userData.joinDate - 25569) * 86400 * 1000));
-          } else {
-             joinDate = new Date(userData.joinDate);
-          }
-
-          if (isNaN(joinDate.getTime())) {
-             failedCount++;
-             errors.push(`Baris ${rowNum}: Format Tanggal Join tidak valid. Gunakan YYYY-MM-DD.`);
-             continue;
-          }
-
           profileToCreate = {
             id: appUserId,
-            fullName: userData.fullName,
-            nik: String(userData.nik),
+            fullName: String(userData.fullName).trim(),
+            nik: nik,
             email: emailForAuth,
             role: 'Kurir',
-            position: userData.jabatan,
-            wilayah: userData.wilayah,
-            area: userData.area,
-            workLocation: userData.workLocation,
+            position: String(userData.jabatan).trim(),
+            wilayah: String(userData.wilayah).trim(),
+            area: String(userData.area).trim(),
+            workLocation: String(userData.workLocation).trim(),
             joinDate: joinDate.toISOString(),
-            contractStatus: userData.contractStatus,
-            bankName: userData.bankName || '',
-            bankAccountNumber: String(userData.bankAccountNumber || ''),
-            bankRecipientName: userData.bankRecipientName || '',
+            contractStatus: String(userData.contractStatus).trim(),
+            bankName: String(userData.bankName || '').trim(),
+            bankAccountNumber: bankAccNumber,
+            bankRecipientName: String(userData.bankRecipientName || '').trim(),
             status: 'Aktif',
             createdBy: creatorProfile,
           };
@@ -238,7 +240,7 @@ export async function importUsers(
   }
 
   return {
-    success: createdCount > 0,
+    success: createdCount > 0 && failedCount === 0,
     createdCount,
     failedCount,
     totalRows: usersData.length,
