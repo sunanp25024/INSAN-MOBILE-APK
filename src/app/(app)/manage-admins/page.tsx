@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, importUsers } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus } from '@/lib/firebaseAdminActions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import * as XLSX from 'xlsx';
 
@@ -274,26 +274,25 @@ export default function ManageAdminsPage() {
 
 
   const handleStatusChange = async (adminToUpdate: UserProfile, newStatusActive: boolean) => {
-    if (!adminToUpdate.uid || !currentUser || currentUser.role !== 'MasterAdmin') return;
+    if (!adminToUpdate.uid || !currentUser || currentUser.role !== 'MasterAdmin') {
+      toast({ title: "Akses Ditolak", description: "Hanya MasterAdmin yang dapat mengubah status.", variant: "destructive" });
+      return;
+    }
+    
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
-    try {
-      const adminDocRef = doc(db, "users", adminToUpdate.uid);
-      await updateDoc(adminDocRef, { 
-          status: newStatus,
-          updatedAt: new Date().toISOString(),
-          updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role }
-      });
-      // Also update Firebase Auth user disabled status
-      await adminAuth.updateUser(adminToUpdate.uid, { disabled: !newStatusActive });
+    const handlerProfile = { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role };
 
+    const result = await updateUserStatus(adminToUpdate.uid, newStatus, handlerProfile);
+
+    if (result.success) {
       toast({
         title: "Status Admin Diperbarui",
         description: `Status admin ${adminToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
       });
       fetchAdmins();
-    } catch (error: any) {
-      console.error("Error updating admin status: ", error);
-      toast({ title: "Error", description: `Gagal memperbarui status admin: ${error.message}`, variant: "destructive" });
+    } else {
+      console.error("Error updating admin status:", result.message);
+      toast({ title: "Error", description: `Gagal memperbarui status admin: ${result.message}`, variant: "destructive" });
     }
   };
 

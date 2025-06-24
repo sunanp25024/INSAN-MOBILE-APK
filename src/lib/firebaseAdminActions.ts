@@ -329,3 +329,48 @@ export async function handleApprovalRequest(
     return { success: false, message: error.message };
   }
 }
+
+/**
+ * Updates a user's status in both Firestore and Firebase Auth.
+ * This is a privileged action that should only be callable by authorized users (e.g., MasterAdmin).
+ *
+ * @param uid The UID of the user to update.
+ * @param newStatus The new status ('Aktif' or 'Nonaktif').
+ * @param handlerProfile The profile of the user performing the action.
+ * @returns An object with the success status and a message.
+ */
+export async function updateUserStatus(
+  uid: string,
+  newStatus: 'Aktif' | 'Nonaktif',
+  handlerProfile: { uid: string; name: string; role: UserRole }
+) {
+  if (!uid) {
+    return { success: false, message: 'User UID is required.' };
+  }
+  if (handlerProfile.role !== 'MasterAdmin') {
+    return { success: false, message: 'Only MasterAdmin can change user status directly.' };
+  }
+
+  try {
+    const userToUpdateRef = adminDb.collection('users').doc(uid);
+
+    // Update Firestore document
+    await userToUpdateRef.update({
+      status: newStatus,
+      updatedAt: new Date().toISOString(),
+      updatedBy: { uid: handlerProfile.uid, name: handlerProfile.name, role: handlerProfile.role },
+    });
+
+    // Update Firebase Auth user disabled status
+    await adminAuth.updateUser(uid, { disabled: newStatus === 'Nonaktif' });
+
+    return { success: true, message: 'User status updated successfully.' };
+  } catch (error: any) {
+    console.error(`Error updating status for user ${uid}:`, error);
+    return {
+      success: false,
+      message: `Failed to update user status: ${error.message}`,
+      errorCode: error.code,
+    };
+  }
+}
