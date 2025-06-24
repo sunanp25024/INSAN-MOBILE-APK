@@ -5,16 +5,19 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
+// Aliasing BarChart from recharts to avoid conflict with lucide-react's BarChart icon
 import { ResponsiveContainer, BarChart as RechartsBarChart, LineChart, PieChart, Pie, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
-import { TrendingUp, Package, CheckCircle, Percent, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon as LucideCalendarIcon, AlertCircle, BarChart } from 'lucide-react';
+// Importing icons, including BarChart icon from lucide-react
+import { TrendingUp, Package, CheckCircle, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon as LucideCalendarIcon, AlertCircle, BarChart as BarChartIcon } from 'lucide-react';
 import type { UserProfile, KurirDailyTaskDoc, AttendanceRecord } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format, startOfWeek, endOfWeek, parseISO, startOfDay, subDays } from "date-fns";
-import { id } from "date-fns/locale";
+import { id as indonesiaLocale } from "date-fns/locale";
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 
+// Interface for the processed performance data
 interface PerformanceData {
   daily: { date: string; totalDelivered: number; totalPending: number; successRate: number; }[];
   weekly: { weekLabel: string; delivered: number; pending: number; }[];
@@ -28,7 +31,6 @@ export default function PerformancePage() {
   const [isLoading, setIsLoading] = useState(true);
   
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [dateRange, setDateRange] = useState<{ from: Date | undefined, to: Date | undefined }>({ from: new Date(Date.now() - 29 * 86400000), to: new Date() });
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   useEffect(() => {
@@ -47,13 +49,14 @@ export default function PerformancePage() {
   }, []);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser?.uid) return;
 
     const fetchPerformanceData = async () => {
       setIsLoading(true);
       try {
-        // Fetch daily task data for the last 90 days for performance calculation
         const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+        
+        // Fetch daily task data for the last 90 days for performance calculation
         const tasksQuery = query(
           collection(db, "kurir_daily_tasks"),
           where("kurirUid", "==", currentUser.uid),
@@ -64,7 +67,7 @@ export default function PerformancePage() {
         const tasksSnapshot = await getDocs(tasksQuery);
         const dailyTasks: KurirDailyTaskDoc[] = tasksSnapshot.docs.map(doc => doc.data() as KurirDailyTaskDoc);
 
-        // Fetch attendance data
+        // Fetch attendance data for the last 90 days
         const attendanceQuery = query(
           collection(db, "attendance"),
           where("kurirUid", "==", currentUser.uid),
@@ -83,27 +86,30 @@ export default function PerformancePage() {
 
         const weeklyPerformanceMap = new Map<string, { delivered: number, pending: number }>();
         dailyTasks.forEach(task => {
-          const taskDate = parseISO(task.date);
-          const weekStart = startOfWeek(taskDate, { weekStartsOn: 1 });
-          const weekLabel = `W-${format(weekStart, 'W')}`;
-          
-          const existing = weeklyPerformanceMap.get(weekLabel) || { delivered: 0, pending: 0 };
-          existing.delivered += task.finalDeliveredCount || 0;
-          existing.pending += task.finalPendingReturnCount || 0;
-          weeklyPerformanceMap.set(weekLabel, existing);
+          try {
+            const taskDate = parseISO(task.date);
+            const weekStart = startOfWeek(taskDate, { weekStartsOn: 1 });
+            const weekLabel = `W-${format(weekStart, 'W')}`;
+            
+            const existing = weeklyPerformanceMap.get(weekLabel) || { delivered: 0, pending: 0 };
+            existing.delivered += task.finalDeliveredCount || 0;
+            existing.pending += task.finalPendingReturnCount || 0;
+            weeklyPerformanceMap.set(weekLabel, existing);
+          } catch (e) {
+            console.warn(`Could not parse date for weekly performance: ${task.date}`, e)
+          }
         });
 
         const weeklyPerformance = Array.from(weeklyPerformanceMap.entries())
             .map(([weekLabel, data]) => ({ weekLabel, ...data }))
             .sort((a, b) => a.weekLabel.localeCompare(b.weekLabel));
 
-
         const totalAttendanceDays = attendanceRecords.filter(rec => rec.status === 'Present' || rec.status === 'Late').length;
         const totalWorkingDays = dailyTasks.length; 
         const attendanceRate = totalWorkingDays > 0 ? (totalAttendanceDays / totalWorkingDays) * 100 : 0;
         
         const overall = dailyTasks.reduce((acc, task) => {
-            acc.totalPackagesEver += task.totalPackages;
+            acc.totalPackagesEver += task.totalPackages || 0;
             acc.totalSuccessfulDeliveriesEver += task.finalDeliveredCount || 0;
             return acc;
         }, { totalPackagesEver: 0, totalSuccessfulDeliveriesEver: 0 });
@@ -125,16 +131,16 @@ export default function PerformancePage() {
     fetchPerformanceData();
   }, [currentUser]);
 
-
   const filteredDailyPerformance = useMemo(() => {
     if (!performanceData) return [];
     const thirtyDaysAgo = subDays(new Date(), 30);
     return performanceData.daily.filter(item => {
-      const itemDate = parseISO(item.date);
-      return itemDate >= thirtyDaysAgo;
+      try {
+        const itemDate = parseISO(item.date);
+        return itemDate >= thirtyDaysAgo;
+      } catch (e) { return false; }
     }).map(d => ({...d, name: format(new Date(d.date), 'dd/MM')})).reverse();
   }, [performanceData]);
-
 
   const selectedDayPerformance = useMemo(() => {
     if (!selectedDate || !performanceData) return null;
@@ -147,6 +153,7 @@ export default function PerformancePage() {
   ] : [];
 
   if (isLoading || !currentUser) {
+    // Skeleton loading UI
     return (
         <div className="space-y-6">
             <Card><CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader></Card>
@@ -162,6 +169,7 @@ export default function PerformancePage() {
   }
 
   if (currentUser.role !== 'Kurir') {
+    // Role check UI
     return (
       <Card className="shadow-lg">
         <CardHeader>
@@ -176,6 +184,7 @@ export default function PerformancePage() {
   
   const overallSuccessRate = (performanceData?.overall.totalPackagesEver ?? 0) > 0 ? (performanceData!.overall.totalSuccessfulDeliveriesEver / performanceData!.overall.totalPackagesEver * 100) : 0;
 
+  // Main page content
   return (
     <div className="space-y-6">
       <Card className="shadow-xl">
@@ -245,7 +254,7 @@ export default function PerformancePage() {
                         className="w-full sm:w-auto justify-start text-left font-normal mt-2 sm:mt-0"
                     >
                         <LucideCalendarIcon className="mr-2 h-4 w-4" />
-                        {selectedDate ? format(selectedDate, "PPP", { locale: id }) : <span>Pilih tanggal</span>}
+                        {selectedDate ? format(selectedDate, "PPP", { locale: indonesiaLocale }) : <span>Pilih tanggal</span>}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50"/>
                     </Button>
                     </PopoverTrigger>
@@ -255,7 +264,7 @@ export default function PerformancePage() {
                         selected={selectedDate}
                         onSelect={(date) => {setSelectedDate(date); setIsCalendarOpen(false);}}
                         initialFocus
-                        locale={id}
+                        locale={indonesiaLocale}
                         disabled={(date) => date > new Date() || date < new Date(Date.now() - 90 * 86400000)} 
                     />
                     </PopoverContent>
@@ -266,7 +275,7 @@ export default function PerformancePage() {
           {selectedDayPerformance ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
               <div>
-                <h3 className="text-lg font-semibold mb-1">Ringkasan untuk {format(parseISO(selectedDayPerformance.date), "PPP", { locale: id })}</h3>
+                <h3 className="text-lg font-semibold mb-1">Ringkasan untuk {format(parseISO(selectedDayPerformance.date), "PPP", { locale: indonesiaLocale })}</h3>
                 <p>Total Paket Terkirim: <strong className="text-green-500">{selectedDayPerformance.totalDelivered}</strong></p>
                 <p>Total Paket Pending: <strong className="text-red-500">{selectedDayPerformance.totalPending}</strong></p>
                 <p>Rate Sukses: <strong className="text-primary">{selectedDayPerformance.successRate.toFixed(1)}%</strong></p>
@@ -291,10 +300,9 @@ export default function PerformancePage() {
         </CardContent>
       </Card>
 
-
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><BarChart className="mr-2 h-5 w-5 text-primary"/> Grafik Pengiriman (Rentang 30 Hari)</CardTitle>
+          <CardTitle className="flex items-center"><BarChartIcon className="mr-2 h-5 w-5 text-primary"/> Grafik Pengiriman (Rentang 30 Hari)</CardTitle>
           <CardDescription>Menampilkan performa pengiriman Anda selama 30 hari terakhir.</CardDescription>
         </CardHeader>
         <CardContent className="h-[300px]">
