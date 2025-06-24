@@ -5,8 +5,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
-import { ResponsiveContainer, BarChart, LineChart, PieChart, Pie, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
-import { TrendingUp, Package, CheckCircle, Percent, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon as LucideCalendarIcon, AlertCircle } from 'lucide-react';
+import { ResponsiveContainer, BarChart as RechartsBarChart, LineChart, PieChart, Pie, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
+import { TrendingUp, Package, CheckCircle, Percent, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon as LucideCalendarIcon, AlertCircle, BarChart } from 'lucide-react';
 import type { UserProfile, KurirDailyTaskDoc, AttendanceRecord } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format, startOfWeek, endOfWeek, parseISO, startOfDay, subDays } from "date-fns";
@@ -200,7 +200,7 @@ export default function PerformancePage() {
         </Card>
          <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Terkirim (90 Hari)</一定会更好</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Terkirim (90 Hari)</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -303,7 +303,7 @@ export default function PerformancePage() {
         <CardContent className="h-[300px]">
           {filteredDailyPerformance.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={filteredDailyPerformance}>
+              <RechartsBarChart data={filteredDailyPerformance}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
                 <XAxis dataKey="name" tick={{fontSize: '0.65rem'}} interval="preserveStartEnd" height={50} angle={-30} textAnchor="end" />
                 <YAxis tick={{fontSize: '0.75rem'}} />
@@ -319,7 +319,7 @@ export default function PerformancePage() {
                 <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
                 <Bar dataKey="totalDelivered" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]}/>
                 <Bar dataKey="totalPending" name="Pending" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]}/>
-              </BarChart>
+              </RechartsBarChart>
             </ResponsiveContainer>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground">Tidak ada data untuk ditampilkan.</div>
@@ -361,5 +361,3 @@ export default function PerformancePage() {
     </div>
   );
 }
-
-    
