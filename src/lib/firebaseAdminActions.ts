@@ -1,74 +1,52 @@
 'use server';
 
-import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
-import { getFirestore, setDoc, doc, Timestamp } from "firebase/firestore";
-import type { UserProfile } from "@/types";
-
-// Nama unik untuk aplikasi sekunder untuk menghindari konflik dengan aplikasi sisi klien utama.
-const secondaryAppName = "secondary-auth-app-for-creation";
-
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
-// Menginisialisasi aplikasi sekunder dengan aman. Jika sudah diinisialisasi, gunakan yang sudah ada.
-const secondaryApp: FirebaseApp = getApps().find(app => app.name === secondaryAppName) 
-    ? getApp(secondaryAppName) 
-    : initializeApp(firebaseConfig, secondaryAppName);
-
-const secondaryAuth = getAuth(secondaryApp);
-const secondaryDb = getFirestore(secondaryApp);
+import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
+import type { UserProfile } from '@/types';
 
 /**
- * Membuat akun pengguna di Firebase Auth dan profil mereka di Firestore
- * menggunakan instance aplikasi Firebase sekunder untuk menghindari logout admin saat ini.
- * @param email Email pengguna baru.
- * @param password Password pengguna baru.
- * @param profileData Data profil pengguna untuk disimpan di Firestore.
- * @returns Objek dengan status keberhasilan dan pesan atau error.
+ * Creates a user account in Firebase Auth and their profile in Firestore
+ * using the Firebase Admin SDK. This action is safe to call from the server
+ * and will not interfere with the currently logged-in user's session.
+ *
+ * @param email The new user's email.
+ * @param password The new user's password.
+ * @param profileData The profile data for the user to be stored in Firestore.
+ * @returns An object with the success status and a message or error code.
  */
 export async function createUserAccount(
-    email: string, 
-    password: string, 
-    profileData: Omit<UserProfile, 'uid'>
+  email: string,
+  password: string,
+  profileData: Omit<UserProfile, 'uid'>
 ) {
-    try {
-        // 1. Buat pengguna di Firebase Authentication menggunakan aplikasi sekunder
-        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-        const newUser = userCredential.user;
+  try {
+    // 1. Create the user in Firebase Authentication using the Admin SDK.
+    const userRecord = await adminAuth.createUser({
+      email: email,
+      password: password,
+      displayName: profileData.fullName,
+      disabled: profileData.status === 'Nonaktif',
+    });
 
-        if (!newUser) {
-            throw new Error("Pembuatan pengguna di Authentication gagal.");
-        }
-        
-        // 2. Siapkan objek profil lengkap dengan UID baru dari Auth
-        const fullProfile: UserProfile = {
-            ...profileData,
-            uid: newUser.uid,
-            createdAt: new Date().toISOString(), // Gunakan string ISO untuk konsistensi
-        };
+    // 2. Prepare the full profile object with the new UID from Auth.
+    const fullProfile: UserProfile = {
+      ...profileData,
+      uid: userRecord.uid, // Use the UID from the newly created user record.
+      createdAt: new Date().toISOString(),
+    };
 
-        // 3. Simpan profil pengguna lengkap ke koleksi 'users' di Firestore
-        await setDoc(doc(secondaryDb, "users", newUser.uid), fullProfile);
-        
-        return { success: true, message: "Pengguna berhasil dibuat.", uid: newUser.uid };
+    // 3. Save the complete user profile to the 'users' collection in Firestore.
+    // The document ID is set to the user's UID for easy lookup.
+    await adminDb.collection('users').doc(userRecord.uid).set(fullProfile);
 
-    } catch (error: any) {
-        console.error("Error di server action createUserAccount:", error);
-        // Hapus pengguna dari Auth jika penyimpanan Firestore gagal untuk menghindari data yatim
-        if (getAuth(secondaryApp).currentUser) {
-            await getAuth(secondaryApp).currentUser?.delete();
-        }
-        return { 
-            success: false, 
-            message: `Gagal membuat pengguna: ${error.message}`, 
-            errorCode: error.code 
-        };
-    }
+    return { success: true, message: 'User created successfully.', uid: userRecord.uid };
+  } catch (error: any) {
+    console.error('Error in createUserAccount server action:', error);
+    
+    // Return a structured error response.
+    return {
+      success: false,
+      message: `Failed to create user: ${error.message}`,
+      errorCode: error.code, // e.g., 'auth/email-already-exists'
+    };
+  }
 }
