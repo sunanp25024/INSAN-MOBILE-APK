@@ -188,13 +188,15 @@ export async function importUsers(
 
           let joinDate: Date;
           if (typeof userData.joinDate === 'number') {
+             // Handle Excel's date serial number format
              joinDate = new Date(Math.round((userData.joinDate - 25569) * 86400 * 1000));
           } else {
+             // Handle string date format
              joinDate = new Date(String(userData.joinDate).trim());
           }
-
+          
           if (isNaN(joinDate.getTime())) {
-             errors.push(`Baris ${rowNum}: Format Tanggal Join tidak valid. Gunakan YYYY-MM-DD.`);
+             errors.push(`Baris ${rowNum}: Format Tanggal Join '${String(userData.joinDate)}' tidak valid. Gunakan format YYYY-MM-DD, contoh: 2025-06-24.`);
              failedCount++;
              continue;
           }
