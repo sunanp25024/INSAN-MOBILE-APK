@@ -9,81 +9,9 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Mail, CalendarDays, User, MapPin, FileText, Briefcase, Phone, Package, Percent, ShieldAlert, Users as UsersIcon, ClipboardList } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import type { UserProfile } from '@/types';
-
-// This data structure should align with the one in courier-management/page.tsx for consistency
-interface DetailedCourierProfile extends UserProfile {
-  totalPackagesToday?: number;
-  onTimeRate?: string;
-  phone?: string; // Added for detail view
-  // position is already in UserProfile
-}
-
-// This mock list is used to "fetch" data on this detail page.
-// It should ideally mirror or be a superset of the data used in the listing page.
-// For simplicity, we redefine it here with potentially more fields.
-const mockCouriersList: DetailedCourierProfile[] = [
-   { 
-    id: 'PISTEST2025', 
-    fullName: 'Budi Santoso', 
-    status: 'Aktif', 
-    workLocation: 'Jakarta Pusat Hub (Thamrin)', 
-    totalPackagesToday: 35, 
-    onTimeRate: '95%',
-    email: 'budi.s@example.com',
-    joinDate: new Date(2023, 0, 15).toISOString(),
-    nik: '1234567890123456',
-    role: 'Kurir',
-    position: 'Kurir Senior',
-    avatarUrl: 'https://placehold.co/100x100.png?text=BS',
-    phone: '081200002025'
-  },
-  { 
-    id: 'KURIR002', 
-    fullName: 'Ani Yudhoyono', 
-    status: 'Aktif', 
-    workLocation: 'Bandung Kota Hub (Kota)', 
-    totalPackagesToday: 42, 
-    onTimeRate: '92%',
-    email: 'ani.y@example.com',
-    joinDate: new Date(2022, 5, 10).toISOString(),
-    nik: '6543210987654321',
-    role: 'Kurir',
-    position: 'Kurir',
-    avatarUrl: 'https://placehold.co/100x100.png?text=AY',
-    phone: '081200000002'
-  },
-  { 
-    id: 'KURIR003', 
-    fullName: 'Charlie Van Houten', 
-    status: 'Nonaktif', 
-    workLocation: 'Surabaya Timur Hub (Cawang)', 
-    totalPackagesToday: 0, 
-    onTimeRate: 'N/A',
-    email: 'charlie.vh@example.com',
-    joinDate: new Date(2023, 8, 1).toISOString(),
-    nik: '1122334455667788',
-    role: 'Kurir',
-    position: 'Kurir',
-    avatarUrl: 'https://placehold.co/100x100.png?text=CVH',
-    phone: '081200000003'
-  },
-  { 
-    id: 'KURIR004', 
-    fullName: 'Dewi Persik', 
-    status: 'Aktif', 
-    workLocation: 'Medan Barat Hub', 
-    totalPackagesToday: 30, 
-    onTimeRate: '98%',
-    email: 'dewi.p@example.com',
-    joinDate: new Date(2021, 11, 20).toISOString(),
-    nik: '8877665544332211',
-    role: 'Kurir',
-    position: 'Kurir',
-    avatarUrl: 'https://placehold.co/100x100.png?text=DP',
-    phone: '081200000004'
-  },
-];
-
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function DetailItem({ icon: Icon, label, value }: { icon: React.ElementType, label: string, value?: string | React.ReactNode }) {
   if (value === undefined || value === null || value === '') return null;
@@ -102,24 +30,73 @@ export default function CourierDetailPage() {
   const router = useRouter();
   const params = useParams();
   const courierId = params.id as string;
-  const [courier, setCourier] = useState<DetailedCourierProfile | null | undefined>(undefined);
+  const [courier, setCourier] = useState<UserProfile | null | undefined>(undefined);
 
   useEffect(() => {
     if (courierId) {
-      const foundCourier = mockCouriersList.find(c => c.id === courierId);
-      setCourier(foundCourier || null); 
+      const fetchCourier = async () => {
+        try {
+          const q = query(
+            collection(db, "users"),
+            where("id", "==", courierId),
+            where("role", "==", "Kurir"),
+            limit(1)
+          );
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const courierDoc = querySnapshot.docs[0];
+            setCourier({ ...courierDoc.data() } as UserProfile);
+          } else {
+            setCourier(null);
+          }
+        } catch (error) {
+          console.error("Error fetching courier details:", error);
+          setCourier(null);
+        }
+      };
+      fetchCourier();
     }
   }, [courierId]);
 
   if (courier === undefined) {
-    return <div className="flex h-screen items-center justify-center">Loading courier details...</div>;
+    return (
+        <div className="space-y-6">
+            <Button variant="outline" disabled>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
+            </Button>
+            <Card className="shadow-xl">
+                <CardHeader>
+                    <div className="flex items-center gap-4">
+                        <Skeleton className="h-24 w-24 rounded-full" />
+                        <div className="space-y-2">
+                            <Skeleton className="h-8 w-64" />
+                            <Skeleton className="h-5 w-48" />
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                    <Skeleton className="h-6 w-1/3 mb-4" />
+                    <Separator className="mb-4"/>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {Array.from({ length: 9 }).map((_, i) => (
+                           <div key={i} className="space-y-2">
+                               <Skeleton className="h-4 w-24" />
+                               <Skeleton className="h-5 w-full" />
+                           </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
   }
 
   if (courier === null) {
     return (
-      <div className="flex flex-col h-screen items-center justify-center">
+      <div className="flex flex-col h-screen items-center justify-center text-center p-4">
         <UsersIcon className="h-16 w-16 text-muted-foreground mb-4" />
-        <p className="text-xl text-destructive mb-4">Kurir tidak ditemukan.</p>
+        <h2 className="text-xl font-semibold text-destructive mb-2">Kurir tidak ditemukan.</h2>
+        <p className="text-muted-foreground mb-4">Data untuk kurir dengan ID '{courierId}' tidak dapat ditemukan di database.</p>
         <Button onClick={() => router.push('/courier-management')}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Manajemen Kurir
         </Button>
@@ -166,9 +143,8 @@ export default function CourierDetailPage() {
             <DetailItem icon={Briefcase} label="Jabatan" value={courier.position || courier.role} />
             <DetailItem icon={CalendarDays} label="Tanggal Bergabung" value={courier.joinDate ? new Date(courier.joinDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric'}) : "N/A"} />
             <DetailItem icon={MapPin} label="Lokasi Kerja (Hub)" value={courier.workLocation} />
-            <DetailItem icon={Package} label="Paket Dibawa Hari Ini (Contoh)" value={courier.totalPackagesToday?.toString() || "N/A"} />
-            <DetailItem icon={Percent} label="Rate Tepat Waktu (Contoh)" value={courier.onTimeRate || "N/A"} />
-            {/* <DetailItem icon={ShieldAlert} label="Kontak Darurat (Contoh)" value={"089988887777 (Ibu)"} /> */}
+            <DetailItem icon={Package} label="Wilayah" value={courier.wilayah || "N/A"} />
+            <DetailItem icon={Percent} label="Area" value={courier.area || "N/A"} />
           </div>
           
           <Separator className="my-6" />
@@ -181,4 +157,3 @@ export default function CourierDetailPage() {
     </div>
   );
 }
-
