@@ -1,86 +1,167 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { ResponsiveContainer, BarChart, LineChart, PieChart, Pie, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
-import { TrendingUp, Package, CheckCircle, AlertTriangle, Percent, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon, AlertCircle } from 'lucide-react';
-import type { DailyPerformance, WeeklyPerformancePoint, UserProfile } from '@/types';
+import { TrendingUp, Package, CheckCircle, Percent, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon as LucideCalendarIcon, AlertCircle } from 'lucide-react';
+import type { UserProfile, KurirDailyTaskDoc, AttendanceRecord } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format } from "date-fns";
+import { format, startOfWeek, endOfWeek, parseISO, startOfDay, subDays } from "date-fns";
 import { id } from "date-fns/locale";
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
+import { Skeleton } from '@/components/ui/skeleton';
 
-const mockDailyPerformance: DailyPerformance[] = Array.from({ length: 30 }, (_, i) => {
-  const date = new Date();
-  date.setDate(date.getDate() - i);
-  const delivered = Math.floor(Math.random() * 50) + 20; 
-  const pending = Math.floor(Math.random() * 10);       
-  return {
-    date: date.toISOString(),
-    totalDelivered: delivered,
-    totalPending: pending,
-    successRate: (delivered / (delivered + pending)) * 100,
-  };
-}).reverse(); 
-
-const mockWeeklyPerformance: WeeklyPerformancePoint[] = [
-  { weekLabel: "Minggu-1", delivered: 250, pending: 30 },
-  { weekLabel: "Minggu-2", delivered: 280, pending: 25 },
-  { weekLabel: "Minggu-3", delivered: 260, pending: 20 },
-  { weekLabel: "Minggu-4", delivered: 300, pending: 15 },
-];
-
-const mockAttendanceSummary = {
-  totalAttendanceDays: 20,
-  totalWorkingDays: 22,
-  attendanceRate: (20/22) * 100, 
-};
-
-const mockOverallStats = {
-    totalPackagesEver: 5890,
-    totalSuccessfulDeliveriesEver: 5500,
-    avgDeliveryTime: "3 jam 15 mnt", 
-};
-
+interface PerformanceData {
+  daily: { date: string; totalDelivered: number; totalPending: number; successRate: number; }[];
+  weekly: { weekLabel: string; delivered: number; pending: number; }[];
+  attendance: { totalAttendanceDays: number; totalWorkingDays: number; attendanceRate: number; };
+  overall: { totalPackagesEver: number; totalSuccessfulDeliveriesEver: number; };
+}
 
 export default function PerformancePage() {
-  const [currentUser, setCurrentUser] = React.useState<UserProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [performanceData, setPerformanceData] = useState<PerformanceData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [dateRange, setDateRange] = useState<{ from: Date | undefined, to: Date | undefined }>({ from: new Date(Date.now() - 7 * 86400000), to: new Date() });
+  const [dateRange, setDateRange] = useState<{ from: Date | undefined, to: Date | undefined }>({ from: new Date(Date.now() - 29 * 86400000), to: new Date() });
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   useEffect(() => {
     const userDataString = localStorage.getItem('loggedInUser');
     if (userDataString) {
       try {
-        setCurrentUser(JSON.parse(userDataString) as UserProfile);
-      } catch (error) { console.error("Error parsing user data for performance page", error); }
+        const user = JSON.parse(userDataString) as UserProfile;
+        setCurrentUser(user);
+      } catch (error) { 
+        console.error("Error parsing user data for performance page", error); 
+        setIsLoading(false);
+      }
+    } else {
+      setIsLoading(false);
     }
   }, []);
 
-  const filteredDailyPerformance = mockDailyPerformance.filter(item => {
-    const itemDate = new Date(item.date);
-    const from = dateRange.from ? new Date(dateRange.from.setHours(0,0,0,0)) : null;
-    const to = dateRange.to ? new Date(dateRange.to.setHours(23,59,59,999)) : null;
-    if (from && itemDate < from) return false;
-    if (to && itemDate > to) return false;
-    return true;
-  }).map(d => ({...d, name: format(new Date(d.date), 'dd/MM')}));
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const fetchPerformanceData = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch daily task data for the last 90 days for performance calculation
+        const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+        const tasksQuery = query(
+          collection(db, "kurir_daily_tasks"),
+          where("kurirUid", "==", currentUser.uid),
+          where("date", ">=", ninetyDaysAgo),
+          where("taskStatus", "==", "completed"),
+          orderBy("date", "desc")
+        );
+        const tasksSnapshot = await getDocs(tasksQuery);
+        const dailyTasks: KurirDailyTaskDoc[] = tasksSnapshot.docs.map(doc => doc.data() as KurirDailyTaskDoc);
+
+        // Fetch attendance data
+        const attendanceQuery = query(
+          collection(db, "attendance"),
+          where("kurirUid", "==", currentUser.uid),
+          where("date", ">=", ninetyDaysAgo)
+        );
+        const attendanceSnapshot = await getDocs(attendanceQuery);
+        const attendanceRecords: AttendanceRecord[] = attendanceSnapshot.docs.map(doc => doc.data() as AttendanceRecord);
+
+        // Process data
+        const dailyPerformance = dailyTasks.map(task => ({
+          date: task.date,
+          totalDelivered: task.finalDeliveredCount || 0,
+          totalPending: task.finalPendingReturnCount || 0,
+          successRate: task.totalPackages > 0 ? ((task.finalDeliveredCount || 0) / task.totalPackages) * 100 : 0,
+        }));
+
+        const weeklyPerformanceMap = new Map<string, { delivered: number, pending: number }>();
+        dailyTasks.forEach(task => {
+          const taskDate = parseISO(task.date);
+          const weekStart = startOfWeek(taskDate, { weekStartsOn: 1 });
+          const weekLabel = `W-${format(weekStart, 'W')}`;
+          
+          const existing = weeklyPerformanceMap.get(weekLabel) || { delivered: 0, pending: 0 };
+          existing.delivered += task.finalDeliveredCount || 0;
+          existing.pending += task.finalPendingReturnCount || 0;
+          weeklyPerformanceMap.set(weekLabel, existing);
+        });
+
+        const weeklyPerformance = Array.from(weeklyPerformanceMap.entries())
+            .map(([weekLabel, data]) => ({ weekLabel, ...data }))
+            .sort((a, b) => a.weekLabel.localeCompare(b.weekLabel));
 
 
-  const selectedDayPerformance = selectedDate 
-    ? mockDailyPerformance.find(p => format(new Date(p.date), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')) 
-    : null;
+        const totalAttendanceDays = attendanceRecords.filter(rec => rec.status === 'Present' || rec.status === 'Late').length;
+        const totalWorkingDays = dailyTasks.length; 
+        const attendanceRate = totalWorkingDays > 0 ? (totalAttendanceDays / totalWorkingDays) * 100 : 0;
+        
+        const overall = dailyTasks.reduce((acc, task) => {
+            acc.totalPackagesEver += task.totalPackages;
+            acc.totalSuccessfulDeliveriesEver += task.finalDeliveredCount || 0;
+            return acc;
+        }, { totalPackagesEver: 0, totalSuccessfulDeliveriesEver: 0 });
+
+        setPerformanceData({
+          daily: dailyPerformance,
+          weekly: weeklyPerformance,
+          attendance: { totalAttendanceDays, totalWorkingDays, attendanceRate },
+          overall: overall,
+        });
+
+      } catch (error) {
+        console.error("Error fetching performance data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPerformanceData();
+  }, [currentUser]);
+
+
+  const filteredDailyPerformance = useMemo(() => {
+    if (!performanceData) return [];
+    return performanceData.daily.filter(item => {
+      const itemDate = parseISO(item.date);
+      const from = dateRange.from ? startOfDay(dateRange.from) : null;
+      const to = dateRange.to ? startOfDay(dateRange.to) : null;
+      if (from && itemDate < from) return false;
+      if (to && itemDate > to) return false;
+      return true;
+    }).map(d => ({...d, name: format(new Date(d.date), 'dd/MM')}));
+  }, [performanceData, dateRange]);
+
+
+  const selectedDayPerformance = useMemo(() => {
+    if (!selectedDate || !performanceData) return null;
+    return performanceData.daily.find(p => p.date === format(selectedDate, 'yyyy-MM-dd'));
+  }, [selectedDate, performanceData]);
 
   const successRateData = selectedDayPerformance ? [
     { name: 'Terkirim', value: selectedDayPerformance.totalDelivered, color: 'hsl(var(--chart-1))' },
     { name: 'Pending', value: selectedDayPerformance.totalPending, color: 'hsl(var(--chart-2))' },
   ] : [];
 
-  if (!currentUser) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  if (isLoading || !currentUser) {
+    return (
+        <div className="space-y-6">
+            <Card><CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader></Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card><CardHeader><Skeleton className="h-5 w-3/4" /></CardHeader><CardContent><Skeleton className="h-7 w-1/2" /></CardContent></Card>
+                <Card><CardHeader><Skeleton className="h-5 w-3/4" /></CardHeader><CardContent><Skeleton className="h-7 w-1/2" /></CardContent></Card>
+                <Card><CardHeader><Skeleton className="h-5 w-3/4" /></CardHeader><CardContent><Skeleton className="h-7 w-1/2" /></CardContent></Card>
+                <Card><CardHeader><Skeleton className="h-5 w-3/4" /></CardHeader><CardContent><Skeleton className="h-7 w-1/2" /></CardContent></Card>
+            </div>
+            <Card><CardHeader><Skeleton className="h-8 w-3/4" /></CardHeader><CardContent className="h-[300px]"><Skeleton className="h-full w-full" /></CardContent></Card>
+        </div>
+    );
   }
 
   if (currentUser.role !== 'Kurir') {
@@ -95,6 +176,8 @@ export default function PerformancePage() {
       </Card>
     );
   }
+  
+  const overallSuccessRate = (performanceData?.overall.totalPackagesEver ?? 0) > 0 ? (performanceData!.overall.totalSuccessfulDeliveriesEver / performanceData!.overall.totalPackagesEver * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -108,32 +191,23 @@ export default function PerformancePage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Paket (All Time)</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Paket (90 Hari)</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockOverallStats.totalPackagesEver.toLocaleString('id-ID')}</div>
+            <div className="text-2xl font-bold">{(performanceData?.overall.totalPackagesEver || 0).toLocaleString('id-ID')}</div>
           </CardContent>
         </Card>
          <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Terkirim (All Time)</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Terkirim (90 Hari)</一定会更好</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockOverallStats.totalSuccessfulDeliveriesEver.toLocaleString('id-ID')}</div>
+            <div className="text-2xl font-bold">{(performanceData?.overall.totalSuccessfulDeliveriesEver || 0).toLocaleString('id-ID')}</div>
             <p className="text-xs text-muted-foreground">
-              {(mockOverallStats.totalSuccessfulDeliveriesEver / mockOverallStats.totalPackagesEver * 100).toFixed(1)}% sukses
+              {overallSuccessRate.toFixed(1)}% sukses
             </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rata-rata Waktu Kirim</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{mockOverallStats.avgDeliveryTime}</div>
           </CardContent>
         </Card>
         <Card>
@@ -142,10 +216,20 @@ export default function PerformancePage() {
             <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockAttendanceSummary.attendanceRate.toFixed(1)}%</div>
+            <div className="text-2xl font-bold">{(performanceData?.attendance.attendanceRate || 0).toFixed(1)}%</div>
              <p className="text-xs text-muted-foreground">
-              {mockAttendanceSummary.totalAttendanceDays} dari {mockAttendanceSummary.totalWorkingDays} hari kerja
+              {performanceData?.attendance.totalAttendanceDays} dari {performanceData?.attendance.totalWorkingDays} hari kerja
             </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Periode Data</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-lg font-bold">90 Hari Terakhir</div>
+            <p className="text-xs text-muted-foreground">Data performa yang ditampilkan</p>
           </CardContent>
         </Card>
       </div>
@@ -163,7 +247,7 @@ export default function PerformancePage() {
                         variant={"outline"}
                         className="w-full sm:w-auto justify-start text-left font-normal mt-2 sm:mt-0"
                     >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        <LucideCalendarIcon className="mr-2 h-4 w-4" />
                         {selectedDate ? format(selectedDate, "PPP", { locale: id }) : <span>Pilih tanggal</span>}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50"/>
                     </Button>
@@ -175,7 +259,7 @@ export default function PerformancePage() {
                         onSelect={(date) => {setSelectedDate(date); setIsCalendarOpen(false);}}
                         initialFocus
                         locale={id}
-                        disabled={(date) => date > new Date() || date < new Date(Date.now() - 30 * 86400000)} 
+                        disabled={(date) => date > new Date() || date < new Date(Date.now() - 90 * 86400000)} 
                     />
                     </PopoverContent>
                 </Popover>
@@ -185,9 +269,9 @@ export default function PerformancePage() {
           {selectedDayPerformance ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
               <div>
-                <h3 className="text-lg font-semibold mb-1">Ringkasan untuk {format(new Date(selectedDayPerformance.date), "PPP", { locale: id })}</h3>
-                <p>Total Paket Terkirim: <strong className="text-green-400">{selectedDayPerformance.totalDelivered}</strong></p>
-                <p>Total Paket Pending: <strong className="text-red-400">{selectedDayPerformance.totalPending}</strong></p>
+                <h3 className="text-lg font-semibold mb-1">Ringkasan untuk {format(parseISO(selectedDayPerformance.date), "PPP", { locale: id })}</h3>
+                <p>Total Paket Terkirim: <strong className="text-green-500">{selectedDayPerformance.totalDelivered}</strong></p>
+                <p>Total Paket Pending: <strong className="text-red-500">{selectedDayPerformance.totalPending}</strong></p>
                 <p>Rate Sukses: <strong className="text-primary">{selectedDayPerformance.successRate.toFixed(1)}%</strong></p>
               </div>
               <div className="h-60">
@@ -198,14 +282,14 @@ export default function PerformancePage() {
                             <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)" }}/>
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             </div>
           ) : (
-            <p className="text-muted-foreground text-center py-4">Pilih tanggal untuk melihat detail performa.</p>
+            <p className="text-muted-foreground text-center py-4">{selectedDate ? 'Tidak ada data pengiriman selesai untuk tanggal ini.' : 'Pilih tanggal untuk melihat detail performa.'}</p>
           )}
         </CardContent>
       </Card>
@@ -213,59 +297,69 @@ export default function PerformancePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><BarChart className="mr-2 h-5 w-5 text-primary"/> Grafik Pengiriman (Rentang Tanggal)</CardTitle>
-          <CardDescription>Default: 7 hari terakhir. Pilih rentang untuk kustomisasi.</CardDescription>
+          <CardTitle className="flex items-center"><BarChart className="mr-2 h-5 w-5 text-primary"/> Grafik Pengiriman (Rentang 30 Hari)</CardTitle>
+          <CardDescription>Menampilkan performa pengiriman Anda selama 30 hari terakhir.</CardDescription>
         </CardHeader>
         <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={filteredDailyPerformance}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-              <XAxis dataKey="name" tick={{fontSize: '0.65rem'}} interval="preserveStartEnd" height={50} angle={-30} textAnchor="end" />
-              <YAxis tick={{fontSize: '0.75rem'}} />
-              <Tooltip
-                contentStyle={{
-                    background: "hsl(var(--background))",
-                    borderColor: "hsl(var(--border))",
-                    borderRadius: "var(--radius)",
-                    fontSize: "0.8rem",
-                    padding: "0.5rem"
-                }}
-              />
-              <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
-              <Bar dataKey="totalDelivered" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]}/>
-              <Bar dataKey="totalPending" name="Pending" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]}/>
-            </BarChart>
-          </ResponsiveContainer>
+          {filteredDailyPerformance.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={filteredDailyPerformance}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
+                <XAxis dataKey="name" tick={{fontSize: '0.65rem'}} interval="preserveStartEnd" height={50} angle={-30} textAnchor="end" />
+                <YAxis tick={{fontSize: '0.75rem'}} />
+                <Tooltip
+                  contentStyle={{
+                      background: "hsl(var(--background))",
+                      borderColor: "hsl(var(--border))",
+                      borderRadius: "var(--radius)",
+                      fontSize: "0.8rem",
+                      padding: "0.5rem"
+                  }}
+                />
+                <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
+                <Bar dataKey="totalDelivered" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]}/>
+                <Bar dataKey="totalPending" name="Pending" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">Tidak ada data untuk ditampilkan.</div>
+          )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><LineChart className="mr-2 h-5 w-5 text-primary"/> Grafik Pengiriman Mingguan</CardTitle>
-          <CardDescription>Tren pengiriman paket selama 4 minggu terakhir.</CardDescription>
+          <CardTitle className="flex items-center"><TrendingUp className="mr-2 h-5 w-5 text-primary"/> Grafik Pengiriman Mingguan</CardTitle>
+          <CardDescription>Tren pengiriman paket selama beberapa minggu terakhir.</CardDescription>
         </CardHeader>
         <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={mockWeeklyPerformance}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
-              <XAxis dataKey="weekLabel" tick={{fontSize: '0.75rem'}} />
-              <YAxis tick={{fontSize: '0.75rem'}}/>
-              <Tooltip 
-                contentStyle={{
-                    background: "hsl(var(--background))",
-                    borderColor: "hsl(var(--border))",
-                    borderRadius: "var(--radius)",
-                    fontSize: "0.8rem",
-                    padding: "0.5rem"
-                }}
-              />
-              <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
-              <Line type="monotone" dataKey="delivered" name="Terkirim" stroke="hsl(var(--chart-1))" strokeWidth={2} activeDot={{ r: 6 }}/>
-              <Line type="monotone" dataKey="pending" name="Pending" stroke="hsl(var(--chart-2))" strokeWidth={2} activeDot={{ r: 6 }}/>
-            </LineChart>
-          </ResponsiveContainer>
+          {performanceData && performanceData.weekly.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={performanceData.weekly}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" />
+                <XAxis dataKey="weekLabel" tick={{fontSize: '0.75rem'}} />
+                <YAxis tick={{fontSize: '0.75rem'}}/>
+                <Tooltip 
+                  contentStyle={{
+                      background: "hsl(var(--background))",
+                      borderColor: "hsl(var(--border))",
+                      borderRadius: "var(--radius)",
+                      fontSize: "0.8rem",
+                      padding: "0.5rem"
+                  }}
+                />
+                <Legend wrapperStyle={{fontSize: "0.8rem"}}/>
+                <Line type="monotone" dataKey="delivered" name="Terkirim" stroke="hsl(var(--chart-1))" strokeWidth={2} activeDot={{ r: 6 }}/>
+                <Line type="monotone" dataKey="pending" name="Pending" stroke="hsl(var(--chart-2))" strokeWidth={2} activeDot={{ r: 6 }}/>
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">Tidak cukup data untuk tren mingguan.</div>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
+
+    
