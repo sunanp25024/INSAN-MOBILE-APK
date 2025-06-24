@@ -89,6 +89,22 @@ export default function ManagePICsPage() {
     resolver: zodResolver(editPicSchema),
   });
 
+  const createNotification = async (message: string) => {
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        title: 'Permintaan Persetujuan Baru',
+        message,
+        type: 'APPROVAL_REQUEST',
+        timestamp: serverTimestamp(),
+        read: false,
+        linkTo: '/approvals',
+      });
+    } catch (error) {
+      console.error("Failed to create notification:", error);
+      // Non-blocking error, so we just log it and don't bother the user.
+    }
+  };
+
   const handleAddPIC: SubmitHandler<PICFormData> = async (data) => {
     if (!currentUser) return;
     setIsSubmitting(true);
@@ -137,6 +153,7 @@ export default function ManagePICsPage() {
       };
       try {
         await addDoc(collection(db, "approval_requests"), approvalRequest);
+        await createNotification(`Admin ${currentUser.fullName} mengajukan penambahan PIC baru: ${data.fullName}.`);
         toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan PIC ${data.fullName} telah dikirim.` });
         reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
         setIsAddPICDialogOpen(false);
@@ -161,7 +178,6 @@ export default function ManagePICsPage() {
 
   const handleOpenEditDialog = (pic: UserProfile) => {
     setCurrentEditingPIC(pic);
-    setValue('id', pic.id);
     setValue('fullName', pic.fullName);
     setValue('email', pic.email || '');
     setValue('workLocation', pic.workLocation || '');
@@ -203,6 +219,7 @@ export default function ManagePICsPage() {
       };
       try {
         await addDoc(collection(db, "approval_requests"), approvalRequest);
+        await createNotification(`Admin ${currentUser.fullName} mengajukan perubahan data untuk PIC: ${currentEditingPIC.fullName}.`);
         toast({ title: "Permintaan Perubahan Diajukan", description: `Permintaan perubahan data PIC ${data.fullName} telah dikirim.` });
       } catch (error: any) {
         toast({ title: "Error Pengajuan Update", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
@@ -220,6 +237,7 @@ export default function ManagePICsPage() {
     
     setIsEditPICDialogOpen(false);
     setCurrentEditingPIC(null);
+    resetEdit();
     setIsSubmitting(false);
   };
   
@@ -338,6 +356,7 @@ export default function ManagePICsPage() {
         };
          try {
             await addDoc(collection(db, "approval_requests"), approvalRequest);
+            await createNotification(`Admin ${currentUser.fullName} mengajukan perubahan status untuk PIC: ${picToUpdate.fullName} menjadi ${newStatus}.`);
             toast({ title: "Permintaan Perubahan Status Diajukan", description: `Permintaan perubahan status PIC ${picToUpdate.fullName} menjadi ${newStatus} telah dikirim.` });
         } catch (error: any) {
             toast({ title: "Error Pengajuan", description: `Gagal mengajukan perubahan status: ${error.message}`, variant: "destructive" });
@@ -551,18 +570,18 @@ export default function ManagePICsPage() {
           <form onSubmit={handleSubmitEdit(handleEditPIC)} className="space-y-4 py-4">
             <div>
               <Label htmlFor="editPicFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
-              <Input id="editPicFullName" {...registerEdit("fullName")} />
+              <Input id="editPicFullName" {...registerEdit("fullName")} defaultValue={currentEditingPIC?.fullName}/>
               {errorsEdit.fullName && <p className="text-destructive text-sm mt-1">{errorsEdit.fullName.message}</p>}
             </div>
             <div>
               <Label htmlFor="editPicEmail">Email <span className="text-destructive">*</span></Label>
-              <Input id="editPicEmail" type="email" {...registerEdit("email")} />
+              <Input id="editPicEmail" type="email" {...registerEdit("email")} defaultValue={currentEditingPIC?.email}/>
               {errorsEdit.email && <p className="text-destructive text-sm mt-1">{errorsEdit.email.message}</p>}
                <p className="text-xs text-muted-foreground mt-1">Mengubah email di sini hanya mempengaruhi profil Firestore.</p>
             </div>
             <div>
               <Label htmlFor="editPicWorkLocation">Area Tanggung Jawab <span className="text-destructive">*</span></Label>
-              <Input id="editPicWorkLocation" {...registerEdit("workLocation")} />
+              <Input id="editPicWorkLocation" {...registerEdit("workLocation")} defaultValue={currentEditingPIC?.workLocation}/>
               {errorsEdit.workLocation && <p className="text-destructive text-sm mt-1">{errorsEdit.workLocation.message}</p>}
             </div>
             <DialogFooter>
@@ -614,3 +633,5 @@ export default function ManagePICsPage() {
     </div>
   );
 }
+
+    
