@@ -142,6 +142,8 @@ export default function AttendancePage() {
       checkInTime: format(now, 'HH:mm'),
       status: now.getHours() < 9 ? 'Present' : 'Late',
       timestamp: Timestamp.fromDate(now),
+      checkInTimestamp: Timestamp.fromDate(now),
+      workLocation: currentUser.workLocation,
     };
 
     try {
@@ -177,10 +179,11 @@ export default function AttendancePage() {
         await updateDoc(recordRef, {
             checkOutTime: checkOutTime,
             timestamp: Timestamp.fromDate(now),
+            checkOutTimestamp: Timestamp.fromDate(now),
         });
-        const updatedRecord = { ...todayRecord, checkOutTime };
-        setTodayRecord(updatedRecord);
-        setAttendanceHistory(prev => prev.map(r => r.date === todayISO ? updatedRecord : r));
+        const updatedRecord = { ...todayRecord, checkOutTime, checkOutTimestamp: Timestamp.fromDate(now) };
+        setTodayRecord(updatedRecord as AttendanceRecord);
+        setAttendanceHistory(prev => prev.map(r => r.date === todayISO ? updatedRecord : r) as AttendanceRecord[]);
         toast({ title: "Check-Out Berhasil", description: `Anda check-out pukul ${checkOutTime}.` });
     } catch(error) {
         console.error("Error during check-out:", error);

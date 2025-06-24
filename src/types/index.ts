@@ -103,6 +103,9 @@ export interface AttendanceRecord {
   checkOutTime?: string; // 'HH:mm'
   status: 'Present' | 'Absent' | 'Late' | 'Not Checked In';
   timestamp?: any; // Firestore ServerTimestamp for sorting or Date object
+  workLocation?: string;
+  checkInTimestamp?: any; // Firestore Timestamp for precise check-in time
+  checkOutTimestamp?: any; // Firestore Timestamp for precise check-out time
 }
 
 export interface DailyPerformance {
@@ -123,8 +126,8 @@ export interface AttendanceActivity {
   kurirName: string;
   kurirId: string; 
   kurirUid?: string; 
-  action: 'check-in' | 'check-out' | 'reported-late';
-  timestamp: string; 
+  action: 'check-in' | 'check-out' | 'check-in-late';
+  timestamp: string; // Milliseconds as a string
   location?: string; 
 }
 
