@@ -5,8 +5,7 @@ import type { UserProfile } from '@/types';
 
 /**
  * Creates a user account in Firebase Auth and their profile in Firestore
- * using the Firebase Admin SDK. This action is safe to call from the server
- * and will not interfere with the currently logged-in user's session.
+ * using the Firebase Admin SDK.
  *
  * @param email The new user's email.
  * @param password The new user's password.
@@ -19,7 +18,7 @@ export async function createUserAccount(
   profileData: Omit<UserProfile, 'uid'>
 ) {
   try {
-    // 1. Create the user in Firebase Authentication using the Admin SDK.
+    // 1. Create the user in Firebase Authentication.
     const userRecord = await adminAuth.createUser({
       email: email,
       password: password,
@@ -30,23 +29,54 @@ export async function createUserAccount(
     // 2. Prepare the full profile object with the new UID from Auth.
     const fullProfile: UserProfile = {
       ...profileData,
-      uid: userRecord.uid, // Use the UID from the newly created user record.
+      uid: userRecord.uid,
       createdAt: new Date().toISOString(),
     };
 
     // 3. Save the complete user profile to the 'users' collection in Firestore.
-    // The document ID is set to the user's UID for easy lookup.
     await adminDb.collection('users').doc(userRecord.uid).set(fullProfile);
 
     return { success: true, message: 'User created successfully.', uid: userRecord.uid };
   } catch (error: any) {
     console.error('Error in createUserAccount server action:', error);
     
-    // Return a structured error response.
     return {
       success: false,
       message: `Failed to create user: ${error.message}`,
-      errorCode: error.code, // e.g., 'auth/email-already-exists'
+      errorCode: error.code,
+    };
+  }
+}
+
+/**
+ * Deletes a user account from Firebase Auth and their profile from Firestore
+ * using the Firebase Admin SDK.
+ *
+ * @param uid The UID of the user to delete.
+ * @returns An object with the success status and a message.
+ */
+export async function deleteUserAccount(uid: string) {
+  if (!uid) {
+    return { success: false, message: 'User UID is required.' };
+  }
+
+  try {
+    // First, delete the user from Firebase Authentication.
+    await adminAuth.deleteUser(uid);
+    
+    // Then, delete the user's profile from Firestore.
+    await adminDb.collection('users').doc(uid).delete();
+
+    return { success: true, message: 'User deleted successfully from Auth and Firestore.' };
+  } catch (error: any) {
+    console.error(`Error deleting user ${uid}:`, error);
+    
+    // If the user was deleted from Auth but not Firestore (or vice-versa),
+    // this could be logged for manual cleanup. For now, we return a generic error.
+    return {
+      success: false,
+      message: `Failed to delete user: ${error.message}`,
+      errorCode: error.code,
     };
   }
 }

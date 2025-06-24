@@ -22,7 +22,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount } from '@/lib/firebaseAdminActions';
 
 const kurirSchema = z.object({
   uid: z.string().optional(),
@@ -236,16 +236,19 @@ export default function ManageKurirsPage() {
         toast({ title: "Error", description: "UID Kurir tidak ditemukan.", variant: "destructive" });
         return;
     }
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus Kurir ${kurirToDelete.fullName}? Profil Firestore akan dihapus. Akun login di Authentication TIDAK terhapus.`)) {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus Kurir ${kurirToDelete.fullName}? Tindakan ini akan menghapus akun login dan profil secara permanen.`)) {
         return;
     }
-    try {
-        await deleteDoc(doc(db, "users", kurirToDelete.uid));
-        toast({ title: "Profil Kurir Dihapus", description: `Profil Kurir ${kurirToDelete.fullName} telah dihapus dari Firestore.` });
-        fetchKurirs();
-    } catch (error: any) {
-        console.error("Error deleting kurir profile: ", error);
-        toast({ title: "Error Menghapus Profil", description: `Gagal menghapus profil kurir: ${error.message}`, variant: "destructive" });
+
+    setIsSubmitting(true);
+    const result = await deleteUserAccount(kurirToDelete.uid);
+    setIsSubmitting(false);
+
+    if (result.success) {
+      toast({ title: "Kurir Dihapus", description: `Kurir ${kurirToDelete.fullName} telah dihapus sepenuhnya.` });
+      fetchKurirs();
+    } else {
+      toast({ title: "Error Menghapus", description: result.message || "Gagal menghapus kurir.", variant: "destructive" });
     }
   };
 
@@ -525,7 +528,7 @@ export default function ManageKurirsPage() {
                       </TableCell>
                       <TableCell className="text-center space-x-1">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(kurir)}><Edit size={16}/></Button>
-                        <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteKurir(kurir)}><Trash2 size={16}/></Button>
+                        <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteKurir(kurir)} disabled={isSubmitting}><Trash2 size={16}/></Button>
                       </TableCell>
                     </TableRow>
                   )) : (

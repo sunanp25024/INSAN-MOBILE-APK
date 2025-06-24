@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount } from '@/lib/firebaseAdminActions';
 
 const picSchema = z.object({
   id: z.string().min(1, "ID PIC tidak boleh kosong").optional(),
@@ -270,15 +270,19 @@ export default function ManagePICsPage() {
             toast({ title: "Error Pengajuan", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
         }
     } else if (currentUser.role === 'MasterAdmin') {
-        if (!window.confirm(`Apakah Anda yakin ingin menghapus PIC ${picToDelete.fullName}? Profil Firestore akan dihapus. Akun login di Authentication TIDAK terhapus.`)) {
+        if (!window.confirm(`Apakah Anda yakin ingin menghapus PIC ${picToDelete.fullName}? Tindakan ini akan menghapus akun login dan profil secara permanen.`)) {
             return;
         }
-        try {
-            await deleteDoc(doc(db, "users", picToDelete.uid));
-            toast({ title: "Profil PIC Dihapus", description: `Profil PIC ${picToDelete.fullName} telah dihapus dari Firestore.` });
+        
+        setIsSubmitting(true);
+        const result = await deleteUserAccount(picToDelete.uid);
+        setIsSubmitting(false);
+
+        if (result.success) {
+            toast({ title: "PIC Dihapus", description: `PIC ${picToDelete.fullName} telah dihapus sepenuhnya.` });
             fetchPICs();
-        } catch (error: any) {
-            toast({ title: "Error Menghapus Profil", description: `Gagal menghapus profil PIC: ${error.message}`, variant: "destructive" });
+        } else {
+            toast({ title: "Error Menghapus", description: result.message || "Gagal menghapus PIC.", variant: "destructive" });
         }
     }
   };
@@ -454,7 +458,7 @@ export default function ManagePICsPage() {
                         </TableCell>
                         <TableCell className="text-center space-x-1">
                           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(pic)}><Edit size={16}/></Button>
-                          <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeletePIC(pic)}><Trash2 size={16}/></Button>
+                          <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeletePIC(pic)} disabled={isSubmitting}><Trash2 size={16}/></Button>
                         </TableCell>
                       </TableRow>
                     )) : (

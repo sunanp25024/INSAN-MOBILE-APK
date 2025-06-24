@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount } from '@/lib/firebaseAdminActions';
 
 const adminSchema = z.object({
   id: z.string().min(1, "ID Aplikasi Admin tidak boleh kosong (cth: ADMIN00X)").optional(), 
@@ -190,17 +190,19 @@ export default function ManageAdminsPage() {
         toast({ title: "Error", description: "UID Admin tidak ditemukan.", variant: "destructive" });
         return;
     }
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus Admin ${adminToDelete.fullName}? Profil Firestore akan dihapus. Akun login di Authentication TIDAK terhapus.`)) {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus Admin ${adminToDelete.fullName}? Tindakan ini akan menghapus akun login dan profil secara permanen.`)) {
         return;
     }
 
-    try {
-        await deleteDoc(doc(db, "users", adminToDelete.uid));
-        toast({ title: "Admin Dihapus (Profil)", description: `Profil Admin ${adminToDelete.fullName} telah dihapus dari Firestore.` });
-        fetchAdmins();
-    } catch (error: any) {
-        console.error("Error deleting admin profile: ", error);
-        toast({ title: "Error Menghapus Profil", description: `Gagal menghapus profil admin: ${error.message}`, variant: "destructive" });
+    setIsSubmitting(true);
+    const result = await deleteUserAccount(adminToDelete.uid);
+    setIsSubmitting(false);
+
+    if (result.success) {
+      toast({ title: "Admin Dihapus", description: `Admin ${adminToDelete.fullName} telah dihapus sepenuhnya.` });
+      fetchAdmins();
+    } else {
+      toast({ title: "Error Menghapus", description: result.message || "Gagal menghapus admin.", variant: "destructive" });
     }
 };
 
@@ -340,7 +342,7 @@ export default function ManageAdminsPage() {
                       </TableCell>
                       <TableCell className="text-center space-x-1">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(admin)}><Edit size={16}/></Button>
-                        <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteAdmin(admin)}><Trash2 size={16}/></Button>
+                        <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteAdmin(admin)} disabled={isSubmitting}><Trash2 size={16}/></Button>
                       </TableCell>
                     </TableRow>
                   )) : (
