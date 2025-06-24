@@ -20,9 +20,10 @@ import { format, parseISO, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createUserAccount, deleteUserAccount } from '@/lib/firebaseAdminActions';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const kurirSchema = z.object({
   uid: z.string().optional(),
@@ -172,7 +173,7 @@ export default function ManageKurirsPage() {
         fullName: kurir.fullName,
         nik: kurir.nik || '',
         passwordValue: '',
-        jabatan: kurir.jabatan || '',
+        jabatan: kurir.position || '',
         wilayah: kurir.wilayah || '',
         area: kurir.area || '',
         workLocation: kurir.workLocation || '',
@@ -232,8 +233,7 @@ export default function ManageKurirsPage() {
   };
   
   const handleDeleteKurir = async (kurirToDelete: UserProfile) => {
-    if (!kurirToDelete.uid) {
-        toast({ title: "Error", description: "UID Kurir tidak ditemukan.", variant: "destructive" });
+    if (!kurirToDelete.uid || !currentUser || currentUser.role !== 'MasterAdmin') {
         return;
     }
     if (!window.confirm(`Apakah Anda yakin ingin menghapus Kurir ${kurirToDelete.fullName}? Tindakan ini akan menghapus akun login dan profil secara permanen.`)) {
@@ -521,6 +521,7 @@ export default function ManageKurirsPage() {
                           checked={kurir.status === 'Aktif'}
                           onCheckedChange={(newStatusChecked) => handleStatusChange(kurir, newStatusChecked)}
                           aria-label={`Status kurir ${kurir.fullName}`}
+                          disabled={currentUser?.role !== 'MasterAdmin'}
                         />
                         <span className={`ml-2 text-xs ${kurir.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
                           {kurir.status}
@@ -528,7 +529,28 @@ export default function ManageKurirsPage() {
                       </TableCell>
                       <TableCell className="text-center space-x-1">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(kurir)}><Edit size={16}/></Button>
-                        <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDeleteKurir(kurir)} disabled={isSubmitting}><Trash2 size={16}/></Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0}>
+                                <Button 
+                                  variant="destructive" 
+                                  size="icon" 
+                                  className="h-8 w-8" 
+                                  onClick={() => handleDeleteKurir(kurir)} 
+                                  disabled={isSubmitting || currentUser?.role !== 'MasterAdmin'}
+                                >
+                                  <Trash2 size={16}/>
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            {currentUser?.role !== 'MasterAdmin' && (
+                              <TooltipContent>
+                                <p>Hanya MasterAdmin yang dapat menghapus.</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   )) : (
