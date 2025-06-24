@@ -1,88 +1,140 @@
 
 "use client";
 
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bell, UserPlus, UserCog, AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Bell, UserPlus, ShieldCheck, AlertTriangle, ArrowRight, UserCog } from 'lucide-react';
+import type { SystemNotification } from '@/types';
+import { db } from '@/lib/firebase';
+import { collection, query, orderBy, limit, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
-interface SystemNotification {
-  id: string;
-  type: 'User Management' | 'System Alert' | 'Data Change';
-  title: string;
-  message: string;
-  timestamp: string;
-  read?: boolean;
-  icon: React.ElementType;
-  iconColor?: string;
-}
-
-// Mock data for example notifications
-const mockNotifications: SystemNotification[] = [
-  {
-    id: 'NOTIF001',
-    type: 'User Management',
-    title: 'Akun PIC Baru Ditambahkan oleh Admin',
-    message: "Admin 'Admin001 (Admin Staff)' telah menambahkan akun PIC baru dengan ID 'PIC003' (Nama: Joko Susilo, Area: Surabaya Pusat).",
-    timestamp: new Date(Date.now() - 3600000 * 1).toISOString(), // 1 hour ago
-    read: false,
-    icon: UserPlus,
-    iconColor: 'text-blue-500'
-  },
-  {
-    id: 'NOTIF002',
-    type: 'User Management',
-    title: 'Akun Kurir Baru Diajukan oleh Admin',
-    message: "Admin 'Admin002 (Admin Staff Dua)' telah mengajukan penambahan akun Kurir baru dengan ID 'KURIR007' (Nama: Rahmat Hidayat) dan sedang menunggu persetujuan Anda.",
-    timestamp: new Date(Date.now() - 3600000 * 3).toISOString(), // 3 hours ago
-    read: false,
-    icon: UserPlus,
-    iconColor: 'text-blue-500'
-  },
-  {
-    id: 'NOTIF003',
-    type: 'System Alert',
-    title: 'Pembaruan Sistem Terjadwal',
-    message: "Akan ada pemeliharaan sistem terjadwal pada tanggal 28 Juli 2024 pukul 02:00 - 04:00 WIB. Aplikasi mungkin tidak dapat diakses sementara.",
-    timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), // 1 day ago
-    read: true,
-    icon: AlertTriangle,
-    iconColor: 'text-yellow-500'
-  },
-   {
-    id: 'NOTIF004',
-    type: 'Data Change',
-    title: 'Perubahan Data Admin Disetujui',
-    message: "Perubahan data untuk Admin 'ADMIN002' telah disetujui dan diterapkan.",
-    timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
-    read: true,
-    icon: UserCog,
-    iconColor: 'text-green-500'
+const getNotificationIcon = (type: SystemNotification['type']) => {
+  switch (type) {
+    case 'APPROVAL_REQUEST':
+      return <ShieldCheck className="mt-1 h-6 w-6 flex-shrink-0 text-yellow-500" />;
+    case 'USER_MANAGEMENT':
+      return <UserPlus className="mt-1 h-6 w-6 flex-shrink-0 text-blue-500" />;
+    case 'DATA_CHANGE':
+       return <UserCog className="mt-1 h-6 w-6 flex-shrink-0 text-green-500" />;
+    case 'SYSTEM_ALERT':
+      return <AlertTriangle className="mt-1 h-6 w-6 flex-shrink-0 text-red-500" />;
+    default:
+      return <Bell className="mt-1 h-6 w-6 flex-shrink-0 text-muted-foreground" />;
   }
-];
-
+};
 
 export default function NotificationsPage() {
-  // TODO: Fetch current user role and verify access (MasterAdmin)
-  // For now, assume access is granted if page is reached
+  const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
+  const fetchNotifications = async () => {
+    setIsLoading(true);
+    try {
+      const q = query(
+        collection(db, 'notifications'),
+        orderBy('timestamp', 'desc'),
+        limit(50) 
+      );
+      const querySnapshot = await getDocs(q);
+      const fetchedNotifications = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as SystemNotification));
+      setNotifications(fetchedNotifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      toast({
+        title: "Gagal Memuat Notifikasi",
+        description: "Terjadi kesalahan saat mengambil data dari server.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const markAsRead = async (notificationId: string) => {
+    const notifRef = doc(db, 'notifications', notificationId);
+    try {
+      await updateDoc(notifRef, { read: true });
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+      );
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      toast({
+        title: "Gagal",
+        description: "Gagal menandai notifikasi sebagai sudah dibaca.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const markAllAsRead = async () => {
+    const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+    if (unreadIds.length === 0) {
+      toast({ title: "Tidak ada notifikasi baru", description: "Semua notifikasi sudah dibaca."});
+      return;
+    };
+    
+    // In a real large-scale app, this would be a backend function call.
+    // For now, we'll batch the writes on the client.
+    const batchPromises = unreadIds.map(id => {
+      const notifRef = doc(db, 'notifications', id);
+      return updateDoc(notifRef, { read: true });
+    });
+
+    try {
+      await Promise.all(batchPromises);
+      fetchNotifications(); // Refetch to confirm
+      toast({ title: "Sukses", description: "Semua notifikasi telah ditandai sebagai sudah dibaca."});
+    } catch (error) {
+      console.error("Error marking all as read:", error);
+       toast({ title: "Gagal", description: "Terjadi kesalahan saat menandai semua notifikasi.", variant: "destructive"});
+    }
+  };
+  
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center text-2xl text-primary">
-            <Bell className="mr-3 h-7 w-7" />
-            Notifikasi Sistem
-          </CardTitle>
-          <CardDescription>
-            Pusat notifikasi untuk aktivitas penting dalam sistem, seperti penambahan pengguna baru oleh Admin atau perubahan data yang membutuhkan perhatian.
-          </CardDescription>
+        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+          <div>
+            <CardTitle className="flex items-center text-2xl text-primary">
+              <Bell className="mr-3 h-7 w-7" />
+              Notifikasi Sistem
+            </CardTitle>
+            <CardDescription>
+              Pusat notifikasi untuk aktivitas penting dalam sistem, seperti pengajuan persetujuan baru.
+            </CardDescription>
+          </div>
+          <Button onClick={markAllAsRead} disabled={unreadCount === 0 || isLoading} className="mt-2 sm:mt-0">
+             Tandai Semua Sudah Dibaca ({unreadCount})
+          </Button>
         </CardHeader>
         <CardContent>
-          {mockNotifications.length > 0 ? (
+          {isLoading ? (
             <div className="space-y-4">
-              {mockNotifications.map((notif) => (
-                <Card key={notif.id} className={`p-4 ${notif.read ? 'bg-card-foreground/5 opacity-70' : 'bg-card-foreground/10 border-primary/30'}`}>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Card key={i} className="p-4"><div className="flex items-start space-x-3"><Skeleton className="h-6 w-6 rounded-full mt-1" /><div className="flex-grow space-y-2"><Skeleton className="h-5 w-3/4" /><Skeleton className="h-4 w-full" /><Skeleton className="h-3 w-1/3" /></div></div></Card>
+              ))}
+            </div>
+          ) : notifications.length > 0 ? (
+            <div className="space-y-4">
+              {notifications.map((notif) => (
+                <Card key={notif.id} className={`p-4 transition-colors ${notif.read ? 'bg-card-foreground/5 opacity-70' : 'bg-card-foreground/10 border-primary/30'}`}>
                   <div className="flex items-start space-x-3">
-                    <notif.icon className={`mt-1 h-6 w-6 flex-shrink-0 ${notif.iconColor || 'text-primary'}`} />
+                    {getNotificationIcon(notif.type)}
                     <div className="flex-grow">
                       <div className="flex justify-between items-center">
                         <h3 className={`text-md font-semibold ${notif.read ? 'text-muted-foreground' : 'text-foreground'}`}>
@@ -92,18 +144,28 @@ export default function NotificationsPage() {
                       </div>
                       <p className={`text-sm ${notif.read ? 'text-muted-foreground' : 'text-foreground/90'}`}>{notif.message}</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(notif.timestamp).toLocaleString('id-ID', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {(notif.timestamp as Timestamp)?.toDate().toLocaleString('id-ID', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>
+                      <div className="mt-2 flex gap-2">
+                        {!notif.read && <Button variant="ghost" size="sm" className="h-auto p-1 text-xs" onClick={() => markAsRead(notif.id)}>Tandai sudah dibaca</Button>}
+                        {notif.linkTo && (
+                          <Link href={notif.linkTo} passHref>
+                            <Button variant="link" size="sm" className="h-auto p-1 text-xs">
+                              Lihat Detail <ArrowRight className="ml-1 h-3 w-3"/>
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </Card>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8">
-              <Bell className="mx-auto h-12 w-12 text-muted-foreground" />
-              <p className="mt-2 text-lg text-muted-foreground">Tidak ada notifikasi baru.</p>
-              <p className="text-sm text-muted-foreground">Semua notifikasi telah dibaca atau belum ada yang masuk.</p>
+            <div className="text-center py-12">
+              <Bell className="mx-auto h-16 w-16 text-muted-foreground/30" />
+              <p className="mt-4 text-xl font-semibold text-muted-foreground">Tidak ada notifikasi.</p>
+              <p className="text-sm text-muted-foreground mt-1">Semua aktivitas sistem akan muncul di sini.</p>
             </div>
           )}
         </CardContent>

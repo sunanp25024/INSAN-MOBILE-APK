@@ -242,3 +242,14 @@ export const mockLocationsData: Wilayah[] = [
     ],
   },
 ];
+
+export interface SystemNotification {
+  id: string; // Firestore document ID
+  title: string;
+  message: string;
+  type: 'APPROVAL_REQUEST' | 'USER_MANAGEMENT' | 'SYSTEM_ALERT' | 'DATA_CHANGE';
+  timestamp: any; // Firestore Server Timestamp
+  read: boolean;
+  linkTo?: string; // e.g., '/approvals'
+  relatedEntityId?: string; // e.g., approval request ID or user UID
+}
