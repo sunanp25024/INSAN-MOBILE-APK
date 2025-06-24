@@ -15,10 +15,10 @@ import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile, ApprovalRequest } from '@/types';
 import { Switch } from '@/components/ui/switch';
-import { auth, db } from '@/lib/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { createUserAccount } from '@/lib/firebaseAdminActions';
 
 const picSchema = z.object({
   id: z.string().min(1, "ID PIC tidak boleh kosong").optional(), // App-specific ID
@@ -90,30 +90,22 @@ export default function ManagePICsPage() {
       toast({ title: "Error", description: "Pengguna tidak terautentikasi.", variant: "destructive" });
       return;
     }
-    if (!data.passwordValue && currentUser.role === 'MasterAdmin') {
-        toast({ title: "Password Dibutuhkan", description: "Password awal wajib diisi untuk PIC baru oleh MasterAdmin.", variant: "destructive" });
+    if (!data.passwordValue) {
+        const roleName = currentUser.role === 'Admin' ? 'pengajuan' : 'PIC';
+        toast({ title: "Password Dibutuhkan", description: `Password awal wajib diisi untuk ${roleName} baru.`, variant: "destructive" });
         return;
     }
-    if (!data.passwordValue && currentUser.role === 'Admin') {
-        toast({ title: "Password Dibutuhkan", description: "Password awal wajib diisi untuk pengajuan PIC baru oleh Admin.", variant: "destructive" });
-        return;
-    }
-
 
     const appPICId = data.id && data.id.trim() !== '' ? data.id.trim() : `PIC${String(Date.now()).slice(-6)}`;
     const emailForAuth = data.email.trim();
 
     if (currentUser.role === 'Admin') {
       // Admin mengajukan permintaan persetujuan
-      if (pics.some(pic => pic.id === appPICId)) {
-        toast({ title: "Gagal Mengajukan", description: `ID Aplikasi PIC ${appPICId} sudah ada atau sedang diajukan.`, variant: "destructive"});
+      if (pics.some(pic => pic.id === appPICId || pic.email === emailForAuth)) {
+        toast({ title: "Gagal Mengajukan", description: `ID Aplikasi PIC atau Email sudah ada atau sedang diajukan.`, variant: "destructive"});
         return;
       }
-      if (pics.some(pic => pic.email === emailForAuth)) {
-        toast({ title: "Gagal Mengajukan", description: `Email ${emailForAuth} sudah digunakan atau sedang diajukan.`, variant: "destructive"});
-        return;
-      }
-
+      
       const approvalPayload: Partial<UserProfile> & { passwordValue?: string } = {
         id: appPICId,
         fullName: data.fullName,
@@ -151,27 +143,13 @@ export default function ManagePICsPage() {
       }
 
     } else if (currentUser.role === 'MasterAdmin') {
-      // MasterAdmin langsung menambahkan PIC
-      if (pics.some(pic => pic.id === appPICId)) {
-        toast({ title: "Gagal Menambahkan", description: `ID Aplikasi PIC ${appPICId} sudah ada.`, variant: "destructive"});
-        return;
-      }
-      // Check if email is already in use in Firebase Auth by querying Firestore first (basic check)
-      const existingEmailUser = pics.find(p => p.email === emailForAuth);
-      if (existingEmailUser) {
-          toast({ title: "Gagal Menambahkan", description: `Email ${emailForAuth} sudah terdaftar.`, variant: "destructive"});
-          return;
-      }
+        // MasterAdmin langsung menambahkan PIC menggunakan server action
+        if (pics.some(pic => pic.id === appPICId || pic.email === emailForAuth)) {
+            toast({ title: "Gagal Menambahkan", description: `ID Aplikasi PIC atau Email sudah ada.`, variant: "destructive"});
+            return;
+        }
 
-      try {
-        // 1. Create user in Firebase Authentication
-        const userCredential = await createUserWithEmailAndPassword(auth, emailForAuth, data.passwordValue!);
-        const firebaseUser = userCredential.user;
-
-        if (firebaseUser) {
-          // 2. Create user profile in Firestore
-          const newPICProfile: UserProfile = {
-            uid: firebaseUser.uid,
+        const profileToCreate: Omit<UserProfile, 'uid' | 'createdAt'> = {
             id: appPICId,
             fullName: data.fullName,
             email: emailForAuth,
@@ -179,27 +157,28 @@ export default function ManagePICsPage() {
             status: 'Aktif',
             workLocation: data.workLocation,
             joinDate: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
             createdBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
-          };
+        };
 
-          await setDoc(doc(db, "users", firebaseUser.uid), newPICProfile);
-          toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} (ID: ${appPICId}) berhasil ditambahkan.` });
-          fetchPICs(); // Refresh list
-          reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
-          setIsAddPICDialogOpen(false);
+        try {
+            const result = await createUserAccount(emailForAuth, data.passwordValue, profileToCreate);
+
+            if (result.success) {
+                toast({ title: "PIC Ditambahkan", description: `PIC ${data.fullName} (ID: ${appPICId}) berhasil ditambahkan.` });
+                fetchPICs();
+                reset({id: '', fullName: '', email: '', passwordValue: '', workLocation: ''});
+                setIsAddPICDialogOpen(false);
+            } else {
+                let errorMessage = result.message || "Gagal menambahkan PIC.";
+                if (result.errorCode === 'auth/email-already-in-use') {
+                    errorMessage = "Email ini sudah terdaftar. Gunakan email lain.";
+                }
+                toast({ title: "Error", description: errorMessage, variant: "destructive" });
+            }
+        } catch (error) {
+            console.error("Error creating PIC:", error);
+            toast({ title: "Error", description: "Terjadi kesalahan saat membuat akun.", variant: "destructive" });
         }
-      } catch (error: any)
-      {
-        console.error("Error adding PIC by MasterAdmin: ", error);
-        let errorMessage = "Gagal menambahkan PIC.";
-        if (error.code === 'auth/email-already-in-use') {
-          errorMessage = "Email ini sudah terdaftar di Firebase Authentication. Gunakan email lain.";
-        } else if (error.code === 'auth/weak-password') {
-          errorMessage = "Password terlalu lemah. Gunakan minimal 6 karakter.";
-        }
-        toast({ title: "Error", description: errorMessage, variant: "destructive" });
-      }
     }
   };
 
@@ -214,13 +193,8 @@ export default function ManagePICsPage() {
   };
 
   const handleEditPIC: SubmitHandler<EditPICFormData> = async (data) => {
-    if (!currentEditingPIC || !currentEditingPIC.uid) return;
-     if (!currentUser || !currentUser.uid) {
-      toast({ title: "Error", description: "Pengguna tidak terautentikasi.", variant: "destructive" });
-      return;
-    }
+    if (!currentEditingPIC || !currentEditingPIC.uid || !currentUser || !currentUser.uid) return;
 
-    // Check if new email conflicts with other users (excluding the current user)
     if (data.email && data.email !== currentEditingPIC.email && pics.some(p => p.email === data.email && p.uid !== currentEditingPIC.uid)) {
         toast({ title: "Gagal Memperbarui", description: `Email ${data.email} sudah digunakan oleh PIC lain.`, variant: "destructive"});
         return;
@@ -234,7 +208,6 @@ export default function ManagePICsPage() {
         updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
     };
 
-
     if (currentUser.role === 'Admin') {
       const approvalRequest: ApprovalRequest = {
         type: 'UPDATE_USER_PROFILE',
@@ -244,21 +217,16 @@ export default function ManagePICsPage() {
         requestedByRole: currentUser.role,
         requestTimestamp: serverTimestamp(),
         targetEntityType: 'USER_PROFILE_DATA',
-        targetEntityId: currentEditingPIC.uid, // UID of the PIC being edited
+        targetEntityId: currentEditingPIC.uid,
         targetEntityName: currentEditingPIC.fullName,
         payload: updatePayload,
-        oldPayload: { // Capture some old fields for audit
-            fullName: currentEditingPIC.fullName,
-            email: currentEditingPIC.email,
-            workLocation: currentEditingPIC.workLocation,
-        },
+        oldPayload: { fullName: currentEditingPIC.fullName, email: currentEditingPIC.email, workLocation: currentEditingPIC.workLocation },
         notesFromRequester: `Pengajuan perubahan data untuk PIC ID: ${currentEditingPIC.id}`,
       };
       try {
         await addDoc(collection(db, "approval_requests"), approvalRequest);
         toast({ title: "Permintaan Perubahan Diajukan", description: `Permintaan perubahan data PIC ${data.fullName} (ID: ${currentEditingPIC.id}) telah dikirim ke MasterAdmin.` });
       } catch (error: any) {
-        console.error("Error submitting update approval request:", error);
         toast({ title: "Error Pengajuan Update", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
       }
     } else if (currentUser.role === 'MasterAdmin') {
@@ -268,7 +236,6 @@ export default function ManagePICsPage() {
         toast({ title: "PIC Diperbarui", description: `Data PIC ${data.fullName} berhasil diperbarui.` });
         fetchPICs();
       } catch (error: any) {
-        console.error("Error updating PIC by MasterAdmin: ", error);
         toast({ title: "Error Update", description: `Gagal memperbarui PIC: ${error.message}`, variant: "destructive" });
       }
     }
@@ -278,16 +245,11 @@ export default function ManagePICsPage() {
   };
   
   const handleDeletePIC = async (picToDelete: UserProfile) => {
-    if (!picToDelete.uid) {
-        toast({ title: "Error", description: "UID PIC tidak ditemukan.", variant: "destructive" });
-        return;
-    }
-    if (!currentUser) return;
+    if (!picToDelete.uid || !currentUser) return;
 
     if (currentUser.role === 'Admin') {
-        // Admin mengajukan permintaan penghapusan (atau lebih baik, penonaktifan)
         const approvalRequest: ApprovalRequest = {
-            type: 'DEACTIVATE_USER', // Or 'DELETE_USER_REQUEST' if hard delete is intended after approval
+            type: 'DEACTIVATE_USER',
             status: 'pending',
             requestedByUid: currentUser.uid,
             requestedByName: currentUser.fullName,
@@ -296,7 +258,7 @@ export default function ManagePICsPage() {
             targetEntityType: 'USER_PROFILE_DATA',
             targetEntityId: picToDelete.uid,
             targetEntityName: picToDelete.fullName,
-            payload: { status: 'Nonaktif' }, // Example payload for deactivation
+            payload: { status: 'Nonaktif' },
             notesFromRequester: `Pengajuan penonaktifan/penghapusan PIC ID: ${picToDelete.id}`,
         };
         try {
@@ -306,7 +268,7 @@ export default function ManagePICsPage() {
             toast({ title: "Error Pengajuan", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
         }
     } else if (currentUser.role === 'MasterAdmin') {
-        if (!window.confirm(`Apakah Anda yakin ingin menghapus PIC ${picToDelete.fullName}? Profil Firestore akan dihapus. Akun Firebase Auth perlu dihapus manual via Firebase Console.`)) {
+        if (!window.confirm(`Apakah Anda yakin ingin menghapus PIC ${picToDelete.fullName}? Profil Firestore akan dihapus, namun akun login Firebase Auth tidak akan terhapus otomatis dari sini.`)) {
             return;
         }
         try {
@@ -314,23 +276,17 @@ export default function ManagePICsPage() {
             toast({ title: "Profil PIC Dihapus", description: `Profil PIC ${picToDelete.fullName} telah dihapus dari Firestore.` });
             fetchPICs();
         } catch (error: any) {
-            console.error("Error deleting PIC profile: ", error);
             toast({ title: "Error Menghapus Profil", description: `Gagal menghapus profil PIC: ${error.message}`, variant: "destructive" });
         }
     }
   };
-
 
   const handleImportPICs = () => {
      toast({ title: "Fitur Dalam Pengembangan", description: "Impor PIC dari Excel belum diimplementasikan." });
   };
   
   const handleStatusChange = async (picToUpdate: UserProfile, newStatusActive: boolean) => {
-    if (!picToUpdate.uid) {
-      toast({ title: "Error", description: "UID PIC tidak ditemukan.", variant: "destructive" });
-      return;
-    }
-    if (!currentUser) return;
+    if (!picToUpdate.uid || !currentUser) return;
 
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
     const payloadForApproval = { status: newStatus };
@@ -369,7 +325,6 @@ export default function ManagePICsPage() {
             });
             fetchPICs();
         } catch (error: any) {
-            console.error("Error updating PIC status: ", error);
             toast({ title: "Error Update Status", description: `Gagal memperbarui status PIC: ${error.message}`, variant: "destructive" });
         }
     }
