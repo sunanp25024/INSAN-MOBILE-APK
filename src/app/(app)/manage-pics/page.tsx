@@ -81,7 +81,7 @@ export default function ManagePICsPage() {
     resolver: zodResolver(picSchema),
   });
   
-  const { register: registerEdit, handleSubmit: handleSubmitEdit, reset: resetEdit, formState: { errors: errorsEdit } } = useForm<EditPICFormData>({
+  const { register: registerEdit, handleSubmit: handleSubmitEdit, reset: resetEdit, formState: { errors: errorsEdit }, setValue } = useForm<EditPICFormData>({
     resolver: zodResolver(editPicSchema),
   });
 
@@ -184,12 +184,10 @@ export default function ManagePICsPage() {
 
   const handleOpenEditDialog = (pic: UserProfile) => {
     setCurrentEditingPIC(pic);
-    resetEdit({
-        id: pic.id,
-        fullName: pic.fullName,
-        email: pic.email || '',
-        workLocation: pic.workLocation || ''
-    });
+    setValue('id', pic.id);
+    setValue('fullName', pic.fullName);
+    setValue('email', pic.email || '');
+    setValue('workLocation', pic.workLocation || '');
     setIsEditPICDialogOpen(true);
   };
 

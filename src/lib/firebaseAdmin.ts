@@ -21,7 +21,8 @@ const privateKey = (process.env.FIREBASE_PRIVATE_KEY || '').replace(
   '\n'
 );
 
-// Initialize the app if it's not already initialized.
+// Initialize the app only if it's not already initialized.
+// This prevents re-initialization errors in hot-reload environments.
 if (!admin.apps.length) {
   try {
     admin.initializeApp({
