@@ -284,7 +284,7 @@ export default function ManageKurirsPage() {
             }
             
             const creatorProfile = { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role };
-            const result = await importUsers(json, 'Kurir', creatorProfile);
+            const result = await importUsers(JSON.parse(JSON.stringify(json)), 'Kurir', creatorProfile);
 
             if (result.success) {
                 toast({
@@ -596,12 +596,25 @@ export default function ManageKurirsPage() {
                       <TableCell>{kurir.email}</TableCell>
                       <TableCell>{kurir.workLocation}</TableCell>
                       <TableCell>
-                        <Switch
-                          checked={kurir.status === 'Aktif'}
-                          onCheckedChange={(newStatusChecked) => handleStatusChange(kurir, newStatusChecked)}
-                          aria-label={`Status kurir ${kurir.fullName}`}
-                          disabled={currentUser?.role !== 'MasterAdmin'}
-                        />
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0}>
+                                <Switch
+                                  checked={kurir.status === 'Aktif'}
+                                  onCheckedChange={(newStatusChecked) => handleStatusChange(kurir, newStatusChecked)}
+                                  aria-label={`Status kurir ${kurir.fullName}`}
+                                  disabled={currentUser?.role !== 'MasterAdmin'}
+                                />
+                              </span>
+                            </TooltipTrigger>
+                             {currentUser?.role !== 'MasterAdmin' && (
+                              <TooltipContent>
+                                <p>Hanya MasterAdmin yang dapat mengubah status.</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
                         <span className={`ml-2 text-xs ${kurir.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
                           {kurir.status}
                         </span>
@@ -688,7 +701,7 @@ export default function ManageKurirsPage() {
               id="excel-file-kurir" 
               type="file" 
               accept=".xlsx, .xls"
-              className="mt-1 hidden"
+              className="mt-1"
               onChange={handleFileSelectAndImport}
               ref={fileInputRef}
               disabled={isImporting}

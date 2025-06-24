@@ -238,7 +238,7 @@ export default function ManageAdminsPage() {
             }
 
             const creatorProfile = { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role };
-            const result = await importUsers(json, 'Admin', creatorProfile);
+            const result = await importUsers(JSON.parse(JSON.stringify(json)), 'Admin', creatorProfile);
 
             if (result.success) {
                 toast({
@@ -406,11 +406,25 @@ export default function ManageAdminsPage() {
                       <TableCell>{admin.fullName}</TableCell>
                       <TableCell>{admin.email}</TableCell>
                       <TableCell>
-                        <Switch
-                          checked={admin.status === 'Aktif'}
-                          onCheckedChange={(newStatus) => handleStatusChange(admin, newStatus)}
-                          aria-label={`Status admin ${admin.fullName}`}
-                        />
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0}>
+                                <Switch
+                                  checked={admin.status === 'Aktif'}
+                                  onCheckedChange={(newStatus) => handleStatusChange(admin, newStatus)}
+                                  aria-label={`Status admin ${admin.fullName}`}
+                                  disabled={currentUser?.role !== 'MasterAdmin'}
+                                />
+                              </span>
+                            </TooltipTrigger>
+                            {currentUser?.role !== 'MasterAdmin' && (
+                              <TooltipContent>
+                                <p>Hanya MasterAdmin yang dapat mengubah status.</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
                         <span className={`ml-2 text-xs ${admin.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
                           {admin.status}
                         </span>
@@ -508,7 +522,7 @@ export default function ManageAdminsPage() {
               id="excel-file-admin" 
               type="file" 
               accept=".xlsx, .xls"
-              className="mt-1 hidden"
+              className="mt-1"
               onChange={handleFileSelectAndImport}
               ref={fileInputRef}
               disabled={isImporting}

@@ -297,7 +297,7 @@ export default function ManagePICsPage() {
             }
 
             const creatorProfile = { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role };
-            const result = await importUsers(json, 'PIC', creatorProfile);
+            const result = await importUsers(JSON.parse(JSON.stringify(json)), 'PIC', creatorProfile);
 
             if (result.success) {
                 toast({
@@ -498,12 +498,25 @@ export default function ManagePICsPage() {
                         <TableCell>{pic.email}</TableCell>
                         <TableCell>{pic.workLocation}</TableCell>
                         <TableCell>
-                          <Switch
-                            checked={pic.status === 'Aktif'}
-                            onCheckedChange={(newStatusChecked) => handleStatusChange(pic, newStatusChecked)}
-                            aria-label={`Status PIC ${pic.fullName}`}
-                            disabled={currentUser?.role !== 'MasterAdmin'}
-                          />
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span tabIndex={0}>
+                                  <Switch
+                                    checked={pic.status === 'Aktif'}
+                                    onCheckedChange={(newStatusChecked) => handleStatusChange(pic, newStatusChecked)}
+                                    aria-label={`Status PIC ${pic.fullName}`}
+                                    disabled={currentUser?.role !== 'MasterAdmin'}
+                                  />
+                                </span>
+                              </TooltipTrigger>
+                               {currentUser?.role !== 'MasterAdmin' && (
+                                <TooltipContent>
+                                  <p>Hanya MasterAdmin yang dapat mengubah status.</p>
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TooltipProvider>
                           <span className={`ml-2 text-xs ${pic.status === 'Aktif' ? 'text-green-600' : pic.status === 'PendingApproval' ? 'text-yellow-600' : 'text-red-600'}`}>
                             {pic.status}
                           </span>
@@ -610,7 +623,7 @@ export default function ManagePICsPage() {
               id="excel-file-pic" 
               type="file" 
               accept=".xlsx, .xls"
-              className="mt-1 hidden"
+              className="mt-1"
               onChange={handleFileSelectAndImport}
               ref={fileInputRef}
               disabled={isImporting}
