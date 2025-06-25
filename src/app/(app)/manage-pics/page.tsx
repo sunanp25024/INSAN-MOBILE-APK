@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, importUsers } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus } from '@/lib/firebaseAdminActions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import * as XLSX from 'xlsx';
 
@@ -336,47 +336,43 @@ export default function ManagePICsPage() {
   
   const handleStatusChange = async (picToUpdate: UserProfile, newStatusActive: boolean) => {
     if (!picToUpdate.uid || !currentUser) return;
-
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
-    const payloadForApproval = { status: newStatus };
 
     if (currentUser.role === 'Admin') {
-        const approvalRequest: Omit<ApprovalRequest, 'id'> = {
-            type: newStatusActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
-            status: 'pending',
-            requestedByUid: currentUser.uid,
-            requestedByName: currentUser.fullName,
-            requestedByRole: currentUser.role,
-            requestTimestamp: serverTimestamp(),
-            targetEntityType: 'USER_PROFILE_DATA',
-            targetEntityId: picToUpdate.uid,
-            targetEntityName: picToUpdate.fullName,
-            payload: payloadForApproval,
-            notesFromRequester: `Pengajuan perubahan status PIC ID ${picToUpdate.id} menjadi ${newStatus}.`,
-        };
-         try {
-            await addDoc(collection(db, "approval_requests"), approvalRequest);
-            await createNotification(`Admin ${currentUser.fullName} mengajukan perubahan status untuk PIC: ${picToUpdate.fullName} menjadi ${newStatus}.`);
-            toast({ title: "Permintaan Perubahan Status Diajukan", description: `Permintaan perubahan status PIC ${picToUpdate.fullName} menjadi ${newStatus} telah dikirim.` });
-        } catch (error: any) {
-            toast({ title: "Error Pengajuan", description: `Gagal mengajukan perubahan status: ${error.message}`, variant: "destructive" });
-        }
+      const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+        type: newStatusActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
+        status: 'pending',
+        requestedByUid: currentUser.uid,
+        requestedByName: currentUser.fullName,
+        requestedByRole: currentUser.role,
+        requestTimestamp: serverTimestamp(),
+        targetEntityType: 'USER_PROFILE_DATA',
+        targetEntityId: picToUpdate.uid,
+        targetEntityName: picToUpdate.fullName,
+        payload: { status: newStatus },
+        notesFromRequester: `Pengajuan perubahan status PIC ID ${picToUpdate.id} menjadi ${newStatus}.`,
+      };
+      try {
+        await addDoc(collection(db, "approval_requests"), approvalRequest);
+        await createNotification(`Admin ${currentUser.fullName} mengajukan perubahan status untuk PIC: ${picToUpdate.fullName} menjadi ${newStatus}.`);
+        toast({ title: "Permintaan Perubahan Status Diajukan", description: `Permintaan perubahan status PIC ${picToUpdate.fullName} menjadi ${newStatus} telah dikirim.` });
+      } catch (error: any) {
+        toast({ title: "Error Pengajuan", description: `Gagal mengajukan perubahan status: ${error.message}`, variant: "destructive" });
+      }
     } else if (currentUser.role === 'MasterAdmin') {
-        try {
-            const picDocRef = doc(db, "users", picToUpdate.uid);
-            await updateDoc(picDocRef, { 
-                status: newStatus,
-                updatedAt: new Date().toISOString(),
-                updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
-            });
-            toast({
-                title: "Status PIC Diperbarui",
-                description: `Status PIC ${picToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
-            });
-            fetchPICs();
-        } catch (error: any) {
-            toast({ title: "Error Update Status", description: `Gagal memperbarui status PIC: ${error.message}`, variant: "destructive" });
-        }
+      const handlerProfile = { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role };
+      const result = await updateUserStatus(picToUpdate.uid, newStatus, handlerProfile);
+      
+      if (result.success) {
+        toast({
+          title: "Status PIC Diperbarui",
+          description: `Status PIC ${picToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
+        });
+        fetchPICs();
+      } else {
+        console.error("Error updating PIC status:", result.message);
+        toast({ title: "Error", description: `Gagal memperbarui status PIC: ${result.message}`, variant: "destructive" });
+      }
     }
   };
 
@@ -633,6 +629,3 @@ export default function ManagePICsPage() {
     </div>
   );
 }
-
-    
-

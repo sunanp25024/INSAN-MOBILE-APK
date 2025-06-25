@@ -22,7 +22,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, importUsers } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus } from '@/lib/firebaseAdminActions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import * as XLSX from 'xlsx';
 
@@ -371,8 +371,7 @@ export default function ManageKurirsPage() {
   const handleStatusChange = async (kurirToUpdate: UserProfile, newStatusActive: boolean) => {
     if (!kurirToUpdate.uid || !currentUser) return;
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
-    const payloadForApproval = { status: newStatus };
-
+    
     if (currentUser.role === 'Admin') {
         const approvalRequest: Omit<ApprovalRequest, 'id'> = {
             type: newStatusActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
@@ -384,7 +383,7 @@ export default function ManageKurirsPage() {
             targetEntityType: 'USER_PROFILE_DATA',
             targetEntityId: kurirToUpdate.uid,
             targetEntityName: kurirToUpdate.fullName,
-            payload: payloadForApproval,
+            payload: { status: newStatus },
             notesFromRequester: `Pengajuan perubahan status Kurir ID ${kurirToUpdate.id} menjadi ${newStatus}.`,
         };
          try {
@@ -394,20 +393,17 @@ export default function ManageKurirsPage() {
             toast({ title: "Error Pengajuan", description: `Gagal mengajukan perubahan status: ${error.message}`, variant: "destructive" });
         }
     } else if (currentUser.role === 'MasterAdmin') {
-        try {
-            const kurirDocRef = doc(db, "users", kurirToUpdate.uid);
-            await updateDoc(kurirDocRef, { 
-                status: newStatus,
-                updatedAt: new Date().toISOString(),
-                updatedBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role }
-            });
+        const handlerProfile = { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role };
+        const result = await updateUserStatus(kurirToUpdate.uid, newStatus, handlerProfile);
+        
+        if (result.success) {
             toast({
                 title: "Status Kurir Diperbarui",
                 description: `Status kurir ${kurirToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
             });
             fetchKurirs();
         } catch (error: any) {
-            toast({ title: "Error", description: `Gagal memperbarui status kurir: ${error.message}`, variant: "destructive" });
+            toast({ title: "Error", description: `Gagal memperbarui status kurir: ${result.message}`, variant: "destructive" });
         }
     }
   };
