@@ -78,8 +78,12 @@ export default function AttendancePage() {
         const todayDocId = `${user.uid}_${todayISO}`;
         const todayDocRef = doc(db, "attendance", todayDocId);
         const todayDocSnap = await getDoc(todayDocRef);
+        
         if (todayDocSnap.exists()) {
-            setTodayRecord(todayDocSnap.data() as AttendanceRecord);
+            const record = todayDocSnap.data() as AttendanceRecord;
+            setTodayRecord({ id: todayDocSnap.id, ...record });
+            // Correct logic: check for checkInTime specifically
+            localStorage.setItem('courierCheckedInToday', record.checkInTime ? todayISO : 'false');
         } else {
             setTodayRecord({ 
                 id: todayDocId,
@@ -89,9 +93,8 @@ export default function AttendancePage() {
                 date: todayISO, 
                 status: 'Not Checked In' 
             });
+            localStorage.setItem('courierCheckedInToday', 'false');
         }
-        localStorage.setItem('courierCheckedInToday', todayDocSnap.exists() ? todayISO : 'false');
-
 
         // Fetch historical records for the last 60 days
         const sixtyDaysAgo = format(subDays(new Date(), 60), 'yyyy-MM-dd');
@@ -104,7 +107,7 @@ export default function AttendancePage() {
         const querySnapshot = await getDocs(historyQuery);
         const fetchedHistory: AttendanceRecord[] = [];
         querySnapshot.forEach((doc) => {
-            fetchedHistory.push(doc.data() as AttendanceRecord);
+            fetchedHistory.push({ id: doc.id, ...doc.data() } as AttendanceRecord);
         });
         setAttendanceHistory(fetchedHistory);
 
@@ -133,8 +136,8 @@ export default function AttendancePage() {
     const docId = `${currentUser.uid}_${todayISO}`;
     const recordRef = doc(db, "attendance", docId);
     
-    const newRecord: AttendanceRecord = {
-      id: docId,
+    // We don't store the ID in the document itself
+    const newRecord: Omit<AttendanceRecord, 'id'> = {
       kurirUid: currentUser.uid,
       kurirId: currentUser.id,
       kurirName: currentUser.fullName,
@@ -148,10 +151,10 @@ export default function AttendancePage() {
 
     try {
         await setDoc(recordRef, newRecord, { merge: true });
-        setTodayRecord(newRecord);
-        setAttendanceHistory(prev => [newRecord, ...prev.filter(r => r.date !== todayISO)]);
-        localStorage.setItem('courierCheckedInToday', todayISO);
         toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Status: ${newRecord.status}.` });
+        // REFETCH data from Firestore to ensure UI consistency
+        await fetchAttendanceData(currentUser);
+        localStorage.setItem('courierCheckedInToday', todayISO);
     } catch (error) {
         console.error("Error during check-in: ", error);
         toast({ title: "Check-In Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
@@ -181,10 +184,9 @@ export default function AttendancePage() {
             timestamp: Timestamp.fromDate(now),
             checkOutTimestamp: Timestamp.fromDate(now),
         });
-        const updatedRecord = { ...todayRecord, checkOutTime, checkOutTimestamp: Timestamp.fromDate(now) };
-        setTodayRecord(updatedRecord as AttendanceRecord);
-        setAttendanceHistory(prev => prev.map(r => r.date === todayISO ? updatedRecord : r) as AttendanceRecord[]);
         toast({ title: "Check-Out Berhasil", description: `Anda check-out pukul ${checkOutTime}.` });
+        // REFETCH data from Firestore to ensure UI consistency
+        await fetchAttendanceData(currentUser);
     } catch(error) {
         console.error("Error during check-out:", error);
         toast({ title: "Check-Out Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
