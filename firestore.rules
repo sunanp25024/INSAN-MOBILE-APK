@@ -1,9 +1,9 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- HELPER FUNCTIONS ---
     function userExists(uid) {
       return exists(/databases/$(database)/documents/users/$(uid));
     }
@@ -12,24 +12,25 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(uid)).data.role;
     }
 
-    // --- USERS COLLECTION ---
     match /users/{userId} {
-      allow create: if request.auth.uid == userId || 
-                    (userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin') ||
-                    (userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && request.resource.data.role in ['PIC', 'Kurir']);
+      allow create: if (request.auth.uid == userId) || 
+                       (userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin') ||
+                       (userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && request.resource.data.role in ['PIC', 'Kurir']);
+
       allow read: if request.auth != null && (
                     request.auth.uid == userId ||
                     (userExists(request.auth.uid) && userRole(request.auth.uid) in ['MasterAdmin', 'Admin', 'PIC'])
                   );
+
       allow update: if request.auth != null && (
                       (request.auth.uid == userId && request.resource.data.role == resource.data.role) ||
                       (userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin') ||
                       (userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && resource.data.role in ['PIC', 'Kurir'])
                     );
+      
       allow delete: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
     }
 
-    // --- APPROVAL_REQUESTS COLLECTION ---
     match /approval_requests/{requestId} {
       allow create: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && request.resource.data.requestedByUid == request.auth.uid;
       allow read: if userExists(request.auth.uid) && (
@@ -42,8 +43,12 @@ service cloud.firestore {
                     );
       allow delete: if false;
     }
+    
+    match /notifications/{notificationId} {
+        allow read: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
+        allow write: if userExists(request.auth.uid) && userRole(request.auth.uid) in ['Admin', 'MasterAdmin'];
+    }
 
-    // --- KURIR_DAILY_TASKS COLLECTION ---
     match /kurir_daily_tasks/{taskId} {
       function isOwnerOrManager() {
         let taskOwnerUid = taskId.split('_')[0];
@@ -55,44 +60,25 @@ service cloud.firestore {
         allow read, write: if request.auth != null && isOwnerOrManager();
       }
     }
-
-    // --- NOTIFICATIONS COLLECTION ---
-    match /notifications/{notificationId} {
-        // Only MasterAdmins should be able to read notifications.
-        // The app creates them via server-side logic (Admin SDK) which bypasses these rules.
-        allow read: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
-        allow write: if false; // All writes should be from the server.
-    }
-
-    // --- ATTENDANCE COLLECTION (FIX) ---
+    
+    // --- ATURAN BARU YANG DIPERBAIKI SECARA DEFINITIF ---
     match /attendance/{attendanceId} {
-      function isOwner() {
-        // The document ID is formatted as {kurirUid}_{yyyy-MM-dd}
-        return request.auth.uid == attendanceId.split('_')[0];
-      }
-      
-      function isManager() {
-        return userExists(request.auth.uid) && userRole(request.auth.uid) in ['PIC', 'Admin', 'MasterAdmin'];
-      }
+        function isManager() {
+          return userExists(request.auth.uid) && userRole(request.auth.uid) in ['PIC', 'Admin', 'MasterAdmin'];
+        }
 
-      // Read: The owner (Kurir) can read their own data. Managers can read any attendance data.
-      allow read: if request.auth.uid != null && (isOwner() || isManager());
-
-      // Create: A Kurir can create their own attendance record.
-      // - The doc ID must contain their UID.
-      // - The `kurirUid` field inside the doc must also be their UID.
-      allow create: if request.auth.uid != null &&
-                       userRole(request.auth.uid) == 'Kurir' &&
-                       isOwner() &&
-                       request.resource.data.kurirUid == request.auth.uid;
-
-      // Update: A Kurir can update their own attendance record (for checkout).
-      // - They must be the owner.
-      // - They cannot change fundamental fields like `kurirUid`.
-      allow update: if request.auth.uid != null &&
-                       userRole(request.auth.uid) == 'Kurir' &&
-                       isOwner() &&
-                       request.resource.data.kurirUid == resource.data.kurirUid;
+        // Kurir dapat MEMBACA (read) dan MEMPERBARUI (update) data absensi jika UID di dalam dokumen cocok dengan UID mereka,
+        // ATAU jika pengguna adalah seorang manajer. Aturan ini sekarang benar untuk query daftar data.
+        allow read, update: if request.auth != null && (
+                            (resource.data.kurirUid == request.auth.uid) || 
+                            isManager()
+                          );
+                          
+        // Kurir dapat MEMBUAT (create) data absensi baru HANYA JIKA mereka memasukkan UID mereka sendiri.
+        allow create: if request.auth != null && request.resource.data.kurirUid == request.auth.uid;
+        
+        // Tidak ada yang boleh menghapus data absensi.
+        allow delete: if false;
     }
   }
 }
