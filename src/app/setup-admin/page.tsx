@@ -72,17 +72,23 @@ export default function SetupAdminPage() {
     } catch (error: any) {
       console.error("Error setting up MasterAdmin: ", error);
       let errorMessage = "Gagal membuat akun MasterAdmin.";
-      if (error.code === 'auth/email-already-in-use') {
+      
+      // Check for the specific referer block error first
+      if (error.message && error.message.includes('auth/requests-from-referer')) {
+        errorMessage = 'Domain aplikasi Vercel Anda diblokir. Pastikan Anda telah menambahkan "apk-para-kurir-tau.vercel.app" ke daftar "HTTP referrers" pada setelan API Key di Google Cloud Console untuk melanjutkan setup.';
+      } else if (error.code === 'auth/email-already-in-use') {
         errorMessage = "Email ini sudah terdaftar. Gunakan email lain atau periksa Firebase Authentication.";
       } else if (error.code === 'auth/weak-password') {
         errorMessage = "Password terlalu lemah. Gunakan minimal 6 karakter.";
       } else if (error.code === 'permission-denied' || error.code === 'permission_denied') {
         errorMessage = "Gagal menyimpan profil karena masalah izin. Pastikan Firestore Security Rules sudah diperbarui sesuai instruksi terbaru.";
       }
+      
       toast({
         title: "Setup Gagal",
         description: errorMessage,
         variant: "destructive",
+        duration: 9000, // Give more time to read the detailed error
       });
     } finally {
       setIsLoading(false);

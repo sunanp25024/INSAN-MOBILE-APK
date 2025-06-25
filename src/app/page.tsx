@@ -50,27 +50,35 @@ export default function LoginPage() {
       
     } catch (error: any) {
       let errorMessage = 'Email atau password salah.';
-      switch (error.code) {
-        case 'auth/user-not-found':
-        case 'auth/wrong-password':
-        case 'auth/invalid-credential':
-          errorMessage = 'Email atau password yang Anda masukkan salah.';
-          break;
-        case 'auth/invalid-email':
-          errorMessage = 'Format email tidak valid.';
-          break;
-        case 'auth/too-many-requests':
-            errorMessage = 'Terlalu banyak percobaan login. Coba lagi nanti.';
+      
+      // Check for the specific referer block error first
+      if (error.message && error.message.includes('auth/requests-from-referer')) {
+        errorMessage = 'Domain aplikasi Vercel Anda diblokir. Pastikan Anda telah menambahkan "apk-para-kurir-tau.vercel.app" ke daftar "HTTP referrers" pada setelan API Key di Google Cloud Console.';
+      } else {
+        switch (error.code) {
+          case 'auth/user-not-found':
+          case 'auth/wrong-password':
+          case 'auth/invalid-credential':
+            errorMessage = 'Email atau password yang Anda masukkan salah.';
             break;
-        default:
-          console.error("Firebase login error:", error);
-          errorMessage = 'Terjadi kesalahan saat login. Silakan coba lagi nanti.';
-          break;
+          case 'auth/invalid-email':
+            errorMessage = 'Format email tidak valid.';
+            break;
+          case 'auth/too-many-requests':
+              errorMessage = 'Terlalu banyak percobaan login. Coba lagi nanti.';
+              break;
+          default:
+            console.error("Firebase login error:", error);
+            errorMessage = 'Terjadi kesalahan saat login. Silakan coba lagi nanti.';
+            break;
+        }
       }
+      
       toast({
         title: 'Login Gagal',
         description: errorMessage,
         variant: 'destructive',
+        duration: 9000, // Give more time to read the detailed error
       });
     } finally {
       setIsLoading(false);
