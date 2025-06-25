@@ -108,6 +108,21 @@ export default function ManageKurirsPage() {
     fetchKurirs();
   }, []);
 
+  const createNotification = async (message: string) => {
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        title: 'Permintaan Persetujuan Baru',
+        message,
+        type: 'APPROVAL_REQUEST',
+        timestamp: serverTimestamp(),
+        read: false,
+        linkTo: '/approvals',
+      });
+    } catch (error) {
+      console.error("Failed to create notification:", error);
+    }
+  };
+
   const handleAddKurirSubmit: SubmitHandler<KurirFormData> = async (data) => {
     if (!currentUser) return;
     setIsSubmitting(true);
@@ -164,6 +179,7 @@ export default function ManageKurirsPage() {
       };
       try {
         await addDoc(collection(db, "approval_requests"), approvalRequest);
+        await createNotification(`Admin ${currentUser.fullName} mengajukan penambahan kurir baru: ${data.fullName}.`);
         toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan kurir ${data.fullName} telah dikirim.` });
         reset();
         setIsAddKurirDialogOpen(false);
@@ -250,6 +266,7 @@ export default function ManageKurirsPage() {
         };
         try {
             await addDoc(collection(db, "approval_requests"), approvalRequest);
+            await createNotification(`Admin ${currentUser.fullName} mengajukan perubahan data untuk Kurir: ${currentEditingKurir.fullName}.`);
             toast({ title: "Permintaan Perubahan Diajukan", description: `Permintaan perubahan data kurir ${data.fullName} telah dikirim.` });
         } catch (error: any) {
             toast({ title: "Error Pengajuan Update", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
@@ -388,6 +405,7 @@ export default function ManageKurirsPage() {
         };
          try {
             await addDoc(collection(db, "approval_requests"), approvalRequest);
+            await createNotification(`Admin ${currentUser.fullName} mengajukan perubahan status untuk Kurir: ${kurirToUpdate.fullName} menjadi ${newStatus}.`);
             toast({ title: "Permintaan Perubahan Status Diajukan", description: `Permintaan perubahan status kurir ${kurirToUpdate.fullName} menjadi ${newStatus} telah dikirim.` });
         } catch (error: any) {
             toast({ title: "Error Pengajuan", description: `Gagal mengajukan perubahan status: ${error.message}`, variant: "destructive" });
@@ -402,7 +420,7 @@ export default function ManageKurirsPage() {
                 description: `Status kurir ${kurirToUpdate.fullName} telah diubah menjadi ${newStatus}.`,
             });
             fetchKurirs();
-        } catch (error: any) {
+        } else {
             toast({ title: "Error", description: `Gagal memperbarui status kurir: ${result.message}`, variant: "destructive" });
         }
     }
