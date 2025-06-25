@@ -3,10 +3,78 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Izinkan operasi baca dan tulis jika pengguna sudah login.
-    // Ini adalah aturan dasar yang aman untuk tahap pengembangan.
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function userRole(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role;
+    }
+
+    match /users/{userId} {
+      // --- ATURAN CREATE DIPERBAIKI ---
+      // Izinkan user membuat profilnya sendiri setelah autentikasi
+      allow create: if request.auth.uid == userId;
+      
+      // Izinkan MasterAdmin membuat pengguna lain
+      allow create: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
+      
+      // Izinkan Admin membuat PIC atau Kurir
+      allow create: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && request.resource.data.role in ['PIC', 'Kurir'];
+      // --- AKHIR PERBAIKAN ---
+
+      allow read: if request.auth != null && (
+                    request.auth.uid == userId ||
+                    (userExists(request.auth.uid) && userRole(request.auth.uid) in ['MasterAdmin', 'Admin', 'PIC'])
+                  );
+
+      allow update: if request.auth != null && (
+                      (request.auth.uid == userId && request.resource.data.role == resource.data.role) ||
+                      (userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin') ||
+                      (userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && resource.data.role in ['PIC', 'Kurir'])
+                    );
+      
+      allow delete: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
+    }
+
+    match /attendance/{attendanceId} {
+      // Seorang Kurir hanya bisa membuat data absensi untuk dirinya sendiri.
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.kurirUid;
+
+      // Seorang Kurir hanya bisa memperbarui data absensi miliknya.
+      allow update: if request.auth != null && request.auth.uid == resource.data.kurirUid;
+      
+      // Kurir dapat membaca datanya sendiri, dan Manajer (PIC, Admin, MasterAdmin) dapat membaca semua data absensi.
+      allow read: if request.auth != null && (
+                    request.auth.uid == resource.data.kurirUid ||
+                    (userExists(request.auth.uid) && userRole(request.auth.uid) in ['PIC', 'Admin', 'MasterAdmin'])
+                  );
+    }
+
+    match /approval_requests/{requestId} {
+      allow create: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && request.resource.data.requestedByUid == request.auth.uid;
+      allow read: if userExists(request.auth.uid) && (
+                    (userRole(request.auth.uid) == 'Admin' && resource.data.requestedByUid == request.auth.uid) ||
+                    userRole(request.auth.uid) == 'MasterAdmin'
+                  );
+      allow update: if userExists(request.auth.uid) && (
+                      userRole(request.auth.uid) == 'MasterAdmin' ||
+                      (userRole(request.auth.uid) == 'Admin' && resource.data.requestedByUid == request.auth.uid && request.resource.data.status == 'cancelled')
+                    );
+      allow delete: if false;
+    }
+
+    match /kurir_daily_tasks/{taskId} {
+      function isOwnerOrManager() {
+        let taskOwnerUid = taskId.split('_')[0];
+        return request.auth.uid == taskOwnerUid || (userExists(request.auth.uid) && userRole(request.auth.uid) in ['PIC', 'Admin', 'MasterAdmin']);
+      }
+      allow read, write: if request.auth != null && isOwnerOrManager();
+      
+      match /packages/{packageId} {
+        allow read, write: if request.auth != null && isOwnerOrManager();
+      }
     }
   }
 }
