@@ -11,7 +11,7 @@ import { ResponsiveContainer, BarChart as RechartsBarChart, LineChart, PieChart,
 import { TrendingUp, Package, CheckCircle, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon as LucideCalendarIcon, AlertCircle, BarChart as BarChartIcon } from 'lucide-react';
 import type { UserProfile, KurirDailyTaskDoc, AttendanceRecord } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format, startOfWeek, endOfWeek, parseISO, startOfDay, subDays } from "date-fns";
+import { format, startOfWeek, endOfWeek, parseISO, startOfDay, subDays, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
@@ -54,31 +54,42 @@ export default function PerformancePage() {
     const fetchPerformanceData = async () => {
       setIsLoading(true);
       try {
-        const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+        const ninetyDaysAgo = startOfDay(subDays(new Date(), 90));
         
-        // Fetch daily task data for the last 90 days for performance calculation
-        // THIS IS THE CORRECTED QUERY: removed orderBy to prevent index requirement
+        // Fetch task data for the user, filtering by status
         const tasksQuery = query(
           collection(db, "kurir_daily_tasks"),
           where("kurirUid", "==", currentUser.uid),
-          where("date", ">=", ninetyDaysAgo),
           where("taskStatus", "==", "completed")
         );
         const tasksSnapshot = await getDocs(tasksQuery);
-        // Client-side sorting
+        
+        // Client-side filtering for date range
         const dailyTasks: KurirDailyTaskDoc[] = tasksSnapshot.docs
           .map(doc => doc.data() as KurirDailyTaskDoc)
+          .filter(task => {
+            try {
+              return parseISO(task.date) >= ninetyDaysAgo;
+            } catch (e) { return false; }
+          })
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
 
-        // Fetch attendance data for the last 90 days
+        // Fetch attendance data for the user
         const attendanceQuery = query(
           collection(db, "attendance"),
-          where("kurirUid", "==", currentUser.uid),
-          where("date", ">=", ninetyDaysAgo)
+          where("kurirUid", "==", currentUser.uid)
         );
         const attendanceSnapshot = await getDocs(attendanceQuery);
-        const attendanceRecords: AttendanceRecord[] = attendanceSnapshot.docs.map(doc => doc.data() as AttendanceRecord);
+        
+        // Client-side filtering for date range
+        const attendanceRecords: AttendanceRecord[] = attendanceSnapshot.docs
+          .map(doc => doc.data() as AttendanceRecord)
+          .filter(record => {
+            try {
+              return parseISO(record.date) >= ninetyDaysAgo;
+            } catch(e) { return false; }
+          });
 
         // Process data
         const dailyPerformance = dailyTasks.map(task => ({

@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { AttendanceRecord, UserProfile } from '@/types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate as getDayOfMonthDateFns, subDays } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate as getDayOfMonthDateFns, subDays, startOfDay, parseISO, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import type { Locale } from "date-fns";
 import { db } from '@/lib/firebase';
@@ -82,7 +82,6 @@ export default function AttendancePage() {
         if (todayDocSnap.exists()) {
             const record = todayDocSnap.data() as AttendanceRecord;
             setTodayRecord({ id: todayDocSnap.id, ...record });
-            // Correct logic: check for checkInTime specifically
             localStorage.setItem('courierCheckedInToday', record.checkInTime ? todayISO : 'false');
         } else {
             setTodayRecord({ 
@@ -96,18 +95,24 @@ export default function AttendancePage() {
             localStorage.setItem('courierCheckedInToday', 'false');
         }
 
-        // Fetch historical records for the last 60 days
-        const sixtyDaysAgo = format(subDays(new Date(), 60), 'yyyy-MM-dd');
+        // Fetch all historical records for the user
         const historyQuery = query(
             collection(db, "attendance"),
-            where("kurirUid", "==", user.uid),
-            where("date", ">=", sixtyDaysAgo)
-            // orderBy("date", "desc") // This caused the index error. Sorting is now done on the client.
+            where("kurirUid", "==", user.uid)
         );
         const querySnapshot = await getDocs(historyQuery);
+        
+        const sixtyDaysAgo = startOfDay(subDays(new Date(), 60));
         const fetchedHistory: AttendanceRecord[] = [];
         querySnapshot.forEach((doc) => {
-            fetchedHistory.push({ id: doc.id, ...doc.data() } as AttendanceRecord);
+            const record = { id: doc.id, ...doc.data() } as AttendanceRecord;
+            // Client-side filtering for the last 60 days
+            try {
+              const recordDate = parseISO(record.date);
+              if (isValid(recordDate) && recordDate >= sixtyDaysAgo) {
+                  fetchedHistory.push(record);
+              }
+            } catch(e) { /* ignore invalid dates */ }
         });
         
         // Sort data on the client to ensure newest records are first
