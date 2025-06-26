@@ -138,6 +138,16 @@ export default function ApprovalsPage() {
         case 'ACTIVATE_USER':
         case 'DEACTIVATE_USER':
             return <p><strong>Status Baru:</strong> {payload.status}</p>
+        case 'DELETE_USER':
+            return (
+                <>
+                    <p><strong>UID:</strong> {payload.uid}</p>
+                    <p><strong>ID Aplikasi:</strong> {payload.id}</p>
+                    <p><strong>Nama Lengkap:</strong> {payload.fullName}</p>
+                    <p><strong>Role:</strong> {payload.role}</p>
+                    <p className="text-destructive font-semibold mt-2">Permintaan ini akan menghapus pengguna secara permanen.</p>
+                </>
+            );
         default:
             return <p>Detail tidak tersedia untuk tipe permintaan ini.</p>
     }

@@ -8,18 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile, ApprovalRequest } from '@/types';
+import type { UserProfile } from '@/types';
 import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus } from '@/lib/firebaseAdminActions';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus, requestUserDeletion } from '@/lib/firebaseAdminActions';
 import * as XLSX from 'xlsx';
 
 const picSchema = z.object({
@@ -42,6 +41,8 @@ export default function ManagePICsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddPICDialogOpen, setIsAddPICDialogOpen] = useState(false);
   const [isEditPICDialogOpen, setIsEditPICDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [currentEditingPIC, setCurrentEditingPIC] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -240,26 +241,32 @@ export default function ManagePICsPage() {
     setIsSubmitting(false);
   };
   
-  const handleDeletePIC = async (picToDelete: UserProfile) => {
-    if (!picToDelete.uid || !currentUser || currentUser.role !== 'MasterAdmin') {
-        toast({ title: "Akses Ditolak", description: "Hanya MasterAdmin yang bisa menghapus.", variant: "destructive" });
-        return;
-    }
-    
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus PIC ${picToDelete.fullName}? Tindakan ini akan menghapus akun login dan profil secara permanen.`)) {
-        return;
-    }
-    
+  const handleOpenDeleteDialog = (user: UserProfile) => {
+    setUserToDelete(user);
+    setIsDeleteDialogOpen(true);
+  };
+  
+  const handleConfirmDelete = async () => {
+    if (!userToDelete || !currentUser) return;
+
     setIsSubmitting(true);
-    const result = await deleteUserAccount(picToDelete.uid);
-    setIsSubmitting(false);
-    
-    if (result.success) {
-        toast({ title: "PIC Dihapus", description: `PIC ${picToDelete.fullName} telah dihapus sepenuhnya.` });
-        fetchPICs();
-    } else {
-        toast({ title: "Error Menghapus", description: result.message || "Gagal menghapus PIC.", variant: "destructive" });
+    let result;
+    if (currentUser.role === 'MasterAdmin') {
+        result = await deleteUserAccount(userToDelete.uid);
+    } else if (currentUser.role === 'Admin') {
+        result = await requestUserDeletion(userToDelete, { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role });
     }
+
+    if (result && result.success) {
+        toast({ title: "Sukses", description: result.message });
+        if(currentUser.role === 'MasterAdmin') fetchPICs();
+    } else if(result) {
+        toast({ title: "Error", description: result.message, variant: "destructive" });
+    }
+    
+    setIsSubmitting(false);
+    setIsDeleteDialogOpen(false);
+    setUserToDelete(null);
   };
 
   const handleFileSelectAndImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -485,52 +492,26 @@ export default function ManagePICsPage() {
                         <TableCell>{pic.email}</TableCell>
                         <TableCell>{pic.workLocation}</TableCell>
                         <TableCell>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span tabIndex={0}>
-                                  <Switch
-                                    checked={pic.status === 'Aktif'}
-                                    onCheckedChange={(newStatusChecked) => handleStatusChange(pic, newStatusChecked)}
-                                    aria-label={`Status PIC ${pic.fullName}`}
-                                  />
-                                </span>
-                              </TooltipTrigger>
-                               {currentUser?.role !== 'MasterAdmin' && (
-                                <TooltipContent>
-                                  <p>Ajukan perubahan status ke MasterAdmin.</p>
-                                </TooltipContent>
-                              )}
-                            </Tooltip>
-                          </TooltipProvider>
+                          <Switch
+                            checked={pic.status === 'Aktif'}
+                            onCheckedChange={(newStatusChecked) => handleStatusChange(pic, newStatusChecked)}
+                            aria-label={`Status PIC ${pic.fullName}`}
+                          />
                           <span className={`ml-2 text-xs ${pic.status === 'Aktif' ? 'text-green-600' : pic.status === 'PendingApproval' ? 'text-yellow-600' : 'text-red-600'}`}>
                             {pic.status}
                           </span>
                         </TableCell>
                         <TableCell className="text-center space-x-1">
                           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(pic)}><Edit size={16}/></Button>
-                           <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span tabIndex={0}>
-                                  <Button 
-                                    variant="destructive" 
-                                    size="icon" 
-                                    className="h-8 w-8" 
-                                    onClick={() => handleDeletePIC(pic)} 
-                                    disabled={isSubmitting || currentUser?.role !== 'MasterAdmin'}
-                                  >
-                                    <Trash2 size={16}/>
-                                  </Button>
-                                </span>
-                              </TooltipTrigger>
-                              {currentUser?.role !== 'MasterAdmin' && (
-                                <TooltipContent>
-                                  <p>Hanya MasterAdmin yang dapat menghapus.</p>
-                                </TooltipContent>
-                              )}
-                            </Tooltip>
-                          </TooltipProvider>
+                          <Button 
+                              variant="destructive" 
+                              size="icon" 
+                              className="h-8 w-8" 
+                              onClick={() => handleOpenDeleteDialog(pic)} 
+                              disabled={isSubmitting}
+                          >
+                            <Trash2 size={16}/>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     )) : (
@@ -548,6 +529,33 @@ export default function ManagePICsPage() {
           )}
         </CardContent>
       </Card>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Konfirmasi Aksi</DialogTitle>
+            <DialogDescription>
+              {currentUser?.role === 'MasterAdmin'
+                ? `Apakah Anda yakin ingin menghapus pengguna ${userToDelete?.fullName}? Tindakan ini tidak dapat dibatalkan.`
+                : `Ajukan penghapusan untuk pengguna ${userToDelete?.fullName}? Permintaan ini memerlukan persetujuan dari MasterAdmin.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Batal</Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Memproses...' : (currentUser?.role === 'MasterAdmin' ? 'Ya, Hapus Pengguna' : 'Ya, Ajukan Penghapusan')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       <Dialog open={isEditPICDialogOpen} onOpenChange={(open) => {
         if (!open) {

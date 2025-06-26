@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { useForm, SubmitHandler, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile, ApprovalRequest } from '@/types';
+import type { UserProfile } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO, isValid } from "date-fns";
@@ -22,8 +22,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus } from '@/lib/firebaseAdminActions';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus, requestUserDeletion } from '@/lib/firebaseAdminActions';
 import * as XLSX from 'xlsx';
 
 const kurirSchema = z.object({
@@ -56,6 +55,8 @@ export default function ManageKurirsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddKurirDialogOpen, setIsAddKurirDialogOpen] = useState(false);
   const [isEditKurirDialogOpen, setIsEditKurirDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [currentEditingKurir, setCurrentEditingKurir] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [firebaseError, setFirebaseError] = useState<string | null>(null);
@@ -288,25 +289,32 @@ export default function ManageKurirsPage() {
     setIsSubmitting(false);
   };
   
-  const handleDeleteKurir = async (kurirToDelete: UserProfile) => {
-    if (!kurirToDelete.uid || !currentUser || currentUser.role !== 'MasterAdmin') {
-        toast({ title: "Akses Ditolak", description: "Hanya MasterAdmin yang bisa menghapus.", variant: "destructive" });
-        return;
-    }
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus Kurir ${kurirToDelete.fullName}? Tindakan ini akan menghapus akun login dan profil secara permanen.`)) {
-        return;
-    }
+  const handleOpenDeleteDialog = (user: UserProfile) => {
+    setUserToDelete(user);
+    setIsDeleteDialogOpen(true);
+  };
+  
+  const handleConfirmDelete = async () => {
+    if (!userToDelete || !currentUser) return;
 
     setIsSubmitting(true);
-    const result = await deleteUserAccount(kurirToDelete.uid);
-    setIsSubmitting(false);
-
-    if (result.success) {
-      toast({ title: "Kurir Dihapus", description: `Kurir ${kurirToDelete.fullName} telah dihapus sepenuhnya.` });
-      fetchKurirs();
-    } else {
-      toast({ title: "Error Menghapus", description: result.message || "Gagal menghapus kurir.", variant: "destructive" });
+    let result;
+    if (currentUser.role === 'MasterAdmin') {
+        result = await deleteUserAccount(userToDelete.uid);
+    } else if (currentUser.role === 'Admin') {
+        result = await requestUserDeletion(userToDelete, { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role });
     }
+
+    if (result && result.success) {
+        toast({ title: "Sukses", description: result.message });
+        if(currentUser.role === 'MasterAdmin') fetchKurirs();
+    } else if(result) {
+        toast({ title: "Error", description: result.message, variant: "destructive" });
+    }
+    
+    setIsSubmitting(false);
+    setIsDeleteDialogOpen(false);
+    setUserToDelete(null);
   };
 
   const handleFileSelectAndImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -634,52 +642,26 @@ export default function ManageKurirsPage() {
                       <TableCell>{kurir.email}</TableCell>
                       <TableCell>{kurir.workLocation}</TableCell>
                       <TableCell>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span tabIndex={0}>
-                                <Switch
-                                  checked={kurir.status === 'Aktif'}
-                                  onCheckedChange={(newStatusChecked) => handleStatusChange(kurir, newStatusChecked)}
-                                  aria-label={`Status kurir ${kurir.fullName}`}
-                                />
-                              </span>
-                            </TooltipTrigger>
-                             {currentUser?.role !== 'MasterAdmin' && (
-                              <TooltipContent>
-                                <p>Ajukan perubahan status ke MasterAdmin.</p>
-                              </TooltipContent>
-                            )}
-                          </Tooltip>
-                        </TooltipProvider>
+                        <Switch
+                          checked={kurir.status === 'Aktif'}
+                          onCheckedChange={(newStatusChecked) => handleStatusChange(kurir, newStatusChecked)}
+                          aria-label={`Status kurir ${kurir.fullName}`}
+                        />
                         <span className={`ml-2 text-xs ${kurir.status === 'Aktif' ? 'text-green-600' : 'text-red-600'}`}>
                           {kurir.status}
                         </span>
                       </TableCell>
                       <TableCell className="text-center space-x-1">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(kurir)}><Edit size={16}/></Button>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span tabIndex={0}>
-                                <Button 
-                                  variant="destructive" 
-                                  size="icon" 
-                                  className="h-8 w-8" 
-                                  onClick={() => handleDeleteKurir(kurir)} 
-                                  disabled={isSubmitting || currentUser?.role !== 'MasterAdmin'}
-                                >
-                                  <Trash2 size={16}/>
-                                </Button>
-                              </span>
-                            </TooltipTrigger>
-                            {currentUser?.role !== 'MasterAdmin' && (
-                              <TooltipContent>
-                                <p>Hanya MasterAdmin yang dapat menghapus.</p>
-                              </TooltipContent>
-                            )}
-                          </Tooltip>
-                        </TooltipProvider>
+                        <Button
+                            variant="destructive"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleOpenDeleteDialog(kurir)}
+                            disabled={isSubmitting}
+                        >
+                            <Trash2 size={16}/>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   )) : (
@@ -697,6 +679,34 @@ export default function ManageKurirsPage() {
           )}
         </CardContent>
       </Card>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Konfirmasi Aksi</DialogTitle>
+            <DialogDescription>
+              {currentUser?.role === 'MasterAdmin'
+                ? `Apakah Anda yakin ingin menghapus pengguna ${userToDelete?.fullName}? Tindakan ini tidak dapat dibatalkan.`
+                : `Ajukan penghapusan untuk pengguna ${userToDelete?.fullName}? Permintaan ini memerlukan persetujuan dari MasterAdmin.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Batal</Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Memproses...' : (currentUser?.role === 'MasterAdmin' ? 'Ya, Hapus Pengguna' : 'Ya, Ajukan Penghapusan')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       <Dialog open={isEditKurirDialogOpen} onOpenChange={setIsEditKurirDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">

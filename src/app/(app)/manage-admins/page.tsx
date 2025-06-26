@@ -8,18 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile, ApprovalRequest } from '@/types';
+import type { UserProfile } from '@/types';
 import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus } from '@/lib/firebaseAdminActions';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus, requestUserDeletion } from '@/lib/firebaseAdminActions';
 import * as XLSX from 'xlsx';
 
 const adminSchema = z.object({
@@ -42,6 +41,8 @@ export default function ManageAdminsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddAdminDialogOpen, setIsAddAdminDialogOpen] = useState(false);
   const [isEditAdminDialogOpen, setIsEditAdminDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [currentEditingAdmin, setCurrentEditingAdmin] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [firebaseError, setFirebaseError] = useState<string | null>(null);
@@ -180,26 +181,33 @@ export default function ManageAdminsPage() {
     }
   };
 
-  const handleDeleteAdmin = async (adminToDelete: UserProfile) => {
-    if (!adminToDelete.uid || !currentUser || currentUser.role !== 'MasterAdmin') {
-        toast({ title: "Akses Ditolak", description: "Hanya MasterAdmin yang dapat menghapus.", variant: "destructive"});
-        return;
-    }
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus Admin ${adminToDelete.fullName}? Tindakan ini akan menghapus akun login dan profil secara permanen.`)) {
-        return;
-    }
+ const handleOpenDeleteDialog = (user: UserProfile) => {
+    setUserToDelete(user);
+    setIsDeleteDialogOpen(true);
+  };
+  
+  const handleConfirmDelete = async () => {
+    if (!userToDelete || !currentUser) return;
 
     setIsSubmitting(true);
-    const result = await deleteUserAccount(adminToDelete.uid);
-    setIsSubmitting(false);
-
-    if (result.success) {
-      toast({ title: "Admin Dihapus", description: `Admin ${adminToDelete.fullName} telah dihapus sepenuhnya.` });
-      fetchAdmins();
-    } else {
-      toast({ title: "Error Menghapus", description: result.message || "Gagal menghapus admin.", variant: "destructive" });
+    let result;
+    if (currentUser.role === 'MasterAdmin') {
+        result = await deleteUserAccount(userToDelete.uid);
+    } else if (currentUser.role === 'Admin') {
+        result = await requestUserDeletion(userToDelete, { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role });
     }
-};
+
+    if (result && result.success) {
+        toast({ title: "Sukses", description: result.message });
+        if(currentUser.role === 'MasterAdmin') fetchAdmins();
+    } else if(result) {
+        toast({ title: "Error", description: result.message, variant: "destructive" });
+    }
+    
+    setIsSubmitting(false);
+    setIsDeleteDialogOpen(false);
+    setUserToDelete(null);
+  };
 
   const handleFileSelectAndImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (isImporting || !currentUser) return;
@@ -415,28 +423,15 @@ export default function ManageAdminsPage() {
                       </TableCell>
                       <TableCell className="text-center space-x-1">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(admin)}><Edit size={16}/></Button>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span tabIndex={0}>
-                                <Button
-                                  variant="destructive"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => handleDeleteAdmin(admin)}
-                                  disabled={isSubmitting || currentUser?.role !== 'MasterAdmin'}
-                                >
-                                  <Trash2 size={16}/>
-                                </Button>
-                              </span>
-                            </TooltipTrigger>
-                            {currentUser?.role !== 'MasterAdmin' && (
-                              <TooltipContent>
-                                <p>Hanya MasterAdmin yang dapat menghapus.</p>
-                              </TooltipContent>
-                            )}
-                          </Tooltip>
-                        </TooltipProvider>
+                        <Button
+                            variant="destructive"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleOpenDeleteDialog(admin)}
+                            disabled={isSubmitting}
+                        >
+                            <Trash2 size={16}/>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   )) : (
@@ -454,6 +449,34 @@ export default function ManageAdminsPage() {
           )}
         </CardContent>
       </Card>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Konfirmasi Aksi</DialogTitle>
+            <DialogDescription>
+              {currentUser?.role === 'MasterAdmin'
+                ? `Apakah Anda yakin ingin menghapus pengguna ${userToDelete?.fullName}? Tindakan ini tidak dapat dibatalkan.`
+                : `Ajukan penghapusan untuk pengguna ${userToDelete?.fullName}? Permintaan ini memerlukan persetujuan dari MasterAdmin.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Batal</Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Memproses...' : (currentUser?.role === 'MasterAdmin' ? 'Ya, Hapus Pengguna' : 'Ya, Ajukan Penghapusan')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       <Dialog open={isEditAdminDialogOpen} onOpenChange={(open) => {
           if (!open) setCurrentEditingAdmin(null);

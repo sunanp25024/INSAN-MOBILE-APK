@@ -1,87 +1,88 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- Users Collection ---
-    // Security for user profile documents.
-    match /users/{userId} {
-      // Any authenticated user can read any profile.
-      // This is safe because the UI controls who can see lists of users.
-      // This also simplifies rules that need to check a user's role and prevents recursion.
-      allow read: if request.auth != null;
-
-      // Only MasterAdmins can create, update, or delete users directly.
-      // Admins must use the approval request flow.
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
+    
+    function getUserRole() {
+      // Caches the result of the get() call for the duration of the request evaluation.
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
-    // --- Approval Requests Collection ---
-    // Security for approval request documents.
+    function isOneOfRoles(roles) {
+      // Ensure user is authenticated before checking role.
+      return request.auth != null && getUserRole() in roles;
+    }
+
+    match /users/{userId} {
+      // Any authenticated user can read any user profile.
+      // The UI logic restricts who can see which lists of users.
+      // This is safe and prevents rule recursion issues that caused previous errors.
+      allow read: if request.auth != null;
+
+      // Only MasterAdmin can create, update, or delete users directly.
+      // Admins must use the approval request flow.
+      allow write: if isOneOfRoles(['MasterAdmin']);
+    }
+
     match /approval_requests/{requestId} {
-      // MasterAdmins can read any request.
-      // Admins can only read requests they created themselves.
-      // This rule covers both GET and LIST operations.
+      // READ (get, list): MasterAdmin can read all. Admins can read requests they created.
+      // This rule works for both get() and list() queries because a client-side query
+      // from an Admin will include `where('requestedByUid', '==', request.auth.uid)`,
+      // which Firestore can validate against this rule.
       allow read: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin' ||
+        isOneOfRoles(['MasterAdmin']) ||
         resource.data.requestedByUid == request.auth.uid
       );
-
-      // Admins and MasterAdmins can create requests for themselves.
+      
+      // CREATE: Admin/MasterAdmin can create. Must be for themselves.
       allow create: if request.auth != null &&
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin', 'MasterAdmin'] &&
-                     request.resource.data.requestedByUid == request.auth.uid;
+        isOneOfRoles(['Admin', 'MasterAdmin']) &&
+        request.resource.data.requestedByUid == request.auth.uid;
 
-      // Only MasterAdmins can update (approve/reject) a request.
-      allow update: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
-
-      // Deleting requests is not allowed to maintain audit trails.
+      // UPDATE: Only MasterAdmin can approve/reject.
+      allow update: if isOneOfRoles(['MasterAdmin']);
+      
+      // DELETE: Not allowed for data integrity.
       allow delete: if false;
     }
 
-    // --- Attendance Collection ---
-    // Security for courier attendance records.
     match /attendance/{attendanceId} {
-      // PICs, Admins, and MasterAdmins can read any attendance record.
-      // A Kurir can only read their own records.
-      allow read: if request.auth != null &&
-                   (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['PIC', 'Admin', 'MasterAdmin'] ||
-                    resource.data.kurirUid == request.auth.uid);
+      // READ: PICs/Admins/MasterAdmins can read all. Kurir can read their own.
+      allow read: if request.auth != null && (
+        isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']) ||
+        (isOneOfRoles(['Kurir']) && resource.data.kurirUid == request.auth.uid)
+      );
 
-      // Only a Kurir can create or update their own attendance record.
+      // WRITE: A Kurir can only create/update their own record.
       allow write: if request.auth != null &&
-                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir' &&
-                    request.resource.data.kurirUid == request.auth.uid;
+        isOneOfRoles(['Kurir']) &&
+        // For create, check incoming data. For update, check existing data.
+        (request.resource.data.kurirUid == request.auth.uid || resource.data.kurirUid == request.auth.uid);
+        
+      allow delete: if false;
     }
 
-    // --- Courier Daily Tasks Collection & Sub-collections ---
-    // Security for daily work documents.
     match /kurir_daily_tasks/{taskId} {
-      // Managers can read any task. Kurir can only read their own.
-      allow read: if request.auth != null &&
-                   (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['PIC', 'Admin', 'MasterAdmin'] ||
-                    resource.data.kurirUid == request.auth.uid);
-
-      // Only the assigned Kurir can write to their own task document.
+      // READ: PIC/Admin/MasterAdmin can read all. Kurir can read their own.
+      allow read: if request.auth != null && (
+        isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']) ||
+        (isOneOfRoles(['Kurir']) && resource.data.kurirUid == request.auth.uid)
+      );
+      // WRITE: Kurir can write to their own task.
       allow write: if request.auth != null &&
-                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir' &&
-                    get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid == request.auth.uid;
+        isOneOfRoles(['Kurir']) &&
+        // Using `getAfter` to check data both on create and update
+        getAfter(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid == request.auth.uid;
 
-      // Security for the 'packages' sub-collection within a task.
       match /packages/{packageId} {
-        // Only the Kurir who owns the parent task document can access its packages.
+         // Allow read/write if the user has access to the parent task document.
         allow read, write: if request.auth != null &&
-                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir' &&
-                            get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid == request.auth.uid;
+          get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid == request.auth.uid;
       }
     }
-
-    // --- Notifications Collection ---
-    // Security for system notifications.
+    
     match /notifications/{notificationId} {
-      // Only MasterAdmins can read or write notifications.
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
+      allow read, write: if isOneOfRoles(['MasterAdmin']);
     }
   }
 }

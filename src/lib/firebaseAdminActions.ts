@@ -87,6 +87,53 @@ export async function deleteUserAccount(uid: string) {
   }
 }
 
+/**
+ * Submits a request to delete a user, which requires MasterAdmin approval.
+ *
+ * @param userToDelete The user profile to request deletion for.
+ * @param requesterProfile The profile of the Admin making the request.
+ * @returns An object with the success status and a message.
+ */
+export async function requestUserDeletion(
+  userToDelete: UserProfile,
+  requesterProfile: { uid: string; fullName: string; role: UserRole }
+) {
+  if (requesterProfile.role !== 'Admin') {
+    return { success: false, message: 'Hanya Admin yang dapat mengajukan penghapusan.' };
+  }
+  if (!userToDelete.uid || !userToDelete.id) {
+    return { success: false, message: 'Data pengguna yang akan dihapus tidak lengkap.'};
+  }
+
+  const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+    type: 'DELETE_USER',
+    status: 'pending',
+    requestedByUid: requesterProfile.uid,
+    requestedByName: requesterProfile.fullName,
+    requestedByRole: requesterProfile.role,
+    requestTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+    targetEntityType: 'USER_PROFILE_DATA',
+    targetEntityId: userToDelete.uid,
+    targetEntityName: userToDelete.fullName,
+    payload: { 
+      uid: userToDelete.uid,
+      id: userToDelete.id,
+      fullName: userToDelete.fullName,
+      email: userToDelete.email,
+      role: userToDelete.role,
+     },
+    notesFromRequester: `Pengajuan penghapusan untuk pengguna: ${userToDelete.fullName} (ID: ${userToDelete.id}, Role: ${userToDelete.role}).`,
+  };
+
+  try {
+    await adminDb.collection('approval_requests').add(approvalRequest);
+    return { success: true, message: 'Permintaan penghapusan telah berhasil diajukan.' };
+  } catch (error: any) {
+    console.error('Error requesting user deletion:', error);
+    return { success: false, message: `Gagal mengajukan permintaan: ${error.message}` };
+  }
+}
+
 
 export async function importUsers(
   usersData: any[],
@@ -319,6 +366,14 @@ export async function handleApprovalRequest(
             transaction.update(userToChangeStatusRef, { status: payload.status });
             await adminAuth.updateUser(targetEntityId, { disabled: payload.status === 'Nonaktif' });
             break;
+
+          case 'DELETE_USER':
+            if (!targetEntityId) throw new Error('Target UID untuk penghapusan tidak ditemukan.');
+            const deletionResult = await deleteUserAccount(targetEntityId);
+            if (!deletionResult.success) {
+              throw new Error(deletionResult.message || 'Gagal menghapus akun pengguna saat menyetujui permintaan.');
+            }
+            break;
             
           default:
             throw new Error(`Jenis persetujuan tidak dikenal: ${type}`);
@@ -378,4 +433,3 @@ export async function updateUserStatus(
     };
   }
 }
-

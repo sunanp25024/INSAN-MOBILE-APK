@@ -68,7 +68,7 @@ export interface KurirDailyTaskDoc {
 
 export interface ApprovalRequest {
   id: string; // Firestore document ID
-  type: 'NEW_USER_PIC' | 'NEW_USER_KURIR' | 'NEW_USER_ADMIN' | 'UPDATE_USER_PROFILE' | 'DEACTIVATE_USER' | 'ACTIVATE_USER' | 'OTHER';
+  type: 'NEW_USER_PIC' | 'NEW_USER_KURIR' | 'NEW_USER_ADMIN' | 'UPDATE_USER_PROFILE' | 'DEACTIVATE_USER' | 'ACTIVATE_USER' | 'DELETE_USER' | 'OTHER';
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
 
   requestedByUid: string;
