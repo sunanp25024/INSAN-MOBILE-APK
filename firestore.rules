@@ -4,54 +4,109 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper Functions
+    // Helper function to check user role
+    function isRole(role) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
     function isOneOfRoles(roles) {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in roles;
     }
 
-    function isOwner(userId) {
-      return request.auth.uid == userId;
+    // Default deny all access to unhandled collections
+    match /{path=**}/documents/{document=**} {
+        allow read, write: if false;
     }
 
-    // Collection: users
+    // USERS collection
     match /users/{userId} {
-      allow read: if isOwner(userId) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']);
-      allow update: if isOwner(userId) || isOneOfRoles(['MasterAdmin']);
-      allow create, delete: if isOneOfRoles(['MasterAdmin']);
-    }
-
-    // Collection: approval_requests
-    match /approval_requests/{requestId} {
-      allow read: if isOwner(resource.data.requestedByUid) || isOneOfRoles(['MasterAdmin']);
-      allow create: if isOneOfRoles(['Admin']);
-      allow update: if isOneOfRoles(['MasterAdmin']);
-    }
-
-    // Collection: notifications
-    match /notifications/{notificationId} {
-        allow read, update: if isOneOfRoles(['MasterAdmin']);
-        allow create: if request.auth != null;
-    }
-    
-    // Collection: attendance
-    // A kurir can write to their own attendance doc.
-    // They can read their own documents. Managers can read any.
-    match /attendance/{attendanceId} {
-        allow read: if isOwner(resource.data.kurirUid) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']);
-        allow write: if isOwner(request.resource.data.kurirUid);
-    }
-    
-    // Collection: kurir_daily_tasks
-    // A kurir can write to their own daily task doc.
-    // They can read their own task doc. Managers can read any.
-    match /kurir_daily_tasks/{taskId} {
-      allow read: if isOwner(resource.data.kurirUid) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']);
-      allow write: if isOwner(request.resource.data.kurirUid);
+      // READ: Any authenticated user can read any profile (for names, etc.)
+      allow read: if request.auth != null;
       
-      // Sub-collection: packages
-      // Only the owner of the parent task can read/write packages.
+      // CREATE: Only MasterAdmin can create any user directly.
+      allow create: if request.auth != null && isRole('MasterAdmin');
+
+      // UPDATE: A user can update their own profile.
+      // MasterAdmin can update any profile.
+      allow update: if request.auth != null && (
+        request.auth.uid == userId ||
+        isRole('MasterAdmin')
+      );
+
+      // DELETE: Only MasterAdmin can delete users.
+      allow delete: if request.auth != null && isRole('MasterAdmin');
+    }
+
+    // APPROVAL_REQUESTS collection
+    match /approval_requests/{requestId} {
+      // READ: MasterAdmin can read all. Admin can only read their own requests.
+      allow read: if request.auth != null && (
+        isRole('MasterAdmin') ||
+        (isRole('Admin') && resource.data.requestedByUid == request.auth.uid)
+      );
+
+      // CREATE: Admins can create new approval requests.
+      allow create: if request.auth != null && isRole('Admin');
+      
+      // UPDATE: Only MasterAdmin can update (approve/reject) a request.
+      allow update: if request.auth != null && isRole('MasterAdmin');
+      
+      // DELETE: Not allowed for now to keep audit trail.
+      allow delete: if false;
+    }
+
+    // NOTIFICATIONS collection
+    match /notifications/{notificationId} {
+      // READ: Only MasterAdmin can read notifications.
+      allow read: if request.auth != null && isRole('MasterAdmin');
+      
+      // WRITE: Can be created by server/admin actions, updated by MasterAdmin (e.g., mark as read)
+      allow write: if request.auth != null && isRole('MasterAdmin');
+    }
+
+    // ATTENDANCE collection
+    match /attendance/{attendanceId} {
+      // READ (get, list):
+      // A Kurir can read documents where their UID matches.
+      // A Manager role can read any attendance record.
+      // For LIST queries, the client MUST filter by kurirUid for a Kurir role to succeed.
+      allow read: if request.auth.uid != null &&
+                   (resource.data.kurirUid == request.auth.uid ||
+                    isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']));
+
+      // WRITE (create, update):
+      // A user can write to a document only if they are the owner.
+      // We check that the doc ID starts with their UID, and the data inside matches.
+      allow write: if request.auth.uid != null &&
+                    request.auth.uid == request.resource.data.kurirUid &&
+                    attendanceId.split('_')[0] == request.auth.uid;
+      allow delete: if false;
+    }
+    
+    // KURIR_DAILY_TASKS collection and its subcollection
+    match /kurir_daily_tasks/{taskId} {
+      // READ (get, list):
+      // A Kurir can read their own task documents. Managers can read any.
+      allow read: if request.auth.uid != null &&
+                   (resource.data.kurirUid == request.auth.uid ||
+                    isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']));
+      
+      // WRITE (create, update):
+      // A Kurir can write to their own task document.
+      allow write: if request.auth.uid != null &&
+                    request.auth.uid == request.resource.data.kurirUid &&
+                    taskId.split('_')[0] == request.auth.uid;
+      allow delete: if false;
+
+      // PACKAGES subcollection
       match /packages/{packageId} {
-        allow read, write: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid);
+        // READ & WRITE:
+        // Allow if the user is a manager OR owns the parent task document.
+        allow read, write: if request.auth.uid != null &&
+                            (isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']) ||
+                             get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid == request.auth.uid);
+        allow delete: if request.auth.uid != null &&
+                      (isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']) ||
+                       get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid == request.auth.uid);
       }
     }
   }
