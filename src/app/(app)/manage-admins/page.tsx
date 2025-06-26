@@ -494,10 +494,10 @@ export default function ManageAdminsPage() {
               {errorsEdit.fullName && <p className="text-destructive text-sm mt-1">{errorsEdit.fullName.message}</p>}
             </div>
             <div>
-              <Label htmlFor="editAdminEmail">Email <span className="text-destructive">*</span></Label>
-              <Input id="editAdminEmail" type="email" {...registerEdit("email")} autoComplete="email" />
+              <Label htmlFor="editAdminEmail">Email</Label>
+              <Input id="editAdminEmail" type="email" {...registerEdit("email")} readOnly className="bg-muted/50" />
               {errorsEdit.email && <p className="text-destructive text-sm mt-1">{errorsEdit.email.message}</p>}
-               <p className="text-xs text-muted-foreground mt-1">Mengubah email di sini tidak mengubah email login Firebase Auth.</p>
+               <p className="text-xs text-muted-foreground mt-1">Email login tidak dapat diubah dari form ini.</p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => { resetEdit(); setIsEditAdminDialogOpen(false); setCurrentEditingAdmin(null); }}>Batal</Button>

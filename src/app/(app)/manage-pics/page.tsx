@@ -576,10 +576,10 @@ export default function ManagePICsPage() {
               {errorsEdit.fullName && <p className="text-destructive text-sm mt-1">{errorsEdit.fullName.message}</p>}
             </div>
             <div>
-              <Label htmlFor="editPicEmail">Email <span className="text-destructive">*</span></Label>
-              <Input id="editPicEmail" type="email" {...registerEdit("email")} defaultValue={currentEditingPIC?.email} autoComplete="email"/>
+              <Label htmlFor="editPicEmail">Email</Label>
+              <Input id="editPicEmail" type="email" {...registerEdit("email")} defaultValue={currentEditingPIC?.email} readOnly className="bg-muted/50" />
               {errorsEdit.email && <p className="text-destructive text-sm mt-1">{errorsEdit.email.message}</p>}
-               <p className="text-xs text-muted-foreground mt-1">Mengubah email di sini hanya mempengaruhi profil Firestore.</p>
+               <p className="text-xs text-muted-foreground mt-1">Email login tidak dapat diubah dari form ini.</p>
             </div>
             <div>
               <Label htmlFor="editPicWorkLocation">Area Tanggung Jawab <span className="text-destructive">*</span></Label>

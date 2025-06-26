@@ -482,9 +482,10 @@ export default function ManageKurirsPage() {
           {errors.jabatan && <p className="text-destructive text-sm mt-1">{errors.jabatan.message}</p>}
         </div>
         <div>
-          <Label htmlFor={isEdit ? "editKurirEmail" : "addKurirEmail"} className="mb-1 block">Email (Opsional untuk login)</Label>
-          <Input id={isEdit ? "editKurirEmail" : "addKurirEmail"} type="email" {...register("email")} placeholder="Auto: [ID_Kurir]@internal.spx" autoComplete="email" />
+          <Label htmlFor={isEdit ? "editKurirEmail" : "addKurirEmail"} className="mb-1 block">Email (untuk login)</Label>
+          <Input id={isEdit ? "editKurirEmail" : "addKurirEmail"} type="email" {...register("email")} placeholder="Auto: [ID_Kurir]@internal.spx" autoComplete="email" readOnly={isEdit} className={isEdit ? 'bg-muted/50' : ''}/>
           {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
+          {isEdit && <p className="text-xs text-muted-foreground mt-1">Email login tidak dapat diubah dari form ini.</p>}
         </div>
       </div>
 
