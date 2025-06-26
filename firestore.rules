@@ -1,98 +1,58 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
-    function userExists(uid) {
-      return exists(/databases/$(database)/documents/users/$(uid));
-    }
-
-    function userRole(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data.role;
-    }
-    
-    function isOwner(uid) {
-      return request.auth.uid == uid;
-    }
-
-    function isRole(role) {
-      return userExists(request.auth.uid) && userRole(request.auth.uid) == role;
-    }
-    
+    // Helper Functions
     function isOneOfRoles(roles) {
-      return userExists(request.auth.uid) && userRole(request.auth.uid) in roles;
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in roles;
     }
 
-    // --- User Profiles ---
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Collection: users
     match /users/{userId} {
-      allow create: if isOwner(userId) || isRole('MasterAdmin') || (isRole('Admin') && request.resource.data.role in ['PIC', 'Kurir']);
-      allow read: if request.auth != null && (isOwner(userId) || isOneOfRoles(['MasterAdmin', 'Admin', 'PIC']));
-      allow update: if request.auth != null && (
-        (isOwner(userId) && request.resource.data.role == resource.data.role) || // User can update their own profile, but not change their role
-        isRole('MasterAdmin') ||
-        (isRole('Admin') && resource.data.role in ['PIC', 'Kurir'])
-      );
-      allow delete: if isRole('MasterAdmin');
+      allow read: if isOwner(userId) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']);
+      allow update: if isOwner(userId) || isOneOfRoles(['MasterAdmin']);
+      allow create, delete: if isOneOfRoles(['MasterAdmin']);
     }
 
-    // --- Approval Requests ---
+    // Collection: approval_requests
     match /approval_requests/{requestId} {
-      allow create: if isRole('Admin') && request.resource.data.requestedByUid == request.auth.uid;
-      allow read: if isOneOfRoles(['MasterAdmin']) || (isRole('Admin') && resource.data.requestedByUid == request.auth.uid);
-      allow update: if isOneOfRoles(['MasterAdmin']) || (isRole('Admin') && resource.data.requestedByUid == request.auth.uid && request.resource.data.status == 'cancelled');
-      allow delete: if false;
+      allow read: if isOwner(resource.data.requestedByUid) || isOneOfRoles(['MasterAdmin']);
+      allow create: if isOneOfRoles(['Admin']);
+      allow update: if isOneOfRoles(['MasterAdmin']);
     }
 
-    // --- Kurir Daily Tasks ---
-    match /kurir_daily_tasks/{taskId} {
-      function isTaskOwner() {
-        return request.auth.uid == taskId.split('_')[0];
-      }
-      
-      allow read, write: if request.auth != null && (isTaskOwner() || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']));
-      
-      match /packages/{packageId} {
-        allow read, write: if request.auth != null && (isTaskOwner() || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']));
-      }
+    // Collection: notifications
+    match /notifications/{notificationId} {
+        allow read, update: if isOneOfRoles(['MasterAdmin']);
+        allow create: if request.auth != null;
     }
     
-    // --- Attendance Rules (Definitive Fix) ---
+    // Collection: attendance
+    // A kurir can write to their own attendance doc.
+    // They can read their own documents. Managers can read any.
     match /attendance/{attendanceId} {
-        function isAttendanceOwner(uid) {
-            return request.auth.uid == uid;
-        }
-
-        // CREATE: A courier can create their own attendance record.
-        // The document ID must match their UID and the date in the record.
-        allow create: if request.auth != null 
-                      && isAttendanceOwner(request.resource.data.kurirUid)
-                      && attendanceId == request.auth.uid + '_' + request.resource.data.date;
-
-        // READ: 
-        // A user can GET their own record. Managers can GET any record.
-        allow get: if request.auth != null 
-                   && (isAttendanceOwner(resource.data.kurirUid) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']));
-                   
-        // LIST: This is the crucial rule for queries.
-        // Allow a query if it EXPLICITLY filters by the current user's UID.
-        // This allows the "fetch history" query to work securely. Managers can list all.
-        allow list: if request.auth != null 
-                    && ( (isRole('Kurir') && request.query.where.kurirUid == request.auth.uid) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']) );
-        
-        // UPDATE: A courier can update their own record (e.g., for check-out).
-        allow update: if request.auth != null && isAttendanceOwner(resource.data.kurirUid);
-
-        // DELETE: No one can delete attendance records for data integrity.
-        allow delete: if false;
+        allow read: if isOwner(resource.data.kurirUid) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']);
+        allow write: if isOwner(request.resource.data.kurirUid);
     }
-
-    // --- Notifications Rules ---
-    match /notifications/{notificationId} {
-        // Only MasterAdmins can read notifications.
-        allow read: if isRole('MasterAdmin');
-        // Only a server-side process (Admin SDK) can create notifications, so client creation is disallowed.
-        allow write: if false; 
+    
+    // Collection: kurir_daily_tasks
+    // A kurir can write to their own daily task doc.
+    // They can read their own task doc. Managers can read any.
+    match /kurir_daily_tasks/{taskId} {
+      allow read: if isOwner(resource.data.kurirUid) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']);
+      allow write: if isOwner(request.resource.data.kurirUid);
+      
+      // Sub-collection: packages
+      // Only the owner of the parent task can read/write packages.
+      match /packages/{packageId} {
+        allow read, write: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid);
+      }
     }
   }
 }
