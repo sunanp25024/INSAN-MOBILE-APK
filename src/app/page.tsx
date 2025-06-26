@@ -103,6 +103,7 @@ export default function LoginPage() {
                 id="email"
                 type="email"
                 placeholder="Masukkan alamat email Anda"
+                autoComplete="email"
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
                 required
@@ -116,6 +117,7 @@ export default function LoginPage() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="******"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required

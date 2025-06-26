@@ -426,17 +426,17 @@ export default function ManagePICsPage() {
                 </div>
                 <div>
                   <Label htmlFor="addPicFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
-                  <Input id="addPicFullName" {...register("fullName")} />
+                  <Input id="addPicFullName" {...register("fullName")} autoComplete="name" />
                   {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
                 </div>
                 <div>
                   <Label htmlFor="addPicEmail">Email <span className="text-destructive">*</span></Label>
-                  <Input id="addPicEmail" type="email" {...register("email")} />
+                  <Input id="addPicEmail" type="email" {...register("email")} autoComplete="email" />
                   {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
                 </div>
                 <div>
                   <Label htmlFor="addPicPassword">Password Awal <span className="text-destructive">*</span></Label>
-                  <Input id="addPicPassword" type="password" {...register("passwordValue")} />
+                  <Input id="addPicPassword" type="password" {...register("passwordValue")} autoComplete="new-password" />
                   {errors.passwordValue && errors.passwordValue.message && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
                 </div>
                 <div>
@@ -572,12 +572,12 @@ export default function ManagePICsPage() {
           <form onSubmit={handleSubmitEdit(handleEditPIC)} className="space-y-4 py-4">
             <div>
               <Label htmlFor="editPicFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
-              <Input id="editPicFullName" {...registerEdit("fullName")} defaultValue={currentEditingPIC?.fullName}/>
+              <Input id="editPicFullName" {...registerEdit("fullName")} defaultValue={currentEditingPIC?.fullName} autoComplete="name"/>
               {errorsEdit.fullName && <p className="text-destructive text-sm mt-1">{errorsEdit.fullName.message}</p>}
             </div>
             <div>
               <Label htmlFor="editPicEmail">Email <span className="text-destructive">*</span></Label>
-              <Input id="editPicEmail" type="email" {...registerEdit("email")} defaultValue={currentEditingPIC?.email}/>
+              <Input id="editPicEmail" type="email" {...registerEdit("email")} defaultValue={currentEditingPIC?.email} autoComplete="email"/>
               {errorsEdit.email && <p className="text-destructive text-sm mt-1">{errorsEdit.email.message}</p>}
                <p className="text-xs text-muted-foreground mt-1">Mengubah email di sini hanya mempengaruhi profil Firestore.</p>
             </div>

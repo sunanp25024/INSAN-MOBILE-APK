@@ -164,11 +164,11 @@ export default function SettingsPage() {
               </div>
               <div>
                 <Label htmlFor="fullName">Nama Lengkap</Label>
-                <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
               </div>
               <div>
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
               </div>
               <Button type="submit" className="w-full sm:w-auto"><Save className="mr-2 h-4 w-4"/> Simpan Perubahan Profil</Button>
             </form>
@@ -185,15 +185,15 @@ export default function SettingsPage() {
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
               <Label htmlFor="currentPassword">Password Saat Ini</Label>
-              <Input id="currentPassword" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Masukkan password lama" required/>
+              <Input id="currentPassword" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Masukkan password lama" required autoComplete="current-password" />
             </div>
             <div>
               <Label htmlFor="newPassword">Password Baru</Label>
-              <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Minimal 6 karakter" required/>
+              <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Minimal 6 karakter" required autoComplete="new-password" />
             </div>
             <div>
               <Label htmlFor="confirmPassword">Konfirmasi Password Baru</Label>
-              <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Konfirmasi password baru" required/>
+              <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Konfirmasi password baru" required autoComplete="new-password" />
             </div>
             <Button type="submit" className="w-full sm:w-auto" disabled={isPasswordSubmitting}>
               {isPasswordSubmitting ? 'Memproses...' : <><Save className="mr-2 h-4 w-4"/> Ganti Password</>}

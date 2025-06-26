@@ -353,17 +353,17 @@ export default function ManageAdminsPage() {
                 </div>
                 <div>
                   <Label htmlFor="addAdminFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
-                  <Input id="addAdminFullName" {...register("fullName")} />
+                  <Input id="addAdminFullName" {...register("fullName")} autoComplete="name" />
                   {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
                 </div>
                 <div>
                   <Label htmlFor="addAdminEmail">Email (untuk Login) <span className="text-destructive">*</span></Label>
-                  <Input id="addAdminEmail" type="email" {...register("email")} />
+                  <Input id="addAdminEmail" type="email" {...register("email")} autoComplete="email" />
                   {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
                 </div>
                 <div>
                   <Label htmlFor="addAdminPassword">Password Awal <span className="text-destructive">*</span></Label>
-                  <Input id="addAdminPassword" type="password" {...register("passwordValue")} />
+                  <Input id="addAdminPassword" type="password" {...register("passwordValue")} autoComplete="new-password" />
                   {errors.passwordValue && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
                 </div>
                 <DialogFooter>
@@ -490,12 +490,12 @@ export default function ManageAdminsPage() {
           <form onSubmit={handleSubmitEdit(handleEditAdmin)} className="space-y-4 py-4">
             <div>
               <Label htmlFor="editAdminFullName">Nama Lengkap <span className="text-destructive">*</span></Label>
-              <Input id="editAdminFullName" {...registerEdit("fullName")} />
+              <Input id="editAdminFullName" {...registerEdit("fullName")} autoComplete="name" />
               {errorsEdit.fullName && <p className="text-destructive text-sm mt-1">{errorsEdit.fullName.message}</p>}
             </div>
             <div>
               <Label htmlFor="editAdminEmail">Email <span className="text-destructive">*</span></Label>
-              <Input id="editAdminEmail" type="email" {...registerEdit("email")} />
+              <Input id="editAdminEmail" type="email" {...registerEdit("email")} autoComplete="email" />
               {errorsEdit.email && <p className="text-destructive text-sm mt-1">{errorsEdit.email.message}</p>}
                <p className="text-xs text-muted-foreground mt-1">Mengubah email di sini tidak mengubah email login Firebase Auth.</p>
             </div>

@@ -462,18 +462,18 @@ export default function ManageKurirsPage() {
         )}
         <div>
           <Label htmlFor={isEdit ? "editKurirFullName" : "addKurirFullName"} className="mb-1 block">Nama Lengkap <span className="text-destructive">*</span></Label>
-          <Input id={isEdit ? "editKurirFullName" : "addKurirFullName"} {...register("fullName")} />
+          <Input id={isEdit ? "editKurirFullName" : "addKurirFullName"} {...register("fullName")} autoComplete="name" />
           {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirNik" : "addKurirNik"} className="mb-1 block">NIK <span className="text-destructive">*</span></Label>
-          <Input id={isEdit ? "editKurirNik" : "addKurirNik"} {...register("nik")} placeholder="16 digit NIK" readOnly={isEdit} className={isEdit ? 'bg-muted/50' : ''}/>
+          <Input id={isEdit ? "editKurirNik" : "addKurirNik"} {...register("nik")} placeholder="16 digit NIK" readOnly={isEdit} className={isEdit ? 'bg-muted/50' : ''} autoComplete="off" />
           {errors.nik && <p className="text-destructive text-sm mt-1">{errors.nik.message}</p>}
         </div>
           {!isEdit && (
           <div>
           <Label htmlFor="addKurirPassword" className="mb-1 block">Password Awal <span className="text-destructive">*</span></Label>
-          <Input id="addKurirPassword" type="password" {...register("passwordValue")} />
+          <Input id="addKurirPassword" type="password" {...register("passwordValue")} autoComplete="new-password" />
           {errors.passwordValue && errors.passwordValue.message && errors.passwordValue.message !== '' && <p className="text-destructive text-sm mt-1">{errors.passwordValue.message}</p>}
         </div>)}
         <div>
@@ -483,7 +483,7 @@ export default function ManageKurirsPage() {
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirEmail" : "addKurirEmail"} className="mb-1 block">Email (Opsional untuk login)</Label>
-          <Input id={isEdit ? "editKurirEmail" : "addKurirEmail"} type="email" {...register("email")} placeholder="Auto: [ID_Kurir]@internal.spx jika kosong"/>
+          <Input id={isEdit ? "editKurirEmail" : "addKurirEmail"} type="email" {...register("email")} placeholder="Auto: [ID_Kurir]@internal.spx" autoComplete="email" />
           {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
         </div>
       </div>
@@ -556,7 +556,7 @@ export default function ManageKurirsPage() {
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirBankAccountNumber" : "addKurirBankAccountNumber"} className="mb-1 block">Nomor Rekening</Label>
-          <Input id={isEdit ? "editKurirBankAccountNumber" : "addKurirBankAccountNumber"} {...register("bankAccountNumber")} />
+          <Input id={isEdit ? "editKurirBankAccountNumber" : "addKurirBankAccountNumber"} {...register("bankAccountNumber")} autoComplete="off" />
             {errors.bankAccountNumber && errors.bankAccountNumber.message && <p className="text-destructive text-sm mt-1">{errors.bankAccountNumber.message}</p>}
         </div>
         <div>

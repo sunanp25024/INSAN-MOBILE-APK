@@ -121,17 +121,17 @@ export default function SetupAdminPage() {
             </div>
             <div>
               <Label htmlFor="fullName">Nama Lengkap <span className="text-destructive">*</span></Label>
-              <Input id="fullName" {...register("fullName")} placeholder="Nama Anda" />
+              <Input id="fullName" {...register("fullName")} placeholder="Nama Anda" autoComplete="name" />
               {errors.fullName && <p className="text-destructive text-sm mt-1">{errors.fullName.message}</p>}
             </div>
             <div>
               <Label htmlFor="email">Email (untuk Login) <span className="text-destructive">*</span></Label>
-              <Input id="email" type="email" {...register("email")} placeholder="masteradmin@example.com" />
+              <Input id="email" type="email" {...register("email")} placeholder="masteradmin@example.com" autoComplete="email" />
               {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
             </div>
             <div>
               <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
-              <Input id="password" type="password" {...register("password")} placeholder="Minimal 6 karakter" />
+              <Input id="password" type="password" {...register("password")} placeholder="Minimal 6 karakter" autoComplete="new-password" />
               {errors.password && <p className="text-destructive text-sm mt-1">{errors.password.message}</p>}
             </div>
             <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
