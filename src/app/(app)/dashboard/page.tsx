@@ -26,6 +26,7 @@ import { db } from '@/lib/firebase';
 import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDocs, Timestamp, serverTimestamp, writeBatch, deleteDoc, runTransaction, orderBy } from 'firebase/firestore';
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
+import { usePathname } from 'next/navigation';
 
 
 const packageInputSchema = z.object({
@@ -94,6 +95,7 @@ export default function DashboardPage() {
   const [hubOptions, setHubOptions] = useState<Hub[]>([]);
 
   const { toast } = useToast();
+  const pathname = usePathname();
 
   const { register, handleSubmit: handlePackageFormSubmit, formState: { errors }, setValue, reset: resetPackageInputForm } = useForm<DailyPackageInput>({
     resolver: zodResolver(packageInputSchema),
@@ -369,7 +371,7 @@ export default function DashboardPage() {
         window.removeEventListener('storage', updateCheckInStatus);
         window.removeEventListener('focus', updateCheckInStatus);
     };
-  }, [currentUser]);
+  }, [currentUser, pathname]);
 
   useEffect(() => {
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
