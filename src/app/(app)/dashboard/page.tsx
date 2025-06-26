@@ -276,17 +276,18 @@ export default function DashboardPage() {
             const sortedAttendance = fetchedAttendanceActivities.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
             setAttendanceActivities(sortedAttendance);
 
-            // --- Fetch Work Summary Activities ---
+            // --- Fetch Work Summary Activities (REVISED QUERY) ---
             const workSummaryQuery = query(
               collection(db, 'kurir_daily_tasks'), 
-              where('date', '==', todayStr),
-              where('taskStatus', '==', 'completed')
+              where('date', '==', todayStr)
+              // No more filtering by taskStatus here to avoid composite index
             );
             const workSummarySnapshot = await getDocs(workSummaryQuery);
             const fetchedWorkSummaries: CourierWorkSummaryActivity[] = [];
             workSummarySnapshot.forEach(doc => {
               const task = doc.data() as KurirDailyTaskDoc;
-              if (task.finishTimestamp) {
+              // Client-side filtering
+              if (task.taskStatus === 'completed' && task.finishTimestamp) {
                 fetchedWorkSummaries.push({
                   id: doc.id,
                   kurirName: task.kurirFullName,
@@ -307,7 +308,7 @@ export default function DashboardPage() {
             if (error.code === 'failed-precondition') {
                  toast({ 
                     title: "Index Diperlukan", 
-                    description: "Operasi membutuhkan index. Silakan buat di Firebase Console.", 
+                    description: "Query membutuhkan index. Silakan buat di Firebase Console atau hubungi developer.", 
                     variant: "destructive",
                     duration: 9000
                 });
@@ -1010,3 +1011,4 @@ export default function DashboardPage() {
     
 
     
+
