@@ -11,17 +11,20 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, Lock, Bell, Palette, Save } from 'lucide-react';
 import type { UserProfile } from '@/types';
-import { getAuth, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
+import { getAuth, updatePassword, reauthenticateWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
+import { storage, db } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, updateDoc } from 'firebase/firestore';
 
 export default function SettingsPage() {
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
-  // State for profile editing (Kurir only)
+  // State for profile editing
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isProfileSubmitting, setIsProfileSubmitting] = useState(false);
 
   // State for password change (all roles)
   const [currentPassword, setCurrentPassword] = useState('');
@@ -41,7 +44,6 @@ export default function SettingsPage() {
         const parsedUser = JSON.parse(userDataString) as UserProfile;
         setCurrentUser(parsedUser);
         setFullName(parsedUser.fullName || '');
-        setEmail(parsedUser.email || '');
         setAvatarPreview(parsedUser.avatarUrl || null);
         
         const savedTheme = localStorage.getItem('appTheme') || 'dark';
@@ -61,18 +63,56 @@ export default function SettingsPage() {
     }
   };
 
-  const handleProfileSave = (e: React.FormEvent) => {
+  const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentUser?.role !== 'Kurir') {
-      toast({ title: "Tidak Diizinkan", description: "Hanya Kurir yang dapat mengubah detail profil.", variant: "destructive"});
-      return;
+    if (!currentUser) return;
+    
+    setIsProfileSubmitting(true);
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (!user) {
+        toast({ title: "Error", description: "Pengguna tidak terautentikasi.", variant: "destructive" });
+        setIsProfileSubmitting(false);
+        return;
     }
-    // In a real app, this would trigger an API call to update Firestore and upload the image.
-    // For this prototype, we'll just update local state and localStorage.
-    const updatedUser = { ...currentUser, fullName, email, avatarUrl: avatarPreview || currentUser.avatarUrl };
-    localStorage.setItem('loggedInUser', JSON.stringify(updatedUser));
-    setCurrentUser(updatedUser);
-    toast({ title: "Profil Disimpan", description: "Informasi profil Anda telah diperbarui (simulasi)." });
+    
+    let avatarUrl = currentUser.avatarUrl || null;
+
+    try {
+        // 1. Upload new avatar if it exists
+        if (avatarFile) {
+            const storageRef = ref(storage, `avatars/${user.uid}/${avatarFile.name}`);
+            const uploadResult = await uploadBytes(storageRef, avatarFile);
+            avatarUrl = await getDownloadURL(uploadResult.ref);
+        }
+
+        // 2. Update Firebase Auth profile
+        await updateProfile(user, {
+            displayName: fullName,
+            photoURL: avatarUrl
+        });
+
+        // 3. Update Firestore profile document
+        const userDocRef = doc(db, "users", user.uid);
+        await updateDoc(userDocRef, {
+            fullName: fullName,
+            avatarUrl: avatarUrl,
+            updatedAt: new Date().toISOString()
+        });
+        
+        // 4. Update local state and localStorage
+        const updatedUser: UserProfile = { ...currentUser, fullName, avatarUrl: avatarUrl || undefined };
+        localStorage.setItem('loggedInUser', JSON.stringify(updatedUser));
+        setCurrentUser(updatedUser);
+        
+        toast({ title: "Profil Disimpan", description: "Informasi profil Anda telah berhasil diperbarui." });
+    } catch (error) {
+        console.error("Error saving profile:", error);
+        toast({ title: "Gagal Menyimpan", description: "Terjadi kesalahan saat menyimpan profil.", variant: "destructive" });
+    } finally {
+        setIsProfileSubmitting(false);
+    }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -95,7 +135,6 @@ export default function SettingsPage() {
     const user = auth.currentUser;
 
     if (user) {
-      // Re-authentication is required for sensitive operations like changing a password.
       const credential = EmailAuthProvider.credential(user.email!, currentPassword);
       try {
         await reauthenticateWithCredential(user, credential);
@@ -136,7 +175,6 @@ export default function SettingsPage() {
   }
 
   const userInitials = (fullName || currentUser.fullName || '').split(" ").map(n => n[0]).join("").toUpperCase() || "XX";
-  const canEditProfile = currentUser.role === 'Kurir';
 
   return (
     <div className="space-y-8">
@@ -147,36 +185,30 @@ export default function SettingsPage() {
         </CardHeader>
       </Card>
 
-      {/* Profile Settings - Visible only for Kurir */}
-      {canEditProfile && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center"><Upload className="mr-2 h-5 w-5 text-primary"/> Edit Profil</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleProfileSave} className="space-y-6">
-              <div className="flex flex-col items-center space-y-4">
-                <Avatar className="h-24 w-24">
-                  <AvatarImage src={avatarPreview || `https://placehold.co/150x150.png?text=${userInitials}`} alt={fullName} data-ai-hint="man face"/>
-                  <AvatarFallback>{userInitials}</AvatarFallback>
-                </Avatar>
-                <Input id="avatarUpload" type="file" accept="image/*" onChange={handleAvatarChange} className="text-sm max-w-xs" />
-              </div>
-              <div>
-                <Label htmlFor="fullName">Nama Lengkap</Label>
-                <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-              </div>
-              <Button type="submit" className="w-full sm:w-auto"><Save className="mr-2 h-4 w-4"/> Simpan Perubahan Profil</Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center"><Upload className="mr-2 h-5 w-5 text-primary"/> Edit Profil</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleProfileSave} className="space-y-6">
+            <div className="flex flex-col items-center space-y-4">
+              <Avatar className="h-24 w-24">
+                <AvatarImage src={avatarPreview || `https://placehold.co/150x150.png?text=${userInitials}`} alt={fullName} data-ai-hint="man face"/>
+                <AvatarFallback>{userInitials}</AvatarFallback>
+              </Avatar>
+              <Input id="avatarUpload" type="file" accept="image/*" onChange={handleAvatarChange} className="text-sm max-w-xs" />
+            </div>
+            <div>
+              <Label htmlFor="fullName">Nama Lengkap</Label>
+              <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
+            </div>
+            <Button type="submit" className="w-full sm:w-auto" disabled={isProfileSubmitting}>
+              {isProfileSubmitting ? 'Menyimpan...' : <><Save className="mr-2 h-4 w-4"/> Simpan Perubahan Profil</>}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-      {/* Change Password - Visible for ALL roles */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Lock className="mr-2 h-5 w-5 text-primary"/> Ganti Password</CardTitle>
@@ -202,7 +234,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Notification Settings */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Bell className="mr-2 h-5 w-5 text-primary"/> Pengaturan Notifikasi</CardTitle>
@@ -230,7 +261,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Theme Settings */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary"/> Pengaturan Tema</CardTitle>

@@ -2,6 +2,7 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -15,6 +16,7 @@ const firebaseConfig = {
 let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
+let storage: FirebaseStorage;
 
 if (!getApps().length) {
   try {
@@ -33,10 +35,10 @@ if (!getApps().length) {
 try {
   auth = getAuth(app);
   db = getFirestore(app);
+  storage = getStorage(app);
 } catch (error) {
   console.error("Error getting Firebase services", error);
-  throw new Error("Failed to get Firebase services (Auth, Firestore). Ensure Firebase was initialized correctly.");
+  throw new Error("Failed to get Firebase services (Auth, Firestore, Storage). Ensure Firebase was initialized correctly.");
 }
 
-export { app, auth, db };
-
+export { app, auth, db, storage };

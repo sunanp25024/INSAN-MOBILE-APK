@@ -68,7 +68,6 @@ export default function LoginPage() {
               errorMessage = 'Terlalu banyak percobaan login. Coba lagi nanti.';
               break;
           default:
-            console.error("Firebase login error:", error);
             errorMessage = 'Terjadi kesalahan saat login. Silakan coba lagi nanti.';
             break;
         }

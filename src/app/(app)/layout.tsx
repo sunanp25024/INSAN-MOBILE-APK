@@ -69,7 +69,6 @@ const allNavItems: NavItem[] = [
   { href: "/notifications", icon: Bell, label: "Notifikasi Sistem", roles: ['MasterAdmin'] },
 
   // Admin specific
-  // Manage PICs and Manage Kurirs are shared with MasterAdmin
   { href: "/pending-approvals", icon: MailCheck, label: "Status Persetujuan", roles: ['Admin'] },
   
   // PIC specific
@@ -93,40 +92,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [loadingAuth, setLoadingAuth] = React.useState(true);
 
   React.useEffect(() => {
-    console.log("Layout Effect triggered. Pathname:", pathname);
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log("onAuthStateChanged triggered.");
       setLoadingAuth(true);
       if (firebaseUser) {
-        console.log("Firebase user found, UID:", firebaseUser.uid);
         let userProfile: UserProfile | null = null;
         
-        // 1. Try to get profile from local storage first for speed
         const localData = localStorage.getItem('loggedInUser');
         if (localData) {
           try {
             const parsed = JSON.parse(localData) as UserProfile;
             if (parsed.uid === firebaseUser.uid) {
-              console.log("User profile found in localStorage.");
               userProfile = parsed;
             }
           } catch (e) { console.warn("Could not parse user data from localStorage.", e) }
         }
 
-        // 2. If no valid local data, fetch from Firestore
         if (!userProfile) {
           try {
-            console.log("No local profile. Fetching from Firestore for UID:", firebaseUser.uid);
             const userDocRef = doc(db, "users", firebaseUser.uid);
             const userDocSnap = await getDoc(userDocRef);
             if (userDocSnap.exists()) {
-              console.log("Firestore document found.");
               userProfile = { uid: firebaseUser.uid, ...userDocSnap.data() } as UserProfile;
-              console.log("User profile constructed:", userProfile);
               localStorage.setItem('loggedInUser', JSON.stringify(userProfile));
               localStorage.setItem('isAuthenticated', 'true');
             } else {
-              console.error("Firestore document NOT found for UID:", firebaseUser.uid);
               await signOut(auth);
               userProfile = null;
             }
@@ -137,23 +126,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           }
         }
         
-        // 3. Final decision based on profile
         if (userProfile) {
-          console.log("Setting current user state.");
           setCurrentUser(userProfile);
           if (userProfile.role) {
             setNavItems(allNavItems.filter(item => item.roles.includes(userProfile!.role)));
-          } else {
-             console.error("User profile is missing 'role' property. Cannot set nav items.");
           }
         } else {
-           console.log("No user profile available after checks. Current user will be null.");
            setCurrentUser(null);
         }
 
       } else {
-        // User is signed out.
-        console.log("No Firebase user. Clearing session.");
         localStorage.removeItem('isAuthenticated');
         localStorage.removeItem('loggedInUser');
         localStorage.removeItem('courierCheckedInToday');
@@ -161,16 +143,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setNavItems([]);
         const publicPages = ['/', '/setup-admin'];
         if (!publicPages.includes(pathname)) {
-          console.log("Not on a public page, redirecting to login.");
           router.replace('/');
         }
       }
-      console.log("Authentication check finished.");
       setLoadingAuth(false);
     });
 
     return () => {
-      console.log("Cleaning up onAuthStateChanged listener.");
       unsubscribe();
     };
   }, [router, pathname]);
@@ -182,7 +161,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.push('/');
     } catch (error) {
       console.error("Error signing out: ", error);
-      // Fallback cleanup
       localStorage.clear();
       router.push('/');
     }

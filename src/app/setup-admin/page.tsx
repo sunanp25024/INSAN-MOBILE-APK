@@ -13,7 +13,7 @@ import { UserPlus, ArrowLeft } from 'lucide-react';
 import type { UserProfile } from '@/types';
 import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore'; // Removed serverTimestamp import
+import { doc, setDoc } from 'firebase/firestore';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -52,14 +52,14 @@ export default function SetupAdminPage() {
           email: data.email,
           role: 'MasterAdmin',
           status: 'Aktif',
-          joinDate: new Date().toISOString(), // Use ISO string
-          createdAt: new Date().toISOString(), // Use ISO string
+          joinDate: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
         };
 
         // Use Firebase Auth UID as document ID in Firestore for consistency
         await setDoc(doc(db, "users", firebaseUser.uid), {
             ...newAdminProfile,
-            uid: firebaseUser.uid, // also store uid inside the document
+            uid: firebaseUser.uid,
         });
 
         toast({
@@ -70,10 +70,8 @@ export default function SetupAdminPage() {
         success = true;
       }
     } catch (error: any) {
-      console.error("Error setting up MasterAdmin: ", error);
       let errorMessage = "Gagal membuat akun MasterAdmin.";
       
-      // Check for the specific referer block error first
       if (error.message && error.message.includes('auth/requests-from-referer')) {
         errorMessage = 'Domain aplikasi Vercel Anda diblokir. Pastikan Anda telah menambahkan "apk-para-kurir-tau.vercel.app" ke daftar "HTTP referrers" pada setelan API Key di Google Cloud Console untuk melanjutkan setup.';
       } else if (error.code === 'auth/email-already-in-use') {
@@ -88,7 +86,7 @@ export default function SetupAdminPage() {
         title: "Setup Gagal",
         description: errorMessage,
         variant: "destructive",
-        duration: 9000, // Give more time to read the detailed error
+        duration: 9000,
       });
     } finally {
       setIsLoading(false);

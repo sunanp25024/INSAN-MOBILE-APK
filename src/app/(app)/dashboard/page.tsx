@@ -22,8 +22,9 @@ import { id as indonesiaLocale } from 'date-fns/locale';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BrowserMultiFormatReader, NotFoundException, ChecksumException, FormatException, type IScannerControls } from '@zxing/library';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
 import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDocs, Timestamp, serverTimestamp, writeBatch, deleteDoc, runTransaction, orderBy } from 'firebase/firestore';
+import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
 import { usePathname } from 'next/navigation';
@@ -65,8 +66,7 @@ export default function DashboardPage() {
   const [dayFinished, setDayFinished] = useState(false); 
 
   const [motivationalQuote, setMotivationalQuote] = useState('');
-  const [returnProofPhoto, setReturnProofPhoto] = useState<File | null>(null); 
-  const [returnProofPhotoDataUrl, setReturnProofPhotoDataUrl] = useState<string | null>(null); 
+  const [returnProofPhotoDataUrl, setReturnProofPhotoDataUrl] = useState<string | null>(null);
   const [returnLeadReceiverName, setReturnLeadReceiverName] = useState('');
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -77,6 +77,7 @@ export default function DashboardPage() {
   const [photoRecipientName, setPhotoRecipientName] = useState('');
   const [isCourierCheckedIn, setIsCourierCheckedIn] = useState<boolean | null>(null);
   const [isScanningForDeliveryUpdate, setIsScanningForDeliveryUpdate] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const scannerControlsRef = useRef<IScannerControls | null>(null);
 
@@ -353,36 +354,21 @@ export default function DashboardPage() {
   }, [allWorkRecords, allAttendanceRecords, allUserProfiles, selectedWilayah, selectedArea, selectedHub, searchKurir]);
 
 
-  // THIS IS THE FIX: This effect hook ensures that the check-in status is
-  // always up-to-date when the user navigates to the dashboard or focuses the window.
   useEffect(() => {
     const checkStatus = () => {
-        // Only run this check for the Kurir role.
         if (currentUser?.role === 'Kurir') {
-          // Read the check-in status directly from localStorage.
           const checkedInDate = localStorage.getItem('courierCheckedInToday');
-          // Get today's date in the same 'YYYY-MM-DD' format.
           const today = new Date().toISOString().split('T')[0];
-          // Update the component's state. If the stored date matches today's date,
-          // the user is checked in.
           setIsCourierCheckedIn(checkedInDate === today);
         }
     };
 
-    // Run the check immediately.
     checkStatus();
-
-    // Also run the check whenever the window/tab gains focus.
-    // This handles cases where the user checks in in another tab and comes back.
     window.addEventListener('focus', checkStatus);
 
-    // Cleanup the event listener when the component unmounts.
     return () => {
       window.removeEventListener('focus', checkStatus);
     };
-    // The dependency array [currentUser, pathname] is crucial. It tells React to
-    // re-run this effect whenever the user data loads OR whenever the user
-    // navigates to a new page (which changes the pathname).
   }, [currentUser, pathname]);
 
   useEffect(() => {
@@ -631,22 +617,32 @@ export default function DashboardPage() {
     if (!photoRecipientName.trim()) { toast({ title: "Nama Penerima Kosong", variant: "destructive"}); return; }
 
     const photoDataUrl = capturePhoto();
-    const proofUrlToStore = photoDataUrl || "https://placehold.co/300x200.png?text=NO_FOTO"; 
-
+    if (!photoDataUrl) {
+        toast({ title: "Gagal Mengambil Foto", variant: "destructive" });
+        return;
+    }
+    
+    setIsSubmitting(true);
     try {
+        const filePath = `delivery_proofs/${dailyTaskDocId}/${capturingForPackageId}_${Date.now()}.jpg`;
+        const proofStorageRef = storageRef(storage, filePath);
+
+        const uploadResult = await uploadString(proofStorageRef, photoDataUrl, 'data_url');
+        const downloadURL = await getDownloadURL(uploadResult.ref);
+
         const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", capturingForPackageId);
         await updateDoc(packageDocRef, {
             status: 'delivered',
             recipientName: photoRecipientName.trim(),
-            deliveryProofPhotoUrl: proofUrlToStore, 
+            deliveryProofPhotoUrl: downloadURL, 
             lastUpdateTime: serverTimestamp()
         });
         
-        setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: proofUrlToStore }));
+        setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: downloadURL }));
         setInTransitPackages(prev => prev.map(p =>
             p.id === capturingForPackageId ? { 
                 ...p, 
-                deliveryProofPhotoUrl: proofUrlToStore, 
+                deliveryProofPhotoUrl: downloadURL, 
                 status: 'delivered', 
                 recipientName: photoRecipientName.trim(),
                 lastUpdateTime: new Date().toISOString() 
@@ -655,10 +651,12 @@ export default function DashboardPage() {
         toast({ title: "Foto Bukti Terkirim" });
     } catch (error) {
         console.error("Error saving delivery proof:", error);
-        toast({ title: "Error Simpan Bukti", variant: "destructive" });
+        toast({ title: "Error Simpan Bukti", description: "Gagal mengunggah foto bukti.", variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+        setCapturingForPackageId(null);
+        setPhotoRecipientName('');
     }
-    setCapturingForPackageId(null);
-    setPhotoRecipientName('');
   };
 
   const handleDeletePackagePhoto = async (packageId: string) => {
@@ -684,29 +682,31 @@ export default function DashboardPage() {
 
   const handleFinishDay = async () => {
     if(!dailyTaskDocId || !currentUser || !dailyTaskData) return;
-
     const remainingInTransit = inTransitPackages.filter(p => p.status === 'in_transit');
-    let finalReturnProofUrl = returnProofPhotoDataUrl; 
+    let finalReturnProofUrl: string | null = null; 
 
-    if (remainingInTransit.length > 0) {
-      if (!returnProofPhoto && !finalReturnProofUrl) { 
-        toast({ title: "Upload Bukti Paket Pending", description: "Untuk menyelesaikan, upload foto bukti serah terima semua paket pending.", variant: "destructive" });
-        return;
-      }
-      if (!returnLeadReceiverName.trim()) {
-        toast({ title: "Nama Leader Serah Terima Kosong", description: "Isi nama leader/supervisor yang menerima paket retur.", variant: "destructive" });
-        return;
-      }
-      if (returnProofPhoto) {
-        finalReturnProofUrl = returnProofPhotoDataUrl;
-      }
-    }
-
-
+    setIsSubmitting(true);
+    
     try {
+        if (remainingInTransit.length > 0) {
+          if (!returnProofPhotoDataUrl) { 
+            toast({ title: "Upload Bukti Paket Pending", description: "Untuk menyelesaikan, upload foto bukti serah terima semua paket pending.", variant: "destructive" });
+            setIsSubmitting(false);
+            return;
+          }
+          if (!returnLeadReceiverName.trim()) {
+            toast({ title: "Nama Leader Serah Terima Kosong", description: "Isi nama leader/supervisor yang menerima paket retur.", variant: "destructive" });
+            setIsSubmitting(false);
+            return;
+          }
+          const filePath = `return_proofs/${dailyTaskDocId}/return_proof_${Date.now()}.jpg`;
+          const returnStorageRef = storageRef(storage, filePath);
+          const uploadResult = await uploadString(returnStorageRef, returnProofPhotoDataUrl, 'data_url');
+          finalReturnProofUrl = await getDownloadURL(uploadResult.ref);
+        }
+
         const batch = writeBatch(db);
         const taskDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId);
-        
         const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length;
         const pendingForReturnCount = remainingInTransit.length;
 
@@ -716,7 +716,7 @@ export default function DashboardPage() {
             finishTimestamp: serverTimestamp(),
             finalDeliveredCount: deliveredCount,
             finalPendingReturnCount: pendingForReturnCount,
-            finalReturnProofPhotoUrl: finalReturnProofUrl || null,
+            finalReturnProofPhotoUrl: finalReturnProofUrl,
             finalReturnLeadReceiverName: returnLeadReceiverName.trim() || null,
         });
 
@@ -727,7 +727,7 @@ export default function DashboardPage() {
             batch.update(packageDocRef, { 
                 status: finalPackageStatus, 
                 lastUpdateTime: serverTimestamp(),
-                returnProofPhotoUrl: finalReturnProofUrl || null,
+                returnProofPhotoUrl: finalReturnProofUrl,
                 returnLeadReceiverName: returnLeadReceiverName.trim() || null,
             });
             updatedPendingReturn.push({ ...pkg, status: finalPackageStatus, returnProofPhotoUrl: finalReturnProofUrl || undefined, returnLeadReceiverName: returnLeadReceiverName.trim() || undefined, lastUpdateTime: new Date().toISOString() });
@@ -747,18 +747,18 @@ export default function DashboardPage() {
             finalReturnLeadReceiverName: returnLeadReceiverName.trim() || undefined,
         };
         setDailyTaskData(finalTaskData);
-
         toast({ title: "Pengantaran Selesai", description: `Terima kasih! Paket retur diserahkan kepada ${returnLeadReceiverName.trim() || 'N/A'}.` });
     } catch (error) {
         console.error("Error finishing day:", error);
-        toast({ title: "Error", description: "Gagal menyelesaikan hari.", variant: "destructive"});
+        toast({ title: "Error", description: "Gagal menyelesaikan hari. Gagal mengunggah foto.", variant: "destructive"});
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
   const handleReturnProofUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
-      setReturnProofPhoto(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setReturnProofPhotoDataUrl(reader.result as string);
@@ -777,7 +777,6 @@ export default function DashboardPage() {
     setPendingReturnPackages([]);
     setDeliveryStarted(false);
     setDayFinished(false);
-    setReturnProofPhoto(null);
     setReturnProofPhotoDataUrl(null);
     setReturnLeadReceiverName('');
     setPackagePhotoMap({});
@@ -1008,9 +1007,9 @@ export default function DashboardPage() {
                   {pkg.deliveryProofPhotoUrl && (<div className="mt-2"><p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p><div className="flex items-end gap-2"><Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" width={96} height={96} data-ai-hint="package door"/><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}><Trash2 size={16} /></Button></div></div>)}
                 </Card>
             ))}</CardContent>
-            {capturingForPackageId && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><Card className="w-[calc(100%-2rem)] max-w-2xl"><CardHeader><CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle><CardDescription>Ambil foto dan nama penerima.</CardDescription></CardHeader><CardContent className="space-y-4"><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}<div><Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label><Input id="photoRecipientName" type="text" placeholder="Nama penerima" value={photoRecipientName} onChange={(e) => setPhotoRecipientName(e.target.value)}/></div></CardContent><CardFooter className="flex flex-col sm:flex-row justify-between gap-2"><Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim()} className="w-full sm:w-auto"><Camera className="mr-2 h-4 w-4" /> Ambil & Simpan</Button></CardFooter></Card></div>)}
+            {capturingForPackageId && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><Card className="w-[calc(100%-2rem)] max-w-2xl"><CardHeader><CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle><CardDescription>Ambil foto dan nama penerima.</CardDescription></CardHeader><CardContent className="space-y-4"><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}<div><Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label><Input id="photoRecipientName" type="text" placeholder="Nama penerima" value={photoRecipientName} onChange={(e) => setPhotoRecipientName(e.target.value)}/></div></CardContent><CardFooter className="flex flex-col sm:flex-row justify-between gap-2"><Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim() || isSubmitting} className="w-full sm:w-auto"><Camera className="mr-2 h-4 w-4" /> {isSubmitting ? 'Mengunggah...' : 'Ambil & Simpan'}</Button></CardFooter></Card></div>)}
             {isScanningForDeliveryUpdate && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><Card className="w-[calc(100%-2rem)] max-w-2xl"><CardHeader><CardTitle>Scan Resi Update Pengiriman</CardTitle><CardDescription>Arahkan kamera ke barcode.</CardDescription></CardHeader><CardContent><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}</CardContent><CardFooter className="flex justify-end gap-2"><Button variant="outline" onClick={() => setIsScanningForDeliveryUpdate(false)} className="w-full sm:w-auto">Tutup</Button></CardFooter></Card></div>)}
-            <CardFooter><Button onClick={handleFinishDay} className="w-full" variant="destructive">Selesaikan Pengantaran Hari Ini</Button></CardFooter>
+            <CardFooter><Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : 'Selesaikan Pengantaran Hari Ini'}</Button></CardFooter>
           </Card>
         )}
 
@@ -1018,11 +1017,11 @@ export default function DashboardPage() {
            <Card>
             <CardHeader><CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle><CardDescription>{inTransitPackages.filter(p => p.status === 'in_transit').length} paket belum terkirim dan perlu di-retur.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              <div><Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label><Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />{returnProofPhotoDataUrl && <Image src={returnProofPhotoDataUrl} alt="Preview Bukti Retur" width={100} height={100} className="mt-2 rounded border" data-ai-hint="receipt package"/>}{returnProofPhoto && <p className="text-xs text-green-500 dark:text-green-400 mt-1">{returnProofPhoto.name} dipilih.</p>}</div>
+              <div><Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label><Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />{returnProofPhotoDataUrl && <Image src={returnProofPhotoDataUrl} alt="Preview Bukti Retur" width={100} height={100} className="mt-2 rounded border" data-ai-hint="receipt package"/>}</div>
               <div><Label htmlFor="returnLeadReceiverName">Nama Leader Serah Terima <span className="text-destructive">*</span></Label><Input id="returnLeadReceiverName" type="text" placeholder="Nama Leader/Supervisor" value={returnLeadReceiverName} onChange={(e) => setReturnLeadReceiverName(e.target.value)}/></div>
               <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1"><h4 className="text-sm font-medium text-muted-foreground">Daftar Resi Pending:</h4>{inTransitPackages.filter(p => p.status === 'in_transit').map(pkg => (<p key={pkg.id} className="text-sm text-muted-foreground break-all">{pkg.id} - <span className="italic">Pending Retur</span></p>))}</div>
             </CardContent>
-            <CardFooter><Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={(!returnProofPhoto && !returnProofPhotoDataUrl) || !returnLeadReceiverName.trim()}>Konfirmasi Selesai dengan Paket Pending</Button></CardFooter>
+            <CardFooter><Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={isSubmitting || !returnProofPhotoDataUrl || !returnLeadReceiverName.trim()}>{isSubmitting ? 'Memproses...' : 'Konfirmasi Selesai dengan Paket Pending'}</Button></CardFooter>
           </Card>
         )}
         

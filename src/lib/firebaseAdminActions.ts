@@ -406,13 +406,14 @@ export async function updateUserStatus(
   try {
     const userToUpdateRef = adminDb.collection('users').doc(uid);
 
+    // Using a transaction to ensure atomicity of the Firestore update
     await adminDb.runTransaction(async (transaction) => {
         const userDoc = await transaction.get(userToUpdateRef);
         if (!userDoc.exists) {
             throw new Error("User profile not found in Firestore.");
         }
         
-        // Update Firestore document
+        // Update Firestore document within the transaction
         transaction.update(userToUpdateRef, {
           status: newStatus,
           updatedAt: new Date().toISOString(),
@@ -420,7 +421,7 @@ export async function updateUserStatus(
         });
     });
 
-    // Update Firebase Auth user disabled status
+    // After the transaction succeeds, update the Firebase Auth user's disabled status
     await adminAuth.updateUser(uid, { disabled: newStatus === 'Nonaktif' });
 
     return { success: true, message: 'User status updated successfully.' };
