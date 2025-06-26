@@ -23,7 +23,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import * as XLSX from 'xlsx';
 
 const adminSchema = z.object({
-  id: z.string().min(1, "ID Aplikasi Admin tidak boleh kosong (cth: ADMIN00X)").optional(), 
+  id: z.string().min(1, "ID Aplikasi Admin tidak boleh kosong (cth: ADMIN00X)").optional(),
   fullName: z.string().min(3, "Nama lengkap minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
   passwordValue: z.string().min(6, "Password minimal 6 karakter").optional().or(z.literal('')),
@@ -99,7 +99,7 @@ export default function ManageAdminsPage() {
     }
 
     const appAdminId = data.id && data.id.trim() !== '' ? data.id : `ADMIN${String(Date.now()).slice(-6)}`;
-    
+
     if (admins.some(admin => admin.id === appAdminId || admin.email === data.email)) {
       toast({ title: "Gagal Menambahkan", description: `ID Aplikasi atau Email sudah ada.`, variant: "destructive"});
       setIsSubmitting(false);
@@ -122,7 +122,7 @@ export default function ManageAdminsPage() {
 
       if (result.success) {
         toast({ title: "Admin Ditambahkan", description: `Admin ${data.fullName} (Email: ${data.email}) berhasil ditambahkan.` });
-        fetchAdmins(); 
+        fetchAdmins();
         reset({ id: '', fullName: '', email: '', passwordValue: '' });
         setIsAddAdminDialogOpen(false);
       } else {
@@ -150,13 +150,13 @@ export default function ManageAdminsPage() {
   const handleEditAdmin: SubmitHandler<EditAdminFormData> = async (data) => {
     if (!currentEditingAdmin || !currentEditingAdmin.uid || !currentUser) return;
     setIsSubmitting(true);
-    
+
     if (data.email && data.email !== currentEditingAdmin.email && admins.some(admin => admin.email === data.email && admin.uid !== currentEditingAdmin.uid)) {
         toast({ title: "Gagal Memperbarui", description: `Email ${data.email} sudah digunakan oleh admin lain.`, variant: "destructive"});
         setIsSubmitting(false);
         return;
     }
-    
+
     const updatedData: Partial<UserProfile> = {
         fullName: data.fullName,
         email: data.email,
@@ -179,7 +179,7 @@ export default function ManageAdminsPage() {
       setIsSubmitting(false);
     }
   };
-  
+
   const handleDeleteAdmin = async (adminToDelete: UserProfile) => {
     if (!adminToDelete.uid || !currentUser || currentUser.role !== 'MasterAdmin') {
         toast({ title: "Akses Ditolak", description: "Hanya MasterAdmin yang dapat menghapus.", variant: "destructive"});
@@ -204,7 +204,7 @@ export default function ManageAdminsPage() {
   const handleFileSelectAndImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (isImporting || !currentUser) return;
     if (!event.target.files || event.target.files.length === 0) return;
-    
+
     const file = event.target.files[0];
     setIsImporting(true);
     toast({ title: "Memulai Impor", description: `Memproses file ${file.name}...` });
@@ -214,7 +214,7 @@ export default function ManageAdminsPage() {
         try {
             const data = e.target?.result;
             if (!data) throw new Error("Gagal membaca file.");
-            
+
             const workbook = XLSX.read(data, { type: 'binary' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
@@ -278,7 +278,7 @@ export default function ManageAdminsPage() {
       toast({ title: "Akses Ditolak", description: "Hanya MasterAdmin yang dapat mengubah status.", variant: "destructive" });
       return;
     }
-    
+
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
     const handlerProfile = { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role };
 
@@ -301,7 +301,7 @@ export default function ManageAdminsPage() {
     admin.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (admin.email && admin.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
-  
+
   if (currentUser?.role !== 'MasterAdmin') {
     return (
         <Card>
@@ -415,15 +415,28 @@ export default function ManageAdminsPage() {
                       </TableCell>
                       <TableCell className="text-center space-x-1">
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(admin)}><Edit size={16}/></Button>
-                        <Button 
-                            variant="destructive" 
-                            size="icon" 
-                            className="h-8 w-8" 
-                            onClick={() => handleDeleteAdmin(admin)} 
-                            disabled={isSubmitting}
-                        >
-                            <Trash2 size={16}/>
-                        </Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0}>
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleDeleteAdmin(admin)}
+                                  disabled={isSubmitting || currentUser?.role !== 'MasterAdmin'}
+                                >
+                                  <Trash2 size={16}/>
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            {currentUser?.role !== 'MasterAdmin' && (
+                              <TooltipContent>
+                                <p>Hanya MasterAdmin yang dapat menghapus.</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   )) : (
@@ -441,7 +454,7 @@ export default function ManageAdminsPage() {
           )}
         </CardContent>
       </Card>
-      
+
       <Dialog open={isEditAdminDialogOpen} onOpenChange={(open) => {
           if (!open) setCurrentEditingAdmin(null);
           setIsEditAdminDialogOpen(open);
@@ -484,9 +497,9 @@ export default function ManageAdminsPage() {
         <CardContent className="space-y-4">
           <div>
             <Label htmlFor="excel-file-admin">Pilih File Excel (.xlsx)</Label>
-            <Input 
-              id="excel-file-admin" 
-              type="file" 
+            <Input
+              id="excel-file-admin"
+              type="file"
               accept=".xlsx, .xls"
               className="mt-1"
               onChange={handleFileSelectAndImport}
