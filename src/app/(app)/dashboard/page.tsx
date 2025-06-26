@@ -244,7 +244,7 @@ export default function DashboardPage() {
             // --- Fetch Attendance Data (Today & Last 90 days) ---
             const attendanceQuery = query(collection(db, 'attendance'), where('date', '>=', format(ninetyDaysAgo, 'yyyy-MM-dd')));
             const attendanceSnapshot = await getDocs(attendanceQuery);
-            const allAttendanceRecords: AttendanceRecord[] = attendanceSnapshot.docs.map(doc => doc.data() as AttendanceRecord);
+            const allAttendanceRecords: AttendanceRecord[] = attendanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceRecord));
             
             const attendanceToday = allAttendanceRecords.filter(r => r.date === todayStr);
 
@@ -1038,3 +1038,6 @@ export default function DashboardPage() {
     
 
 
+
+
+    
