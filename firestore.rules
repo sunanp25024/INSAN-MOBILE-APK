@@ -13,10 +13,10 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow create: if (request.auth.uid == userId) || 
+      allow create: if request.auth.uid == userId ||
                        (userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin') ||
                        (userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && request.resource.data.role in ['PIC', 'Kurir']);
-
+      
       allow read: if request.auth != null && (
                     request.auth.uid == userId ||
                     (userExists(request.auth.uid) && userRole(request.auth.uid) in ['MasterAdmin', 'Admin', 'PIC'])
@@ -43,11 +43,6 @@ service cloud.firestore {
                     );
       allow delete: if false;
     }
-    
-    match /notifications/{notificationId} {
-        allow read: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
-        allow write: if userExists(request.auth.uid) && userRole(request.auth.uid) in ['Admin', 'MasterAdmin'];
-    }
 
     match /kurir_daily_tasks/{taskId} {
       function isOwnerOrManager() {
@@ -60,25 +55,42 @@ service cloud.firestore {
         allow read, write: if request.auth != null && isOwnerOrManager();
       }
     }
-    
-    // --- ATURAN BARU YANG DIPERBAIKI SECARA DEFINITIF ---
-    match /attendance/{attendanceId} {
-        function isManager() {
-          return userExists(request.auth.uid) && userRole(request.auth.uid) in ['PIC', 'Admin', 'MasterAdmin'];
-        }
 
-        // Kurir dapat MEMBACA (read) dan MEMPERBARUI (update) data absensi jika UID di dalam dokumen cocok dengan UID mereka,
-        // ATAU jika pengguna adalah seorang manajer. Aturan ini sekarang benar untuk query daftar data.
-        allow read, update: if request.auth != null && (
-                            (resource.data.kurirUid == request.auth.uid) || 
-                            isManager()
-                          );
-                          
-        // Kurir dapat MEMBUAT (create) data absensi baru HANYA JIKA mereka memasukkan UID mereka sendiri.
-        allow create: if request.auth != null && request.resource.data.kurirUid == request.auth.uid;
-        
-        // Tidak ada yang boleh menghapus data absensi.
-        allow delete: if false;
+    match /attendance/{attendanceId} {
+       function isRecordOwner(uid) {
+        return uid == attendanceId.split('_')[0];
+      }
+      
+      // Allow Kurir to read their own single document
+      allow get: if request.auth != null && isRecordOwner(request.auth.uid);
+
+      // Allow Kurir to list their own attendance records
+      // This is crucial for fetching history
+      allow list: if request.auth != null && request.query.where.kurirUid == request.auth.uid;
+      
+      // Allow managers to read any attendance record
+      allow read: if request.auth != null && userExists(request.auth.uid) && userRole(request.auth.uid) in ['PIC', 'Admin', 'MasterAdmin'];
+
+      // Allow Kurir to create their own attendance record
+      allow create: if request.auth != null && 
+                       isRecordOwner(request.auth.uid) &&
+                       request.resource.data.kurirUid == request.auth.uid;
+      
+      // Allow Kurir to update their own attendance record
+      allow update: if request.auth != null && isRecordOwner(request.auth.uid);
+      
+      // No one can delete attendance records
+      allow delete: if false;
+    }
+    
+     match /notifications/{notificationId} {
+      // Only MasterAdmin can read the list of notifications
+      allow list: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
+       // Anyone authenticated can create a notification (e.g., Admins for approvals)
+      allow create: if request.auth != null;
+       // Only MasterAdmin can update (e.g., mark as read)
+      allow update: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
+      allow delete: if false;
     }
   }
 }
