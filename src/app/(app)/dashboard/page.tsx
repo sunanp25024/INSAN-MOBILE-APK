@@ -251,7 +251,7 @@ export default function DashboardPage() {
             const todayStr = format(new Date(), 'yyyy-MM-dd');
 
             // --- Fetch Attendance Activities ---
-            const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', todayStr), orderBy('checkInTimestamp', 'desc'));
+            const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', todayStr));
             const attendanceSnapshot = await getDocs(attendanceQuery);
             const fetchedAttendanceActivities: AttendanceActivity[] = [];
             attendanceSnapshot.forEach(doc => {
@@ -301,9 +301,18 @@ export default function DashboardPage() {
             });
             setCourierWorkSummaries(fetchedWorkSummaries);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error fetching managerial dashboard feeds:", error);
-            toast({ title: "Error", description: "Gagal memuat feed aktivitas terbaru.", variant: "destructive"});
+            if (error.code === 'failed-precondition') {
+                 toast({ 
+                    title: "Index Diperlukan", 
+                    description: "Operasi membutuhkan index. Silakan buat di Firebase Console.", 
+                    variant: "destructive",
+                    duration: 9000
+                });
+            } else {
+                toast({ title: "Error", description: "Gagal memuat feed aktivitas terbaru.", variant: "destructive"});
+            }
         }
       };
       fetchManagerialData();
