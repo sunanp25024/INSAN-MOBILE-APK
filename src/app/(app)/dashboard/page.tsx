@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight, Filter as FilterIcon, Download as DownloadIcon, Search as SearchIcon, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, CourierWorkSummaryActivity, DashboardSummaryData, WeeklyShipmentSummary, MonthlySummaryData, Wilayah, Area, Hub, KurirDailyTaskDoc } from '@/types';
+import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, CourierWorkSummaryActivity, DashboardSummaryData, WeeklyShipmentSummary, MonthlySummaryData, Wilayah, Area, Hub, KurirDailyTaskDoc, AttendanceRecord } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,7 +23,7 @@ import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BrowserMultiFormatReader, NotFoundException, ChecksumException, FormatException, type IScannerControls } from '@zxing/library';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDocs, Timestamp, serverTimestamp, writeBatch, deleteDoc, runTransaction } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDocs, Timestamp, serverTimestamp, writeBatch, deleteDoc, runTransaction, orderBy } from 'firebase/firestore';
 
 
 const packageInputSchema = z.object({
@@ -235,14 +235,80 @@ export default function DashboardPage() {
         setCurrentUser(parsedUser);
 
         if (parsedUser.role !== 'Kurir') {
-          setDashboardSummary(generateInitialDashboardSummary()); // Keep mock for managers for now
-          // ... (rest of manager-specific mock data setup)
+          setDashboardSummary(generateInitialDashboardSummary());
         }
       } catch (error) {
         console.error("Failed to parse user data from localStorage for dashboard", error);
       }
     }
   }, []);
+
+  // Fetch managerial dashboard data (feeds)
+  useEffect(() => {
+    if (currentUser?.role && currentUser.role !== 'Kurir') {
+      const fetchManagerialData = async () => {
+        try {
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+            // --- Fetch Attendance Activities ---
+            const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', todayStr), orderBy('checkInTimestamp', 'desc'));
+            const attendanceSnapshot = await getDocs(attendanceQuery);
+            const fetchedAttendanceActivities: AttendanceActivity[] = [];
+            attendanceSnapshot.forEach(doc => {
+                const record = doc.data() as AttendanceRecord;
+                if (record.checkInTimestamp) {
+                    fetchedAttendanceActivities.push({
+                        id: `${doc.id}-check-in`, kurirName: record.kurirName, kurirId: record.kurirId,
+                        action: record.status === 'Late' ? 'check-in-late' : 'check-in',
+                        timestamp: (record.checkInTimestamp as Timestamp).toMillis().toString(),
+                        location: record.workLocation || 'N/A'
+                    });
+                }
+                if (record.checkOutTimestamp) {
+                    fetchedAttendanceActivities.push({
+                        id: `${doc.id}-check-out`, kurirName: record.kurirName, kurirId: record.kurirId,
+                        action: 'check-out',
+                        timestamp: (record.checkOutTimestamp as Timestamp).toMillis().toString(),
+                        location: record.workLocation || 'N/A'
+                    });
+                }
+            });
+            setAttendanceActivities(fetchedAttendanceActivities.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp)));
+
+            // --- Fetch Work Summary Activities ---
+            const workSummaryQuery = query(
+              collection(db, 'kurir_daily_tasks'), 
+              where('date', '==', todayStr),
+              where('taskStatus', '==', 'completed'),
+              orderBy('finishTimestamp', 'desc')
+            );
+            const workSummarySnapshot = await getDocs(workSummaryQuery);
+            const fetchedWorkSummaries: CourierWorkSummaryActivity[] = [];
+            workSummarySnapshot.forEach(doc => {
+              const task = doc.data() as KurirDailyTaskDoc;
+              if (task.finishTimestamp) {
+                fetchedWorkSummaries.push({
+                  id: doc.id,
+                  kurirName: task.kurirFullName,
+                  kurirId: task.kurirUid,
+                  hubLocation: "N/A", // This data isn't in kurir_daily_tasks
+                  timestamp: (task.finishTimestamp as Timestamp).toMillis().toString(),
+                  totalPackagesAssigned: task.totalPackages,
+                  packagesDelivered: task.finalDeliveredCount || 0,
+                  packagesPendingOrReturned: task.finalPendingReturnCount || 0,
+                });
+              }
+            });
+            setCourierWorkSummaries(fetchedWorkSummaries);
+
+        } catch (error) {
+            console.error("Error fetching managerial dashboard feeds:", error);
+            toast({ title: "Error", description: "Gagal memuat feed aktivitas terbaru.", variant: "destructive"});
+        }
+      };
+      fetchManagerialData();
+    }
+  }, [currentUser, toast]);
 
   useEffect(() => {
     if (currentUser?.role !== 'Kurir') return;
@@ -251,8 +317,13 @@ export default function DashboardPage() {
       const today = new Date().toISOString().split('T')[0];
       setIsCourierCheckedIn(checkedInDate === today);
     };
-    updateCheckInStatus(); 
+    
+    // Check on mount
+    updateCheckInStatus();
+    
+    // Listen for storage changes from other tabs
     window.addEventListener('storage', updateCheckInStatus);
+    // Re-check when the window gets focus
     window.addEventListener('focus', updateCheckInStatus);
     
     return () => { 
@@ -685,12 +756,28 @@ export default function DashboardPage() {
 
   const formatActivityTimestamp = (timestamp: string): string => { 
       try {
-        return formatDistanceToNow(parseISO(timestamp), { addSuffix: true, locale: indonesiaLocale });
+        const date = new Date(parseInt(timestamp));
+        if (isNaN(date.getTime())) return "Waktu tidak valid";
+        const now = new Date();
+        const diffInMinutes = (now.getTime() - date.getTime()) / (1000 * 60);
+
+        if (diffInMinutes < 60) {
+            return formatDistanceToNow(date, { addSuffix: true, locale: indonesiaLocale });
+        } else {
+            return format(date, "HH:mm, dd MMM yyyy", { locale: indonesiaLocale });
+        }
       } catch (error) {
           return "Invalid date";
       }
   };
-  const getAttendanceActionIcon = (action: AttendanceActivity['action']) => { return <UserCheckIcon /> };
+  const getAttendanceActionIcon = (action: AttendanceActivity['action']) => {
+    switch (action) {
+      case 'check-in': return <UserRoundCheck className="h-5 w-5 text-green-500" />;
+      case 'check-in-late': return <Clock className="h-5 w-5 text-yellow-500" />;
+      case 'check-out': return <UserRoundX className="h-5 w-5 text-red-500" />;
+      default: return <Activity className="h-5 w-5 text-muted-foreground" />;
+    }
+  };
   const getCourierWorkSummaryIcon = () => { return <Truck /> };
   const triggerFilterSimulation = () => { };
   const handleWilayahChange = (wilayahId: string) => { };
@@ -901,13 +988,15 @@ export default function DashboardPage() {
         <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5" />Ringkasan Performa Bulanan (3 Bulan)</CardTitle><CardDescription>Perbandingan bulanan.</CardDescription></CardHeader><CardContent className="h-[320px] pt-4"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={dashboardSummary.monthlyPerformanceSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="month" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="left" orientation="left" stroke="hsl(var(--chart-1))" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-5))" tick={{fontSize: '0.75rem'}} /><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}} /><Bar yAxisId="left" dataKey="totalDelivered" name="Total Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={25} /><Bar yAxisId="right" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-5))" radius={[4, 4, 0, 0]} barSize={25} /></RechartsBarChart></ResponsiveContainer></CardContent></Card>
       </div>
       
-      {/* Activity Feeds (still mock for managers) */}
+      {/* Activity Feeds */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><Activity className="mr-2 h-5 w-5"/>Aktivitas Absensi Terkini</CardTitle><CardDescription>Update check-in/out kurir.</CardDescription></CardHeader><CardContent className="max-h-[400px] overflow-y-auto pr-2">{attendanceActivities.length > 0 ? (<ul className="space-y-3">{attendanceActivities.map(activity => ( <li key={activity.id} className="flex items-start space-x-3 p-3 bg-card-foreground/5 rounded-md"><div className="flex-shrink-0 mt-0.5">{getAttendanceActionIcon(activity.action)}</div><div className="flex-grow"><p className="text-sm font-medium">{activity.kurirName} <span className="text-xs text-muted-foreground">({activity.kurirId})</span></p><p className="text-sm text-muted-foreground">{activity.action === 'check-in' ? 'melakukan check-in' : activity.action === 'check-out' ? 'melakukan check-out' : 'melaporkan keterlambatan'}{activity.location && <span className="text-xs"> di {activity.location}</span>}</p><p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(activity.timestamp)}</p></div></li>))}</ul>) : (<p className="text-muted-foreground text-center py-4">Belum ada aktivitas absensi.</p>)}</CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><ListChecks className="mr-2 h-5 w-5"/>Ringkasan Penyelesaian Kerja Kurir</CardTitle><CardDescription>Laporan ringkas setelah kurir selesai.</CardDescription></CardHeader><CardContent className="max-h-[400px] overflow-y-auto pr-2">{courierWorkSummaries.length > 0 ? (<ul className="space-y-3">{courierWorkSummaries.map(summary => ( <li key={summary.id} className="flex items-start space-x-3 p-3 bg-card-foreground/5 rounded-md"><div className="flex-shrink-0 mt-0.5">{getCourierWorkSummaryIcon()}</div><div className="flex-grow"><p className="text-sm font-medium">{summary.kurirName} <span className="text-xs text-muted-foreground">({summary.kurirId})</span></p><p className="text-sm text-muted-foreground">Dari Hub: <span className="font-semibold">{summary.hubLocation}</span></p><p className="text-sm text-muted-foreground">Menyelesaikan: <strong className="text-foreground">{summary.totalPackagesAssigned}</strong> paket, <strong className="text-green-500">{summary.packagesDelivered}</strong> terkirim, <strong className="text-red-500">{summary.packagesPendingOrReturned}</strong> retur/pending.</p><p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(summary.timestamp)}</p></div></li>))}</ul>) : (<p className="text-muted-foreground text-center py-4">Belum ada ringkasan kerja.</p>)}</CardContent></Card>
+        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><ListChecks className="mr-2 h-5 w-5"/>Ringkasan Penyelesaian Kerja Kurir</CardTitle><CardDescription>Laporan ringkas setelah kurir selesai.</CardDescription></CardHeader><CardContent className="max-h-[400px] overflow-y-auto pr-2">{courierWorkSummaries.length > 0 ? (<ul className="space-y-3">{courierWorkSummaries.map(summary => ( <li key={summary.id} className="flex items-start space-x-3 p-3 bg-card-foreground/5 rounded-md"><div className="flex-shrink-0 mt-0.5">{getCourierWorkSummaryIcon()}</div><div className="flex-grow"><p className="text-sm font-medium">{summary.kurirName} <span className="text-xs text-muted-foreground">({summary.kurirId})</span></p><p className="text-sm text-muted-foreground">Menyelesaikan: <strong className="text-foreground">{summary.totalPackagesAssigned}</strong> paket, <strong className="text-green-500">{summary.packagesDelivered}</strong> terkirim, <strong className="text-red-500">{summary.packagesPendingOrReturned}</strong> retur/pending.</p><p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(summary.timestamp)}</p></div></li>))}</ul>) : (<p className="text-muted-foreground text-center py-4">Belum ada ringkasan kerja.</p>)}</CardContent></Card>
       </div>
     </div>
   );
 }
+
+    
 
     
