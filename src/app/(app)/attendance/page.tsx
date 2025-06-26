@@ -101,14 +101,17 @@ export default function AttendancePage() {
         const historyQuery = query(
             collection(db, "attendance"),
             where("kurirUid", "==", user.uid),
-            where("date", ">=", sixtyDaysAgo),
-            orderBy("date", "desc")
+            where("date", ">=", sixtyDaysAgo)
+            // orderBy("date", "desc") // This caused the index error. Sorting is now done on the client.
         );
         const querySnapshot = await getDocs(historyQuery);
         const fetchedHistory: AttendanceRecord[] = [];
         querySnapshot.forEach((doc) => {
             fetchedHistory.push({ id: doc.id, ...doc.data() } as AttendanceRecord);
         });
+        
+        // Sort data on the client to ensure newest records are first
+        fetchedHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setAttendanceHistory(fetchedHistory);
 
     } catch(error: any) {
