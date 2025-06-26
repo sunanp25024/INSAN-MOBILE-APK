@@ -294,20 +294,22 @@ export async function handleApprovalRequest(
           case 'NEW_USER_PIC':
           case 'NEW_USER_ADMIN':
           case 'NEW_USER_KURIR':
-            // FIX: Ensure status is 'Aktif' upon creation through approval.
             const { passwordValue, ...profilePayload } = payload;
-            profilePayload.status = 'Aktif'; // Explicitly set status to 'Aktif'.
+            profilePayload.status = 'Aktif'; 
             
             if (!passwordValue) {
                 throw new Error('Password tidak ditemukan dalam payload untuk user baru.');
             }
-            await createUserAccount(profilePayload.email, passwordValue, profilePayload);
+            const creationResult = await createUserAccount(profilePayload.email, passwordValue, profilePayload);
+            if (!creationResult.success) {
+                throw new Error(creationResult.message || 'Gagal membuat akun pengguna baru saat persetujuan.');
+            }
             break;
 
           case 'UPDATE_USER_PROFILE':
             if (!targetEntityId) throw new Error('Target UID untuk update tidak ditemukan.');
             const userToUpdateRef = adminDb.collection('users').doc(targetEntityId);
-            transaction.update(userToUpdateRef, { ...payload, status: 'Aktif' }); // Ensure status is active on update
+            transaction.update(userToUpdateRef, { ...payload, status: 'Aktif' });
             break;
             
           case 'ACTIVATE_USER':
@@ -333,15 +335,7 @@ export async function handleApprovalRequest(
   }
 }
 
-/**
- * Updates a user's status in both Firestore and Firebase Auth.
- * This is a privileged action that should only be callable by authorized users (e.g., MasterAdmin).
- *
- * @param uid The UID of the user to update.
- * @param newStatus The new status ('Aktif' or 'Nonaktif').
- * @param handlerProfile The profile of the user performing the action.
- * @returns An object with the success status and a message.
- */
+
 export async function updateUserStatus(
   uid: string,
   newStatus: 'Aktif' | 'Nonaktif',
@@ -357,11 +351,18 @@ export async function updateUserStatus(
   try {
     const userToUpdateRef = adminDb.collection('users').doc(uid);
 
-    // Update Firestore document
-    await userToUpdateRef.update({
-      status: newStatus,
-      updatedAt: new Date().toISOString(),
-      updatedBy: { uid: handlerProfile.uid, name: handlerProfile.name, role: handlerProfile.role },
+    await adminDb.runTransaction(async (transaction) => {
+        const userDoc = await transaction.get(userToUpdateRef);
+        if (!userDoc.exists) {
+            throw new Error("User profile not found in Firestore.");
+        }
+        
+        // Update Firestore document
+        transaction.update(userToUpdateRef, {
+          status: newStatus,
+          updatedAt: new Date().toISOString(),
+          updatedBy: { uid: handlerProfile.uid, name: handlerProfile.name, role: handlerProfile.role },
+        });
     });
 
     // Update Firebase Auth user disabled status
@@ -377,3 +378,4 @@ export async function updateUserStatus(
     };
   }
 }
+

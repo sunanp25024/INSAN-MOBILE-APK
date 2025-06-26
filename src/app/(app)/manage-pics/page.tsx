@@ -101,7 +101,6 @@ export default function ManagePICsPage() {
       });
     } catch (error) {
       console.error("Failed to create notification:", error);
-      // Non-blocking error, so we just log it and don't bother the user.
     }
   };
 

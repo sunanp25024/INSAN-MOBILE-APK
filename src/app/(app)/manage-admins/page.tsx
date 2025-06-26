@@ -91,7 +91,7 @@ export default function ManageAdminsPage() {
 
   const handleAddAdmin: SubmitHandler<AdminFormData> = async (data) => {
     setIsSubmitting(true);
-    if (!currentUser) return; // Should not happen if page is guarded
+    if (!currentUser) return; 
     if (!data.passwordValue) {
       toast({ title: "Password Dibutuhkan", description: "Password awal wajib diisi untuk admin baru.", variant: "destructive" });
       setIsSubmitting(false);
