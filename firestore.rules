@@ -1,9 +1,9 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --- Helper Functions ---
     function userExists(uid) {
       return exists(/databases/$(database)/documents/users/$(uid));
     }
@@ -11,86 +11,88 @@ service cloud.firestore {
     function userRole(uid) {
       return get(/databases/$(database)/documents/users/$(uid)).data.role;
     }
-
-    match /users/{userId} {
-      allow create: if request.auth.uid == userId ||
-                       (userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin') ||
-                       (userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && request.resource.data.role in ['PIC', 'Kurir']);
-      
-      allow read: if request.auth != null && (
-                    request.auth.uid == userId ||
-                    (userExists(request.auth.uid) && userRole(request.auth.uid) in ['MasterAdmin', 'Admin', 'PIC'])
-                  );
-
-      allow update: if request.auth != null && (
-                      (request.auth.uid == userId && request.resource.data.role == resource.data.role) ||
-                      (userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin') ||
-                      (userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && resource.data.role in ['PIC', 'Kurir'])
-                    );
-      
-      allow delete: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
+    
+    function isOwner(uid) {
+      return request.auth.uid == uid;
     }
 
-    match /approval_requests/{requestId} {
-      allow create: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'Admin' && request.resource.data.requestedByUid == request.auth.uid;
-      allow read: if userExists(request.auth.uid) && (
-                    (userRole(request.auth.uid) == 'Admin' && resource.data.requestedByUid == request.auth.uid) ||
-                    userRole(request.auth.uid) == 'MasterAdmin'
-                  );
-      allow update: if userExists(request.auth.uid) && (
-                      userRole(request.auth.uid) == 'MasterAdmin' ||
-                      (userRole(request.auth.uid) == 'Admin' && resource.data.requestedByUid == request.auth.uid && request.resource.data.status == 'cancelled')
-                    );
-      allow delete: if false;
-    }
-
-    match /kurir_daily_tasks/{taskId} {
-      function isOwnerOrManager() {
-        let taskOwnerUid = taskId.split('_')[0];
-        return request.auth.uid == taskOwnerUid || (userExists(request.auth.uid) && userRole(request.auth.uid) in ['PIC', 'Admin', 'MasterAdmin']);
-      }
-      allow read, write: if request.auth != null && isOwnerOrManager();
-      
-      match /packages/{packageId} {
-        allow read, write: if request.auth != null && isOwnerOrManager();
-      }
-    }
-
-    match /attendance/{attendanceId} {
-       function isRecordOwner(uid) {
-        return uid == attendanceId.split('_')[0];
-      }
-      
-      // Allow Kurir to read their own single document
-      allow get: if request.auth != null && isRecordOwner(request.auth.uid);
-
-      // Allow Kurir to list their own attendance records
-      // This is crucial for fetching history
-      allow list: if request.auth != null && request.query.where.kurirUid == request.auth.uid;
-      
-      // Allow managers to read any attendance record
-      allow read: if request.auth != null && userExists(request.auth.uid) && userRole(request.auth.uid) in ['PIC', 'Admin', 'MasterAdmin'];
-
-      // Allow Kurir to create their own attendance record
-      allow create: if request.auth != null && 
-                       isRecordOwner(request.auth.uid) &&
-                       request.resource.data.kurirUid == request.auth.uid;
-      
-      // Allow Kurir to update their own attendance record
-      allow update: if request.auth != null && isRecordOwner(request.auth.uid);
-      
-      // No one can delete attendance records
-      allow delete: if false;
+    function isRole(role) {
+      return userExists(request.auth.uid) && userRole(request.auth.uid) == role;
     }
     
-     match /notifications/{notificationId} {
-      // Only MasterAdmin can read the list of notifications
-      allow list: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
-       // Anyone authenticated can create a notification (e.g., Admins for approvals)
-      allow create: if request.auth != null;
-       // Only MasterAdmin can update (e.g., mark as read)
-      allow update: if userExists(request.auth.uid) && userRole(request.auth.uid) == 'MasterAdmin';
+    function isOneOfRoles(roles) {
+      return userExists(request.auth.uid) && userRole(request.auth.uid) in roles;
+    }
+
+    // --- User Profiles ---
+    match /users/{userId} {
+      allow create: if isOwner(userId) || isRole('MasterAdmin') || (isRole('Admin') && request.resource.data.role in ['PIC', 'Kurir']);
+      allow read: if request.auth != null && (isOwner(userId) || isOneOfRoles(['MasterAdmin', 'Admin', 'PIC']));
+      allow update: if request.auth != null && (
+        (isOwner(userId) && request.resource.data.role == resource.data.role) || // User can update their own profile, but not change their role
+        isRole('MasterAdmin') ||
+        (isRole('Admin') && resource.data.role in ['PIC', 'Kurir'])
+      );
+      allow delete: if isRole('MasterAdmin');
+    }
+
+    // --- Approval Requests ---
+    match /approval_requests/{requestId} {
+      allow create: if isRole('Admin') && request.resource.data.requestedByUid == request.auth.uid;
+      allow read: if isOneOfRoles(['MasterAdmin']) || (isRole('Admin') && resource.data.requestedByUid == request.auth.uid);
+      allow update: if isOneOfRoles(['MasterAdmin']) || (isRole('Admin') && resource.data.requestedByUid == request.auth.uid && request.resource.data.status == 'cancelled');
       allow delete: if false;
+    }
+
+    // --- Kurir Daily Tasks ---
+    match /kurir_daily_tasks/{taskId} {
+      function isTaskOwner() {
+        return request.auth.uid == taskId.split('_')[0];
+      }
+      
+      allow read, write: if request.auth != null && (isTaskOwner() || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']));
+      
+      match /packages/{packageId} {
+        allow read, write: if request.auth != null && (isTaskOwner() || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']));
+      }
+    }
+    
+    // --- Attendance Rules (Definitive Fix) ---
+    match /attendance/{attendanceId} {
+        function isAttendanceOwner(uid) {
+            return request.auth.uid == uid;
+        }
+
+        // CREATE: A courier can create their own attendance record.
+        // The document ID must match their UID and the date in the record.
+        allow create: if request.auth != null 
+                      && isAttendanceOwner(request.resource.data.kurirUid)
+                      && attendanceId == request.auth.uid + '_' + request.resource.data.date;
+
+        // READ: 
+        // A user can GET their own record. Managers can GET any record.
+        allow get: if request.auth != null 
+                   && (isAttendanceOwner(resource.data.kurirUid) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']));
+                   
+        // LIST: This is the crucial rule for queries.
+        // Allow a query if it EXPLICITLY filters by the current user's UID.
+        // This allows the "fetch history" query to work securely. Managers can list all.
+        allow list: if request.auth != null 
+                    && ( (isRole('Kurir') && request.query.where.kurirUid == request.auth.uid) || isOneOfRoles(['PIC', 'Admin', 'MasterAdmin']) );
+        
+        // UPDATE: A courier can update their own record (e.g., for check-out).
+        allow update: if request.auth != null && isAttendanceOwner(resource.data.kurirUid);
+
+        // DELETE: No one can delete attendance records for data integrity.
+        allow delete: if false;
+    }
+
+    // --- Notifications Rules ---
+    match /notifications/{notificationId} {
+        // Only MasterAdmins can read notifications.
+        allow read: if isRole('MasterAdmin');
+        // Only a server-side process (Admin SDK) can create notifications, so client creation is disallowed.
+        allow write: if false; 
     }
   }
 }

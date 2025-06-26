@@ -111,9 +111,14 @@ export default function AttendancePage() {
         });
         setAttendanceHistory(fetchedHistory);
 
-    } catch(error) {
+    } catch(error: any) {
         console.error("Error fetching attendance data:", error);
-        toast({ title: "Error", description: "Gagal memuat data absensi.", variant: "destructive"});
+        toast({ 
+            title: "Error", 
+            description: `Gagal memuat data absensi: ${error.message}`, 
+            variant: "destructive",
+            duration: 9000 
+        });
     } finally {
         setIsLoading(false);
     }
@@ -152,8 +157,10 @@ export default function AttendancePage() {
     try {
         await setDoc(recordRef, newRecord, { merge: true });
         toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Status: ${newRecord.status}.` });
-        // REFETCH data from Firestore to ensure UI consistency
-        await fetchAttendanceData(currentUser);
+        // REFETCH ALL data from Firestore to ensure UI consistency
+        if (currentUser) {
+            await fetchAttendanceData(currentUser);
+        }
         localStorage.setItem('courierCheckedInToday', todayISO);
     } catch (error) {
         console.error("Error during check-in: ", error);
@@ -185,8 +192,10 @@ export default function AttendancePage() {
             checkOutTimestamp: Timestamp.fromDate(now),
         });
         toast({ title: "Check-Out Berhasil", description: `Anda check-out pukul ${checkOutTime}.` });
-        // REFETCH data from Firestore to ensure UI consistency
-        await fetchAttendanceData(currentUser);
+        // REFETCH ALL data from Firestore to ensure UI consistency
+        if (currentUser) {
+            await fetchAttendanceData(currentUser);
+        }
     } catch(error) {
         console.error("Error during check-out:", error);
         toast({ title: "Check-Out Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
