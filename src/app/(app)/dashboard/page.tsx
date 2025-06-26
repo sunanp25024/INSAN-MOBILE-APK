@@ -354,18 +354,32 @@ export default function DashboardPage() {
 
 
   // THIS IS THE FIX: This effect hook ensures that the check-in status is
-  // always up-to-date when the user navigates to the dashboard.
+  // always up-to-date when the user navigates to the dashboard or focuses the window.
   useEffect(() => {
-    // Only run this check for the Kurir role.
-    if (currentUser?.role === 'Kurir') {
-      // Read the check-in status directly from localStorage.
-      const checkedInDate = localStorage.getItem('courierCheckedInToday');
-      // Get today's date in the same 'YYYY-MM-DD' format.
-      const today = new Date().toISOString().split('T')[0];
-      // Update the component's state. If the stored date matches today's date,
-      // the user is checked in.
-      setIsCourierCheckedIn(checkedInDate === today);
-    }
+    const checkStatus = () => {
+        // Only run this check for the Kurir role.
+        if (currentUser?.role === 'Kurir') {
+          // Read the check-in status directly from localStorage.
+          const checkedInDate = localStorage.getItem('courierCheckedInToday');
+          // Get today's date in the same 'YYYY-MM-DD' format.
+          const today = new Date().toISOString().split('T')[0];
+          // Update the component's state. If the stored date matches today's date,
+          // the user is checked in.
+          setIsCourierCheckedIn(checkedInDate === today);
+        }
+    };
+
+    // Run the check immediately.
+    checkStatus();
+
+    // Also run the check whenever the window/tab gains focus.
+    // This handles cases where the user checks in in another tab and comes back.
+    window.addEventListener('focus', checkStatus);
+
+    // Cleanup the event listener when the component unmounts.
+    return () => {
+      window.removeEventListener('focus', checkStatus);
+    };
     // The dependency array [currentUser, pathname] is crucial. It tells React to
     // re-run this effect whenever the user data loads OR whenever the user
     // navigates to a new page (which changes the pathname).
