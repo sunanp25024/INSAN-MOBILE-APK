@@ -494,13 +494,12 @@ export default function ManagePICsPage() {
                                     checked={pic.status === 'Aktif'}
                                     onCheckedChange={(newStatusChecked) => handleStatusChange(pic, newStatusChecked)}
                                     aria-label={`Status PIC ${pic.fullName}`}
-                                    disabled={currentUser?.role !== 'MasterAdmin'}
                                   />
                                 </span>
                               </TooltipTrigger>
                                {currentUser?.role !== 'MasterAdmin' && (
                                 <TooltipContent>
-                                  <p>Hanya MasterAdmin yang dapat mengubah status.</p>
+                                  <p>Ajukan perubahan status ke MasterAdmin.</p>
                                 </TooltipContent>
                               )}
                             </Tooltip>

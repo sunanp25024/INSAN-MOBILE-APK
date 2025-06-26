@@ -642,13 +642,12 @@ export default function ManageKurirsPage() {
                                   checked={kurir.status === 'Aktif'}
                                   onCheckedChange={(newStatusChecked) => handleStatusChange(kurir, newStatusChecked)}
                                   aria-label={`Status kurir ${kurir.fullName}`}
-                                  disabled={currentUser?.role !== 'MasterAdmin'}
                                 />
                               </span>
                             </TooltipTrigger>
                              {currentUser?.role !== 'MasterAdmin' && (
                               <TooltipContent>
-                                <p>Hanya MasterAdmin yang dapat mengubah status.</p>
+                                <p>Ajukan perubahan status ke MasterAdmin.</p>
                               </TooltipContent>
                             )}
                           </Tooltip>
