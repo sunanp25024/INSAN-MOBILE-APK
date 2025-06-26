@@ -428,7 +428,7 @@ export default function ManageAdminsPage() {
                             size="icon"
                             className="h-8 w-8"
                             onClick={() => handleOpenDeleteDialog(admin)}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || currentUser?.uid === admin.uid}
                         >
                             <Trash2 size={16}/>
                         </Button>
