@@ -15,9 +15,7 @@ export function AppLogo({ className }: { className?: string }) {
       width={LOGO_WIDTH}
       height={LOGO_HEIGHT}
       className={cn(className)}
-      // Removed unoptimized to let Next.js handle optimization if desired,
-      // but for local public files, it's often served directly.
-      // priority // You might consider adding priority if this logo is critical for LCP
+      priority
     />
   );
 }
