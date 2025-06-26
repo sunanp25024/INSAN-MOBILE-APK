@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import type { AttendanceRecord, KurirDailyTaskDoc, UserProfile, Wilayah, Area, Hub } from '@/types';
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
@@ -345,3 +345,5 @@ export default function ReportsPage() {
     </div>
   );
 }
+
+    
