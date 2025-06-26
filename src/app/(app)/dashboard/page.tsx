@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Link from 'next/link';
 import { Checkbox } from '@/components/ui/checkbox';
-import { format, subDays, formatDistanceToNow, startOfWeek, endOfWeek, eachWeekOfInterval, getMonth, getYear, parseISO, isValid } from 'date-fns';
+import { format, subDays, formatDistanceToNow, startOfWeek, endOfWeek, parseISO, isValid, startOfMonth, getWeek } from 'date-fns';
 import { id as indonesiaLocale } from 'date-fns/locale';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -129,6 +129,7 @@ export default function DashboardPage() {
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummaryData | null>(null);
   const [attendanceActivities, setAttendanceActivities] = useState<AttendanceActivity[]>([]);
   const [courierWorkSummaries, setCourierWorkSummaries] = useState<CourierWorkSummaryActivity[]>([]);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
 
   // Filter states
   const [selectedWilayah, setSelectedWilayah] = useState<string>('all-wilayah');
@@ -219,46 +220,39 @@ export default function DashboardPage() {
   }, [currentUser, isCourierCheckedIn, setValue, todayDateString, toast, resetPackageInputForm]);
 
 
-  const generateInitialDashboardSummary = (isFiltered = false): DashboardSummaryData => {
-    // This function will eventually be replaced by Firestore queries for managerial roles
-    const today = new Date();
-    let baseActiveCouriers = Math.floor(Math.random() * 15) + 5;
-    // ... (rest of the mock data generation logic)
-    return { /* ... mock data ... */ } as DashboardSummaryData; // Simplified
-  };
-
  useEffect(() => {
     const userDataString = localStorage.getItem('loggedInUser');
     if (userDataString) {
       try {
         const parsedUser = JSON.parse(userDataString) as UserProfile;
         setCurrentUser(parsedUser);
-
-        if (parsedUser.role !== 'Kurir') {
-          setDashboardSummary(generateInitialDashboardSummary());
-        }
       } catch (error) {
         console.error("Failed to parse user data from localStorage for dashboard", error);
       }
     }
   }, []);
 
-  // Fetch managerial dashboard data (feeds)
+  // Fetch managerial dashboard data (feeds and stats)
   useEffect(() => {
     if (currentUser?.role && currentUser.role !== 'Kurir') {
       const fetchManagerialData = async () => {
+        setIsDashboardLoading(true);
         try {
             const todayStr = format(new Date(), 'yyyy-MM-dd');
+            const ninetyDaysAgo = subDays(new Date(), 90);
 
-            // --- Fetch Attendance Activities ---
-            const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', todayStr));
+            // --- Fetch Attendance Data (Today & Last 90 days) ---
+            const attendanceQuery = query(collection(db, 'attendance'), where('date', '>=', format(ninetyDaysAgo, 'yyyy-MM-dd')));
             const attendanceSnapshot = await getDocs(attendanceQuery);
+            const allAttendanceRecords: AttendanceRecord[] = attendanceSnapshot.docs.map(doc => doc.data() as AttendanceRecord);
+            
+            const attendanceToday = allAttendanceRecords.filter(r => r.date === todayStr);
+
             const fetchedAttendanceActivities: AttendanceActivity[] = [];
-            attendanceSnapshot.forEach(doc => {
-                const record = doc.data() as AttendanceRecord;
+            attendanceToday.forEach(record => {
                 if (record.checkInTimestamp) {
                     fetchedAttendanceActivities.push({
-                        id: `${doc.id}-check-in`, kurirName: record.kurirName, kurirId: record.kurirId,
+                        id: `${record.id}-check-in`, kurirName: record.kurirName, kurirId: record.kurirId,
                         action: record.status === 'Late' ? 'check-in-late' : 'check-in',
                         timestamp: (record.checkInTimestamp as Timestamp).toMillis().toString(),
                         location: record.workLocation || 'N/A'
@@ -266,7 +260,7 @@ export default function DashboardPage() {
                 }
                 if (record.checkOutTimestamp) {
                     fetchedAttendanceActivities.push({
-                        id: `${doc.id}-check-out`, kurirName: record.kurirName, kurirId: record.kurirId,
+                        id: `${record.id}-check-out`, kurirName: record.kurirName, kurirId: record.kurirId,
                         action: 'check-out',
                         timestamp: (record.checkOutTimestamp as Timestamp).toMillis().toString(),
                         location: record.workLocation || 'N/A'
@@ -276,45 +270,76 @@ export default function DashboardPage() {
             const sortedAttendance = fetchedAttendanceActivities.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
             setAttendanceActivities(sortedAttendance);
 
-            // --- Fetch Work Summary Activities (REVISED QUERY) ---
-            const workSummaryQuery = query(
-              collection(db, 'kurir_daily_tasks'), 
-              where('date', '==', todayStr)
-              // No more filtering by taskStatus here to avoid composite index
-            );
+
+            // --- Fetch Work Data (Today & Last 90 days) ---
+            const workSummaryQuery = query(collection(db, 'kurir_daily_tasks'), where('date', '>=', format(ninetyDaysAgo, 'yyyy-MM-dd')));
             const workSummarySnapshot = await getDocs(workSummaryQuery);
-            const fetchedWorkSummaries: CourierWorkSummaryActivity[] = [];
-            workSummarySnapshot.forEach(doc => {
-              const task = doc.data() as KurirDailyTaskDoc;
-              // Client-side filtering
-              if (task.taskStatus === 'completed' && task.finishTimestamp) {
-                fetchedWorkSummaries.push({
-                  id: doc.id,
-                  kurirName: task.kurirFullName,
-                  kurirId: task.kurirUid,
-                  hubLocation: "N/A", // This data isn't in kurir_daily_tasks
-                  timestamp: (task.finishTimestamp as Timestamp).toMillis().toString(),
-                  totalPackagesAssigned: task.totalPackages,
-                  packagesDelivered: task.finalDeliveredCount || 0,
-                  packagesPendingOrReturned: task.finalPendingReturnCount || 0,
-                });
-              }
-            });
+            const allWorkRecords: KurirDailyTaskDoc[] = workSummarySnapshot.docs.map(doc => doc.data() as KurirDailyTaskDoc);
+            
+            const workRecordsToday = allWorkRecords.filter(r => r.date === todayStr);
+            const completedWorkToday = workRecordsToday.filter(task => task.taskStatus === 'completed' && task.finishTimestamp);
+
+            const fetchedWorkSummaries: CourierWorkSummaryActivity[] = completedWorkToday.map(task => ({
+                id: task.kurirUid + task.date,
+                kurirName: task.kurirFullName,
+                kurirId: task.kurirUid,
+                hubLocation: "N/A",
+                timestamp: (task.finishTimestamp as Timestamp).toMillis().toString(),
+                totalPackagesAssigned: task.totalPackages,
+                packagesDelivered: task.finalDeliveredCount || 0,
+                packagesPendingOrReturned: task.finalPendingReturnCount || 0,
+            }));
             const sortedSummaries = fetchedWorkSummaries.sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
             setCourierWorkSummaries(sortedSummaries);
+            
+            // --- Process Data for Stats Cards ---
+            const totalPackagesProcessedToday = workRecordsToday.reduce((sum, task) => sum + (task.totalPackages || 0), 0);
+            const totalPackagesDeliveredToday = workRecordsToday.reduce((sum, task) => sum + (task.finalDeliveredCount || 0), 0);
+            const presentCouriers = attendanceToday.filter(a => a.status === 'Present').length;
+            const onTimeDeliveryRateToday = attendanceToday.length > 0 ? (presentCouriers / attendanceToday.length) * 100 : 0;
+
+            // --- Process Data for Charts ---
+            const dailyShipmentSummary = Array.from({ length: 7 }).map((_, i) => {
+                const date = subDays(new Date(), i);
+                const dateStr = format(date, 'yyyy-MM-dd');
+                const tasksOnDate = allWorkRecords.filter(t => t.date === dateStr);
+                const terkirim = tasksOnDate.reduce((sum, task) => sum + (task.finalDeliveredCount || 0), 0);
+                const pending = tasksOnDate.reduce((sum, task) => sum + (task.finalPendingReturnCount || 0), 0);
+                return { date: dateStr, name: format(date, 'dd/MM'), terkirim, pending };
+            }).reverse();
+
+            const weeklyShipmentSummary = allWorkRecords.reduce((acc, task) => {
+                const weekNum = `W${getWeek(parseISO(task.date), { weekStartsOn: 1 })}`;
+                if (!acc[weekNum]) acc[weekNum] = { week: weekNum, terkirim: 0, pending: 0 };
+                acc[weekNum].terkirim += task.finalDeliveredCount || 0;
+                acc[weekNum].pending += task.finalPendingReturnCount || 0;
+                return acc;
+            }, {} as Record<string, WeeklyShipmentSummary>);
+
+            const monthlyPerformanceSummary = allWorkRecords.reduce((acc, task) => {
+                const monthName = format(parseISO(task.date), 'MMMM', { locale: indonesiaLocale });
+                if (!acc[monthName]) acc[monthName] = { month: monthName, totalDelivered: 0, totalPending: 0, successRate: 0 };
+                acc[monthName].totalDelivered += task.finalDeliveredCount || 0;
+                acc[monthName].totalPending += task.finalPendingReturnCount || 0;
+                return acc;
+            }, {} as Record<string, MonthlySummaryData>);
+
+            setDashboardSummary({
+                activeCouriersToday: attendanceToday.length,
+                totalPackagesProcessedToday,
+                totalPackagesDeliveredToday,
+                onTimeDeliveryRateToday,
+                dailyShipmentSummary,
+                weeklyShipmentSummary: Object.values(weeklyShipmentSummary).slice(-4),
+                monthlyPerformanceSummary: Object.values(monthlyPerformanceSummary).slice(-3)
+            });
+
 
         } catch (error: any) {
-            console.error("Error fetching managerial dashboard feeds:", error);
-            if (error.code === 'failed-precondition') {
-                 toast({ 
-                    title: "Index Diperlukan", 
-                    description: "Query membutuhkan index. Silakan buat di Firebase Console atau hubungi developer.", 
-                    variant: "destructive",
-                    duration: 9000
-                });
-            } else {
-                toast({ title: "Error", description: "Gagal memuat feed aktivitas terbaru.", variant: "destructive"});
-            }
+            console.error("Error fetching managerial dashboard data:", error);
+            toast({ title: "Error", description: "Gagal memuat data dashboard.", variant: "destructive"});
+        } finally {
+          setIsDashboardLoading(false);
         }
       };
       fetchManagerialData();
@@ -960,7 +985,7 @@ export default function DashboardPage() {
 
 
   // Fallback for Managerial Roles (still uses mock data for now)
-  if (!dashboardSummary) {
+  if (isDashboardLoading) {
     return ( <div className="flex justify-center items-center h-screen"><p>Memuat ringkasan dashboard...</p></div> );
   }
 
@@ -972,7 +997,7 @@ export default function DashboardPage() {
             {currentUser.role === 'MasterAdmin' ? <UserCog className="mr-2 h-7 w-7" /> : currentUser.role === 'Admin' ? <Users className="mr-2 h-7 w-7" /> : <Briefcase className="mr-2 h-7 w-7" />}
              Selamat Datang, {currentUser.fullName}!
           </CardTitle>
-          <CardDescription>Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir. (Data manajerial masih mock).</CardDescription>
+          <CardDescription>Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir.</CardDescription>
         </CardHeader>
       </Card>
 
@@ -984,19 +1009,19 @@ export default function DashboardPage() {
         <Button onClick={handleDashboardFilterApply} className="w-full lg:w-auto self-end"><FilterIcon className="mr-2 h-4 w-4" /> Terapkan Filter</Button>
       </div></CardContent><CardFooter><Button onClick={handleDownloadDashboardSummary} variant="outline" className="w-full sm:w-auto"><DownloadIcon className="mr-2 h-4 w-4" /> Unduh Ringkasan Dashboard</Button></CardFooter></Card>)}
       
-      {/* Stats Cards (still mock for managers) */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Kurir Aktif Hari Ini</CardTitle><Users className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{dashboardSummary.activeCouriersToday}</div><p className="text-xs text-muted-foreground">Total kurir beroperasi</p></CardContent></Card>
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Diproses Hari Ini</CardTitle><PackageIcon className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{dashboardSummary.totalPackagesProcessedToday}</div><p className="text-xs text-muted-foreground">Total paket ditugaskan</p></CardContent></Card>
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Terkirim Hari Ini</CardTitle><PackageCheck className="h-5 w-5 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{dashboardSummary.totalPackagesDeliveredToday}</div><p className="text-xs text-muted-foreground">Dari {dashboardSummary.totalPackagesProcessedToday} paket</p></CardContent></Card>
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Rate Tepat Waktu</CardTitle><Clock className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{dashboardSummary.onTimeDeliveryRateToday}%</div><p className="text-xs text-muted-foreground">Pengiriman tepat waktu</p></CardContent></Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Kurir Aktif Hari Ini</CardTitle><Users className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{dashboardSummary?.activeCouriersToday ?? 0}</div><p className="text-xs text-muted-foreground">Total kurir beroperasi</p></CardContent></Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Diproses Hari Ini</CardTitle><PackageIcon className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{dashboardSummary?.totalPackagesProcessedToday ?? 0}</div><p className="text-xs text-muted-foreground">Total paket ditugaskan</p></CardContent></Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Terkirim Hari Ini</CardTitle><PackageCheck className="h-5 w-5 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{dashboardSummary?.totalPackagesDeliveredToday ?? 0}</div><p className="text-xs text-muted-foreground">Dari {dashboardSummary?.totalPackagesProcessedToday ?? 0} paket</p></CardContent></Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Rate Absen Tepat Waktu</CardTitle><Clock className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{(dashboardSummary?.onTimeDeliveryRateToday ?? 0).toFixed(1)}%</div><p className="text-xs text-muted-foreground">Kurir check-in tepat waktu</p></CardContent></Card>
       </div>
 
-      {/* Charts (still mock for managers) */}
+      {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5"/>Ringkasan Pengiriman (7 Hari)</CardTitle><CardDescription>Visualisasi paket terkirim & pending.</CardDescription></CardHeader><CardContent className="h-[300px] pt-4"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={dashboardSummary.dailyShipmentSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="name" tick={{fontSize: '0.75rem'}}/><YAxis tick={{fontSize: '0.75rem'}}/><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}}/><Bar dataKey="terkirim" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={20}/><Bar dataKey="pending" name="Pending/Retur" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={20}/></RechartsBarChart></ResponsiveContainer></CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><TrendingUp className="mr-2 h-5 w-5" />Tren Pengiriman Mingguan (4 Minggu)</CardTitle><CardDescription>Performa mingguan.</CardDescription></CardHeader><CardContent className="h-[300px] pt-4"><ResponsiveContainer width="100%" height="100%"><LineChart data={dashboardSummary.weeklyShipmentSummary} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="week" tick={{fontSize: '0.75rem'}} /><YAxis tick={{fontSize: '0.75rem'}} /><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}} /><Line type="monotone" dataKey="terkirim" name="Terkirim" stroke="hsl(var(--chart-3))" strokeWidth={2} activeDot={{ r: 6 }} /><Line type="monotone" dataKey="pending" name="Pending/Retur" stroke="hsl(var(--chart-4))" strokeWidth={2} activeDot={{ r: 6 }} /></LineChart></ResponsiveContainer></CardContent></Card>
-        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5" />Ringkasan Performa Bulanan (3 Bulan)</CardTitle><CardDescription>Perbandingan bulanan.</CardDescription></CardHeader><CardContent className="h-[320px] pt-4"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={dashboardSummary.monthlyPerformanceSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="month" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="left" orientation="left" stroke="hsl(var(--chart-1))" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-5))" tick={{fontSize: '0.75rem'}} /><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}} /><Bar yAxisId="left" dataKey="totalDelivered" name="Total Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={25} /><Bar yAxisId="right" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-5))" radius={[4, 4, 0, 0]} barSize={25} /></RechartsBarChart></ResponsiveContainer></CardContent></Card>
+        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5"/>Ringkasan Pengiriman (7 Hari)</CardTitle><CardDescription>Visualisasi paket terkirim & pending.</CardDescription></CardHeader><CardContent className="h-[300px] pt-4"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={dashboardSummary?.dailyShipmentSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="name" tick={{fontSize: '0.75rem'}}/><YAxis tick={{fontSize: '0.75rem'}}/><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}}/><Bar dataKey="terkirim" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={20}/><Bar dataKey="pending" name="Pending/Retur" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={20}/></RechartsBarChart></ResponsiveContainer></CardContent></Card>
+        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><TrendingUp className="mr-2 h-5 w-5" />Tren Pengiriman Mingguan (4 Minggu)</CardTitle><CardDescription>Performa mingguan.</CardDescription></CardHeader><CardContent className="h-[300px] pt-4"><ResponsiveContainer width="100%" height="100%"><LineChart data={dashboardSummary?.weeklyShipmentSummary} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="week" tick={{fontSize: '0.75rem'}} /><YAxis tick={{fontSize: '0.75rem'}} /><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}} /><Line type="monotone" dataKey="terkirim" name="Terkirim" stroke="hsl(var(--chart-3))" strokeWidth={2} activeDot={{ r: 6 }} /><Line type="monotone" dataKey="pending" name="Pending/Retur" stroke="hsl(var(--chart-4))" strokeWidth={2} activeDot={{ r: 6 }} /></LineChart></ResponsiveContainer></CardContent></Card>
+        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5" />Ringkasan Performa Bulanan (3 Bulan)</CardTitle><CardDescription>Perbandingan bulanan.</CardDescription></CardHeader><CardContent className="h-[320px] pt-4"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={dashboardSummary?.monthlyPerformanceSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="month" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="left" orientation="left" stroke="hsl(var(--chart-1))" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-5))" tick={{fontSize: '0.75rem'}} /><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}} /><Bar yAxisId="left" dataKey="totalDelivered" name="Total Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={25} /><Bar yAxisId="right" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-5))" radius={[4, 4, 0, 0]} barSize={25} /></RechartsBarChart></ResponsiveContainer></CardContent></Card>
       </div>
       
       {/* Activity Feeds */}
@@ -1011,4 +1036,5 @@ export default function DashboardPage() {
     
 
     
+
 
