@@ -1,95 +1,101 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // HELPER FUNCTIONS
-    // Checks if a user has a specific role by reading their profile.
-    function isRole(role) {
-      // Ensure user is authenticated before trying to read their profile.
-      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
-    }
-    
-    // Checks if the user is any kind of manager (PIC, Admin, MasterAdmin).
-    function isManager() {
-      if (request.auth == null) {
-        return false;
-      }
-      let userRole = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-      return userRole == 'PIC' || userRole == 'Admin' || userRole == 'MasterAdmin';
+    // ========== HELPER FUNCTIONS ==========
+    // It's often more readable and maintainable to use functions.
+
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
     }
 
-    // COLLECTION RULES
+    function isRole(uid, roleName) {
+      // Gracefully handle non-existent user docs during checks
+      return exists(/databases/$(database)/documents/users/$(uid)) && getUserData(uid).role == roleName;
+    }
+
+    function isMasterAdmin(uid) {
+      return isRole(uid, 'MasterAdmin');
+    }
+
+    function isAdmin(uid) {
+      return isRole(uid, 'Admin') || isMasterAdmin(uid);
+    }
+
+    function isManager(uid) {
+      return isRole(uid, 'PIC') || isAdmin(uid);
+    }
+    
+    function isKurir(uid) {
+      return isRole(uid, 'Kurir');
+    }
+
+    // Check if the requesting user is the owner of the document.
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Check if the user's UID matches a field inside the document.
+    function isOwnerOfRecord() {
+      return request.auth.uid == resource.data.requestedByUid || request.auth.uid == resource.data.kurirUid;
+    }
+
+
+    // ========== USERS COLLECTION ==========
     match /users/{userId} {
-      // Any authenticated user can read any other user's profile.
-      // This is necessary for pages like "Manage Kurir" where a PIC needs to see a list of couriers.
-      allow read: if request.auth != null;
+      // Anyone can read their own profile. Managers can read any profile.
+      allow read: if request.auth != null && (isOwner(userId) || isManager(request.auth.uid));
       
-      // A user can update their own profile (e.g., from the settings page).
-      // MasterAdmin can also update any profile.
-      allow update: if request.auth.uid == userId || isRole('MasterAdmin');
+      // A user can create their own profile document (on signup).
+      // This is necessary for the setup-admin page to work.
+      allow create: if request.auth.uid == userId;
 
-      // Creation/deletion is handled by secure backend functions, not allowed from the client.
-      allow create, delete: if false;
+      // A user can update their own profile. MasterAdmin can update any profile.
+      allow update: if request.auth != null && (isOwner(userId) || isMasterAdmin(request.auth.uid));
+      
+      // Only MasterAdmins can delete users.
+      allow delete: if request.auth != null && isMasterAdmin(request.auth.uid);
     }
 
+    // ========== ATTENDANCE COLLECTION ==========
     match /attendance/{attendanceId} {
-      // Kurir can read their own records.
-      // Managers can read all attendance records for their dashboard/reports.
-      allow read: if (request.auth.uid == resource.data.kurirUid) || isManager();
-
-      // Only the specific Kurir can create or update their own attendance record.
-      allow create, update: if request.resource.data.kurirUid == request.auth.uid;
-
-      // Deletion is not allowed from the client.
-      allow delete: if false;
+      // ID format is {kurirUid}_{date}
+      allow read: if request.auth != null && (isOwner(attendanceId.split('_')[0]) || isManager(request.auth.uid));
+      allow create, update: if request.auth != null && isKurir(request.auth.uid) && isOwner(attendanceId.split('_')[0]);
+      allow delete: if false; // Disallow client-side deletion
     }
 
+    // ========== DAILY TASKS COLLECTION ==========
     match /kurir_daily_tasks/{taskId} {
-      // Kurir can read their own tasks.
-      // Managers can read all tasks for their dashboard/reports.
-      allow read: if (request.auth.uid == resource.data.kurirUid) || isManager();
+      // ID format is {kurirUid}_{date}
+      allow read: if request.auth != null && (isOwner(taskId.split('_')[0]) || isManager(request.auth.uid));
+      allow create, update: if request.auth != null && isKurir(request.auth.uid) && isOwner(taskId.split('_')[0]);
+      allow delete: if false; // Disallow client-side deletion
       
-      // Only the specific Kurir can create or update their own task document.
-      allow create, update: if request.resource.data.kurirUid == request.auth.uid;
-      
-      // Deletion is not allowed from the client.
-      allow delete: if false;
-      
-      // Subcollection for packages within a task.
       match /packages/{packageId} {
-        // The rules for packages depend on who owns the parent task document.
-        function taskOwnerUid() {
-            return get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid;
-        }
-
-        // The task owner or a manager can read the packages.
-        allow read: if (request.auth.uid == taskOwnerUid()) || isManager();
-        
-        // Only the task owner can write (create, update, delete) packages.
-        allow write: if request.auth.uid == taskOwnerUid();
+        allow read: if request.auth != null && (isOwner(taskId.split('_')[0]) || isManager(request.auth.uid));
+        allow create, update, delete: if request.auth != null && isKurir(request.auth.uid) && isOwner(taskId.split('_')[0]);
       }
     }
-    
+
+    // ========== APPROVAL REQUESTS COLLECTION ==========
     match /approval_requests/{requestId} {
-      // MasterAdmin can read all requests.
-      // An Admin can read a request if they were the one who submitted it.
-      allow read: if isRole('MasterAdmin') || (isRole('Admin') && request.auth.uid == resource.data.requestedByUid);
-      
-      // Only Admins can create new approval requests.
-      allow create: if isRole('Admin');
-      
-      // Updates and deletions are handled by secure backend functions only.
-      allow update, delete: if false;
+      // MasterAdmins can read all. Admins can read their own.
+      allow read: if request.auth != null && (isMasterAdmin(request.auth.uid) || isOwnerOfRecord());
+      // Admins and MasterAdmins can create requests.
+      allow create: if request.auth != null && isAdmin(request.auth.uid);
+      // Only MasterAdmins can approve/reject by updating.
+      allow update: if request.auth != null && isMasterAdmin(request.auth.uid);
+      allow delete: if false;
     }
-    
+
+    // ========== NOTIFICATIONS COLLECTION ==========
     match /notifications/{notificationId} {
-        // Only MasterAdmins can see system-wide notifications.
-        allow read, update: if isRole('MasterAdmin');
-        
-        // Creation and deletion are not for clients.
-        allow create, delete: if false;
+      // Only MasterAdmins can read/update notifications.
+      allow read, update: if request.auth != null && isMasterAdmin(request.auth.uid);
+      // Notifications are created by the backend (server action).
+      allow create, delete: if false;
     }
   }
 }
