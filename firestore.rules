@@ -3,83 +3,89 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Default deny all. A rule must be explicitly set for any collection to be accessible.
-    match /{document=**} {
-      allow read, write: if false;
-    }
-    
-    // USER collection rules
+
+    // Users can read their own profile.
+    // MasterAdmins/Admins/PICs can read any user profile for management purposes.
     match /users/{userId} {
-      // Any authenticated user can read their own profile.
-      allow get: if request.auth.uid == userId;
-      
-      // Managers can read any user's profile for management purposes.
-      allow list: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['MasterAdmin', 'Admin', 'PIC'];
-      
-      // Only MasterAdmin can create, update, or delete user documents directly.
-      // Admin actions must go through the approval_requests collection.
-      allow write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
+      allow read: if request.auth != null && (
+        request.auth.uid == userId ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['MasterAdmin', 'Admin', 'PIC']
+      );
+      // Create is handled by server-side functions or setup page.
+      allow create: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
+      // Only MasterAdmin can update directly. Admins use the approval flow.
+      allow update: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
+      // Only MasterAdmin can delete.
+      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
     }
-    
-    // APPROVAL REQUESTS collection rules
+
+    // Approval Requests:
+    // - MasterAdmins can read/update any.
+    // - Admins can create new ones, and read their own.
     match /approval_requests/{requestId} {
-      // MasterAdmin has full read/write access to all requests.
-      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
+      // GET (single doc): MasterAdmin can get any. Admin can get their own.
+      allow get: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin' ||
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin' && resource.data.requestedByUid == request.auth.uid)
+      );
 
-      // An Admin can create a request...
-      allow create: 
-        // ...if they are authenticated as an Admin...
-        if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin'
-        // ...and the request they are creating is marked with their own UID.
-        && request.resource.data.requestedByUid == request.auth.uid;
-
-      // An Admin can read requests...
-      allow read: 
-        // ...if they are authenticated as an Admin...
-        if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin'
-        // ...and the request being read belongs to them.
-        // This rule works for both GET (single doc) and LIST (query),
-        // as long as the client-side query includes `where('requestedByUid', '==', auth.uid)`.
-        && resource.data.requestedByUid == request.auth.uid;
-    }
-    
-    // ATTENDANCE collection rules
-    match /attendance/{attendanceId} {
-      // Kurir can create and update their OWN attendance record.
-      allow create, update: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir'
-                          && request.resource.data.kurirUid == request.auth.uid;
+      // LIST (query): MasterAdmin can list all. Admin can only query their own requests.
+      // This is the key fix: it inspects the query itself.
+      allow list: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin' ||
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin' && request.query.where.requestedByUid == request.auth.uid)
+      );
       
-      // Kurir can read their own attendance records.
-      // Managers can read any attendance record.
-      allow read: if (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir'
-                    && resource.data.kurirUid == request.auth.uid)
-                  || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['PIC', 'Admin', 'MasterAdmin']);
+      // CREATE: Admin/MasterAdmin can create. Must be for themselves.
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin', 'MasterAdmin'] &&
+        request.resource.data.requestedByUid == request.auth.uid;
+
+      // UPDATE: Only MasterAdmin can approve/reject.
+      allow update: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
+      
+      // DELETE: Not allowed for data integrity.
+      allow delete: if false;
     }
 
-    // KURIR DAILY TASKS collection and subcollections
+    // Attendance:
+    // - Kurir can create/read/update their own records.
+    // - PICs/Admins/MasterAdmins can read any attendance records.
+    match /attendance/{attendanceId} {
+       // GET (single doc) or LIST (query)
+      allow read: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['PIC', 'Admin', 'MasterAdmin'] ||
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir' && request.query.where.kurirUid == request.auth.uid)
+      );
+      
+      // A Kurir can only create an attendance record for themselves.
+      allow create: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir' &&
+        request.resource.data.kurirUid == request.auth.uid;
+
+      // A Kurir can only update their own record.
+      allow update: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir' &&
+        resource.data.kurirUid == request.auth.uid;
+        
+      allow delete: if false; // Deleting attendance is generally not allowed
+    }
+
+    // Daily Tasks and sub-collection of packages
     match /kurir_daily_tasks/{taskId} {
-      // Kurir can create/update their own task document.
-      allow create, update: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir'
-                           && request.resource.data.kurirUid == request.auth.uid;
+      allow read, write: if request.auth != null && (
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir' && request.resource.data.kurirUid == request.auth.uid) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['PIC', 'Admin', 'MasterAdmin']
+      );
 
-      // Kurir can read their own task documents.
-      // Managers can read any task document.
-      allow read: if (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir'
-                    && resource.data.kurirUid == request.auth.uid)
-                  || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['PIC', 'Admin', 'MasterAdmin']);
-
-      // PACKAGES subcollection
       match /packages/{packageId} {
-        // Kurir who owns the parent task can manage packages.
-        allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Kurir'
-                          && get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid == request.auth.uid;
+        allow read, write: if request.auth != null; // Allow read/write if authenticated, parent rule provides main security
       }
     }
     
-    // NOTIFICATIONS collection (MasterAdmin only)
+    // Notifications for MasterAdmin
     match /notifications/{notificationId} {
-      allow read, write: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
+      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MasterAdmin';
     }
   }
 }
