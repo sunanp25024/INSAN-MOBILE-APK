@@ -4,18 +4,13 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ListChecks, UserCheck, UserRoundCheck, UserRoundX, Clock, Activity, PackageCheck, PackageX, AlertCircle } from 'lucide-react';
-import type { UserProfile, AttendanceActivity, CourierWorkSummaryActivity, AttendanceRecord } from '@/types';
+import type { UserProfile, AttendanceActivity, CourierWorkSummaryActivity, AttendanceRecord, KurirDailyTaskDoc } from '@/types';
 import { format, formatDistanceToNow, startOfDay } from 'date-fns';
 import { id as indonesiaLocale } from 'date-fns/locale';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-
-// Mock data for work summaries, will be replaced later
-const mockCourierWorkSummaries: CourierWorkSummaryActivity[] = [
-  // This data is now for example purposes only.
-].sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
 
 
 const formatActivityTimestamp = (timestamp: string): string => {
@@ -24,7 +19,15 @@ const formatActivityTimestamp = (timestamp: string): string => {
         if (isNaN(date.getTime())) {
           return "Waktu tidak valid";
         }
-        return formatDistanceToNow(date, { addSuffix: true, locale: indonesiaLocale });
+        // Use a more user-friendly format for the timestamp
+        const now = new Date();
+        const differenceInMinutes = (now.getTime() - date.getTime()) / (1000 * 60);
+
+        if (differenceInMinutes < 60) {
+          return formatDistanceToNow(date, { addSuffix: true, locale: indonesiaLocale });
+        } else {
+          return format(date, "HH:mm, dd MMM yyyy", { locale: indonesiaLocale });
+        }
     } catch(e) {
         return "Waktu error";
     }
@@ -42,7 +45,7 @@ const getAttendanceActionIcon = (action: AttendanceActivity['action']) => {
 export default function CourierUpdatesPage() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [attendanceActivities, setAttendanceActivities] = useState<AttendanceActivity[]>([]);
-  const [workSummariesToday, setWorkSummariesToday] = useState<CourierWorkSummaryActivity[]>(mockCourierWorkSummaries); // Still using mock for now
+  const [workSummariesToday, setWorkSummariesToday] = useState<CourierWorkSummaryActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
@@ -66,58 +69,72 @@ export default function CourierUpdatesPage() {
         return;
     };
 
-    const fetchAttendanceActivities = async () => {
+    const fetchAllActivities = async () => {
         setIsLoading(true);
         try {
             const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+            // --- Fetch Attendance Activities ---
             const attendanceQuery = query(collection(db, 'attendance'), where('date', '==', todayStr));
-            const querySnapshot = await getDocs(attendanceQuery);
+            const attendanceSnapshot = await getDocs(attendanceQuery);
             
-            const activities: AttendanceActivity[] = [];
-            querySnapshot.forEach(doc => {
+            const fetchedAttendanceActivities: AttendanceActivity[] = [];
+            attendanceSnapshot.forEach(doc => {
                 const record = doc.data() as AttendanceRecord;
-                
-                // Create check-in activity
                 if (record.checkInTimestamp) {
-                    activities.push({
-                        id: `${doc.id}-check-in`,
-                        kurirName: record.kurirName,
-                        kurirId: record.kurirId,
+                    fetchedAttendanceActivities.push({
+                        id: `${doc.id}-check-in`, kurirName: record.kurirName, kurirId: record.kurirId,
                         action: record.status === 'Late' ? 'check-in-late' : 'check-in',
                         timestamp: (record.checkInTimestamp as Timestamp).toMillis().toString(),
-                        location: record.workLocation || 'Lokasi tidak diketahui'
+                        location: record.workLocation || 'N/A'
                     });
                 }
-                
-                // Create check-out activity
                 if (record.checkOutTimestamp) {
-                    activities.push({
-                        id: `${doc.id}-check-out`,
-                        kurirName: record.kurirName,
-                        kurirId: record.kurirId,
+                    fetchedAttendanceActivities.push({
+                        id: `${doc.id}-check-out`, kurirName: record.kurirName, kurirId: record.kurirId,
                         action: 'check-out',
                         timestamp: (record.checkOutTimestamp as Timestamp).toMillis().toString(),
-                        location: record.workLocation || 'Lokasi tidak diketahui'
+                        location: record.workLocation || 'N/A'
                     });
                 }
             });
+            setAttendanceActivities(fetchedAttendanceActivities.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp)));
 
-            // Sort all activities by timestamp descending
-            activities.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
-            setAttendanceActivities(activities);
+            // --- Fetch Work Summary Activities ---
+            const workSummaryQuery = query(
+              collection(db, 'kurir_daily_tasks'), 
+              where('date', '==', todayStr),
+              where('taskStatus', '==', 'completed')
+            );
+            const workSummarySnapshot = await getDocs(workSummaryQuery);
+            const fetchedWorkSummaries: CourierWorkSummaryActivity[] = [];
+
+            workSummarySnapshot.forEach(doc => {
+              const task = doc.data() as KurirDailyTaskDoc;
+              if (task.finishTimestamp) {
+                fetchedWorkSummaries.push({
+                  id: doc.id,
+                  kurirName: task.kurirFullName,
+                  kurirId: task.kurirUid, // Using kurirUid as the identifier
+                  hubLocation: "N/A", // This data isn't in kurir_daily_tasks, needs adjustment if required
+                  timestamp: (task.finishTimestamp as Timestamp).toMillis().toString(),
+                  totalPackagesAssigned: task.totalPackages,
+                  packagesDelivered: task.finalDeliveredCount || 0,
+                  packagesPendingOrReturned: task.finalPendingReturnCount || 0,
+                });
+              }
+            });
+            setWorkSummariesToday(fetchedWorkSummaries.sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp)));
 
         } catch (error) {
-            console.error("Error fetching attendance activities:", error);
-            toast({ title: "Error", description: "Gagal memuat aktivitas absensi.", variant: "destructive"});
+            console.error("Error fetching activities:", error);
+            toast({ title: "Error", description: "Gagal memuat aktivitas harian.", variant: "destructive"});
         } finally {
             setIsLoading(false);
         }
     };
     
-    fetchAttendanceActivities();
-    
-    // For now, we keep the work summaries as mock. This will be implemented next.
-    // In a real scenario, you'd fetch this data too.
+    fetchAllActivities();
     
   }, [currentUser, toast]);
 
@@ -168,7 +185,7 @@ export default function CourierUpdatesPage() {
             Ringkasan Aktivitas & Absensi Kurir Harian
           </CardTitle>
           <CardDescription>
-            Pantau ringkasan penyelesaian pekerjaan dan status absensi kurir untuk hari ini.
+            Pantau ringkasan penyelesaian pekerjaan dan status absensi kurir untuk hari ini secara real-time.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -176,7 +193,7 @@ export default function CourierUpdatesPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center text-xl"><PackageCheck className="mr-2 h-5 w-5 text-blue-500"/>Ringkasan Penyelesaian Kerja (Data Contoh)</CardTitle>
+            <CardTitle className="flex items-center text-xl"><PackageCheck className="mr-2 h-5 w-5 text-blue-500"/>Ringkasan Penyelesaian Kerja</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
             {workSummariesToday.length === 0 ? (
@@ -189,12 +206,12 @@ export default function CourierUpdatesPage() {
                       <PackageCheck className="h-5 w-5 text-blue-500" />
                     </div>
                     <div className="flex-grow">
-                      <p className="font-semibold text-sm">{summary.kurirName} <span className="text-xs text-muted-foreground">({summary.kurirId})</span></p>
-                      <p className="text-xs text-muted-foreground">Hub: {summary.hubLocation}</p>
+                      <p className="font-semibold text-sm">{summary.kurirName}</p>
+                      <p className="text-xs text-muted-foreground">ID Kurir: {summary.kurirId}</p>
                       <p className="text-sm text-muted-foreground mt-1">
                         Selesai: <strong className="text-foreground">{summary.totalPackagesAssigned}</strong> paket dibawa, <strong className="text-green-500">{summary.packagesDelivered}</strong> terkirim, <strong className="text-red-500">{summary.packagesPendingOrReturned}</strong> retur/pending.
                       </p>
-                      <p className="text-xs text-muted-foreground/70 mt-0.5">
+                      <p className="text-xs text-muted-foreground/80 mt-0.5">
                         {formatActivityTimestamp(summary.timestamp)}
                       </p>
                     </div>
@@ -223,7 +240,7 @@ export default function CourierUpdatesPage() {
                       <p className="font-semibold text-sm">{activity.kurirName} <span className="text-xs text-muted-foreground">({activity.kurirId})</span></p>
                       <p className="text-sm text-muted-foreground">
                         {getActionText(activity.action)}
-                        {activity.location && <span className="text-xs"> di {activity.location}</span>}.
+                        {activity.location && activity.location !== 'N/A' && <span className="text-xs"> di {activity.location}</span>}.
                       </p>
                       <p className="text-xs text-muted-foreground/70 mt-0.5">
                         {formatActivityTimestamp(activity.timestamp)}
