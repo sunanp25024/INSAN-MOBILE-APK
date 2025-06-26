@@ -273,14 +273,14 @@ export default function DashboardPage() {
                     });
                 }
             });
-            setAttendanceActivities(fetchedAttendanceActivities.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp)));
+            const sortedAttendance = fetchedAttendanceActivities.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
+            setAttendanceActivities(sortedAttendance);
 
             // --- Fetch Work Summary Activities ---
             const workSummaryQuery = query(
               collection(db, 'kurir_daily_tasks'), 
               where('date', '==', todayStr),
-              where('taskStatus', '==', 'completed'),
-              orderBy('finishTimestamp', 'desc')
+              where('taskStatus', '==', 'completed')
             );
             const workSummarySnapshot = await getDocs(workSummaryQuery);
             const fetchedWorkSummaries: CourierWorkSummaryActivity[] = [];
@@ -299,7 +299,8 @@ export default function DashboardPage() {
                 });
               }
             });
-            setCourierWorkSummaries(fetchedWorkSummaries);
+            const sortedSummaries = fetchedWorkSummaries.sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
+            setCourierWorkSummaries(sortedSummaries);
 
         } catch (error: any) {
             console.error("Error fetching managerial dashboard feeds:", error);
@@ -321,6 +322,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (currentUser?.role !== 'Kurir') return;
+
     const updateCheckInStatus = () => {
       const checkedInDate = localStorage.getItem('courierCheckedInToday');
       const today = new Date().toISOString().split('T')[0];
@@ -330,9 +332,8 @@ export default function DashboardPage() {
     // Check on mount
     updateCheckInStatus();
     
-    // Listen for storage changes from other tabs
+    // Listen for storage changes from other tabs and window focus
     window.addEventListener('storage', updateCheckInStatus);
-    // Re-check when the window gets focus
     window.addEventListener('focus', updateCheckInStatus);
     
     return () => { 
