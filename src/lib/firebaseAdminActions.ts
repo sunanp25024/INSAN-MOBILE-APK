@@ -42,7 +42,7 @@ export async function createUserAccount(
     console.error('Error in createUserAccount server action:', error);
     
     // If user was created in Auth but Firestore failed, we should delete the Auth user to prevent orphans.
-    if (error.code !== 'auth/email-already-exists' && error.uid) {
+    if (error.code !== 'auth/email-already-in-use' && error.uid) {
         await adminAuth.deleteUser(error.uid);
     }
     
@@ -294,7 +294,10 @@ export async function handleApprovalRequest(
           case 'NEW_USER_PIC':
           case 'NEW_USER_ADMIN':
           case 'NEW_USER_KURIR':
+            // FIX: Ensure status is 'Aktif' upon creation through approval.
             const { passwordValue, ...profilePayload } = payload;
+            profilePayload.status = 'Aktif'; // Explicitly set status to 'Aktif'.
+            
             if (!passwordValue) {
                 throw new Error('Password tidak ditemukan dalam payload untuk user baru.');
             }
