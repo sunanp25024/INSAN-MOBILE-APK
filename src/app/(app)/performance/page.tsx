@@ -57,15 +57,19 @@ export default function PerformancePage() {
         const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
         
         // Fetch daily task data for the last 90 days for performance calculation
+        // THIS IS THE CORRECTED QUERY: removed orderBy to prevent index requirement
         const tasksQuery = query(
           collection(db, "kurir_daily_tasks"),
           where("kurirUid", "==", currentUser.uid),
           where("date", ">=", ninetyDaysAgo),
-          where("taskStatus", "==", "completed"),
-          orderBy("date", "desc")
+          where("taskStatus", "==", "completed")
         );
         const tasksSnapshot = await getDocs(tasksQuery);
-        const dailyTasks: KurirDailyTaskDoc[] = tasksSnapshot.docs.map(doc => doc.data() as KurirDailyTaskDoc);
+        // Client-side sorting
+        const dailyTasks: KurirDailyTaskDoc[] = tasksSnapshot.docs
+          .map(doc => doc.data() as KurirDailyTaskDoc)
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
 
         // Fetch attendance data for the last 90 days
         const attendanceQuery = query(
