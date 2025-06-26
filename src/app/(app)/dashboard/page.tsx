@@ -353,24 +353,22 @@ export default function DashboardPage() {
   }, [allWorkRecords, allAttendanceRecords, allUserProfiles, selectedWilayah, selectedArea, selectedHub, searchKurir]);
 
 
+  // THIS IS THE FIX: This effect hook ensures that the check-in status is
+  // always up-to-date when the user navigates to the dashboard.
   useEffect(() => {
-    if (currentUser?.role !== 'Kurir') return;
-
-    const updateCheckInStatus = () => {
+    // Only run this check for the Kurir role.
+    if (currentUser?.role === 'Kurir') {
+      // Read the check-in status directly from localStorage.
       const checkedInDate = localStorage.getItem('courierCheckedInToday');
+      // Get today's date in the same 'YYYY-MM-DD' format.
       const today = new Date().toISOString().split('T')[0];
+      // Update the component's state. If the stored date matches today's date,
+      // the user is checked in.
       setIsCourierCheckedIn(checkedInDate === today);
-    };
-    
-    updateCheckInStatus();
-    
-    window.addEventListener('storage', updateCheckInStatus);
-    window.addEventListener('focus', updateCheckInStatus);
-    
-    return () => { 
-        window.removeEventListener('storage', updateCheckInStatus);
-        window.removeEventListener('focus', updateCheckInStatus);
-    };
+    }
+    // The dependency array [currentUser, pathname] is crucial. It tells React to
+    // re-run this effect whenever the user data loads OR whenever the user
+    // navigates to a new page (which changes the pathname).
   }, [currentUser, pathname]);
 
   useEffect(() => {
@@ -918,7 +916,7 @@ export default function DashboardPage() {
                   width={300}
                   height={200}
                   style={{objectFit: 'contain'}}
-                  data-ai-hint="package receipt"
+                  data-ai-hint="receipt package"
                 />
               </div>
             )}
