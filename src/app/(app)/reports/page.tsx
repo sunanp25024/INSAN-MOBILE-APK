@@ -15,7 +15,7 @@ import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import type { AttendanceRecord, KurirDailyTaskDoc, UserProfile, Wilayah, Area, Hub } from '@/types';
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
-import { format } from 'date-fns';
+import { format, subDays, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 
 export default function ReportsPage() {
   const { toast } = useToast(); 
@@ -95,7 +95,7 @@ export default function ReportsPage() {
       .map(kurir => kurir.uid);
   };
 
-  const handleDownloadReport = async (reportType: 'Kehadiran Kurir' | 'Performa Pengiriman') => {
+  const handleDownloadReport = async (reportType: 'Kehadiran Kurir' | 'Performa Pengiriman' | 'Laporan Aktivitas Harian' | 'Laporan Ringkasan Mingguan') => {
     if (isDownloading) return;
     
     setReportTypeDownloading(reportType);
@@ -167,7 +167,7 @@ export default function ReportsPage() {
             const successRate = task.totalPackages > 0 ? ((task.finalDeliveredCount || 0) / task.totalPackages * 100) : 0;
             return {
                 'Tanggal': task.date,
-                'ID Kurir': task.kurirUid,
+                'ID Kurir': allKurirs.find(k => k.uid === task.kurirUid)?.id || task.kurirUid,
                 'Nama Kurir': task.kurirFullName,
                 'Status Tugas': task.taskStatus,
                 'Total Paket': task.totalPackages,
@@ -180,15 +180,156 @@ export default function ReportsPage() {
         columnWidths = [ { wch: 12 }, { wch: 28 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 15 }];
         fileName = `Laporan_Performa_Pengiriman_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
       
+      } else if (reportType === 'Laporan Aktivitas Harian') {
+        const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
+        const attendanceQuery = query(collection(db, "attendance"), where("date", ">=", thirtyDaysAgo), orderBy("date", "desc"));
+        const tasksQuery = query(collection(db, "kurir_daily_tasks"), where("date", ">=", thirtyDaysAgo), orderBy("date", "desc"));
+        
+        const [attendanceSnapshot, tasksSnapshot] = await Promise.all([getDocs(attendanceQuery), getDocs(tasksQuery)]);
+        
+        let attendanceRecords = attendanceSnapshot.docs.map(doc => doc.data() as AttendanceRecord);
+        let taskRecords = tasksSnapshot.docs.map(doc => doc.data() as KurirDailyTaskDoc);
+
+        if (filteredUids.length > 0) {
+          const uidsSet = new Set(filteredUids);
+          attendanceRecords = attendanceRecords.filter(record => uidsSet.has(record.kurirUid));
+          taskRecords = taskRecords.filter(record => uidsSet.has(record.kurirUid));
+        }
+        
+        if (attendanceRecords.length === 0 && taskRecords.length === 0) {
+            toast({ title: 'Tidak Ada Data', description: 'Tidak ada data aktivitas untuk diunduh pada filter ini.', variant: 'destructive' });
+            setIsDownloading(false); setReportTypeDownloading(null); return;
+        }
+
+        const dailyActivities: any[] = [];
+
+        attendanceRecords.forEach(record => {
+            dailyActivities.push({
+                'Tanggal': record.date,
+                'ID Kurir': record.kurirId,
+                'Nama Kurir': record.kurirName,
+                'Aktivitas': 'Absensi',
+                'Detail': `Check-In: ${record.checkInTime || '-'}, Check-Out: ${record.checkOutTime || '-'}, Status: ${record.status}`,
+                'Hub': record.workLocation || 'N/A'
+            });
+        });
+
+        taskRecords.forEach(task => {
+            dailyActivities.push({
+                'Tanggal': task.date,
+                'ID Kurir': allKurirs.find(k => k.uid === task.kurirUid)?.id || task.kurirUid,
+                'Nama Kurir': task.kurirFullName,
+                'Aktivitas': 'Penyelesaian Kerja',
+                'Detail': `Paket: ${task.totalPackages}, Terkirim: ${task.finalDeliveredCount || 0}, Pending: ${task.finalPendingReturnCount || 0}`,
+                'Hub': allKurirs.find(k => k.uid === task.kurirUid)?.workLocation || 'N/A'
+            });
+        });
+        
+        dailyActivities.sort((a, b) => b.Tanggal.localeCompare(a.Tanggal) || a['Nama Kurir'].localeCompare(b['Nama Kurir']));
+
+        worksheetData = dailyActivities;
+        columnWidths = [ { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 60 }, { wch: 25 }];
+        fileName = `Laporan_Aktivitas_Harian_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      
+      } else if (reportType === 'Laporan Ringkasan Mingguan') {
+        const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+        const attendanceQuery = query(collection(db, "attendance"), where("date", ">=", ninetyDaysAgo));
+        const tasksQuery = query(collection(db, "kurir_daily_tasks"), where("date", ">=", ninetyDaysAgo));
+        
+        const [attendanceSnapshot, tasksSnapshot] = await Promise.all([getDocs(attendanceQuery), getDocs(tasksQuery)]);
+        
+        let attendanceRecords = attendanceSnapshot.docs.map(doc => doc.data() as AttendanceRecord);
+        let taskRecords = tasksSnapshot.docs.map(doc => doc.data() as KurirDailyTaskDoc);
+
+        if (filteredUids.length > 0) {
+          const uidsSet = new Set(filteredUids);
+          attendanceRecords = attendanceRecords.filter(record => uidsSet.has(record.kurirUid));
+          taskRecords = taskRecords.filter(record => uidsSet.has(record.kurirUid));
+        }
+
+        if (attendanceRecords.length === 0 && taskRecords.length === 0) {
+            toast({ title: 'Tidak Ada Data', description: 'Tidak ada data untuk laporan mingguan pada filter ini.', variant: 'destructive' });
+            setIsDownloading(false); setReportTypeDownloading(null); return;
+        }
+        
+        const getWeekLabel = (date: Date) => {
+            const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+            const weekEnd = endOfWeek(date, { weekStartsOn: 1 });
+            return `${format(weekStart, 'dd MMM')} - ${format(weekEnd, 'dd MMM yyyy')}`;
+        };
+
+        const weeklySummary: Record<string, any> = {};
+
+        for (const task of taskRecords) {
+          try {
+            const date = parseISO(task.date);
+            const week = getWeekLabel(date);
+            const key = `${task.kurirUid}-${week}`;
+            if (!weeklySummary[key]) {
+              weeklySummary[key] = {
+                'Minggu': week,
+                'ID Kurir': allKurirs.find(k => k.uid === task.kurirUid)?.id || task.kurirUid,
+                'Nama Kurir': task.kurirFullName,
+                'Total Paket': 0,
+                'Total Terkirim': 0,
+                'Total Pending': 0,
+                'Hari Kerja': 0,
+                'Hari Hadir': 0,
+              };
+            }
+            weeklySummary[key]['Total Paket'] += task.totalPackages || 0;
+            weeklySummary[key]['Total Terkirim'] += task.finalDeliveredCount || 0;
+            weeklySummary[key]['Total Pending'] += task.finalPendingReturnCount || 0;
+            weeklySummary[key]['Hari Kerja'] += 1;
+          } catch(e) { console.error("Error parsing task date", e) }
+        }
+
+        for (const att of attendanceRecords) {
+          try {
+            if (att.status === 'Present' || att.status === 'Late') {
+                 const date = parseISO(att.date);
+                 const week = getWeekLabel(date);
+                 const key = `${att.kurirUid}-${week}`;
+                 if (weeklySummary[key]) {
+                     weeklySummary[key]['Hari Hadir'] += 1;
+                 } else {
+                    // Handle case where a courier has attendance but no tasks in a week
+                    weeklySummary[key] = {
+                        'Minggu': week,
+                        'ID Kurir': att.kurirId,
+                        'Nama Kurir': att.kurirName,
+                        'Total Paket': 0, 'Total Terkirim': 0, 'Total Pending': 0,
+                        'Hari Kerja': 0, 'Hari Hadir': 1,
+                    };
+                 }
+            }
+          } catch(e) { console.error("Error parsing attendance date", e) }
+        }
+        
+        worksheetData = Object.values(weeklySummary).map(summary => ({
+            ...summary,
+            'Rate Sukses (%)': (summary['Total Paket'] > 0 ? (summary['Total Terkirim'] / summary['Total Paket']) * 100 : 0).toFixed(1),
+            'Rate Kehadiran (%)': (summary['Hari Kerja'] > 0 ? (summary['Hari Hadir'] / summary['Hari Kerja']) * 100 : 0).toFixed(1)
+        }));
+        
+        worksheetData.sort((a,b) => b.Minggu.localeCompare(a.Minggu) || a['Nama Kurir'].localeCompare(b['Nama Kurir']));
+        
+        columnWidths = [ { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 18 }];
+        fileName = `Laporan_Ringkasan_Mingguan_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
       }
 
-      const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, reportType);
-      worksheet['!cols'] = columnWidths;
-      XLSX.writeFile(workbook, fileName);
 
-      toast({ title: 'Unduhan Berhasil', description: `${reportType} telah diunduh.` });
+      if (worksheetData.length > 0) {
+        const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, reportType);
+        worksheet['!cols'] = columnWidths;
+        XLSX.writeFile(workbook, fileName);
+        toast({ title: 'Unduhan Berhasil', description: `${reportType} telah diunduh.` });
+      } else {
+        toast({ title: 'Tidak Ada Data', description: `Tidak ada data yang ditemukan untuk ${reportType} dengan filter ini.`, variant: 'destructive' });
+      }
+
 
     } catch (error: any) {
         console.error("Error downloading report: ", error);
@@ -312,17 +453,17 @@ export default function ReportsPage() {
               </Button>
             </CardFooter>
           </Card>
-
+          
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center text-lg"><CalendarCheck className="mr-2 h-5 w-5 text-primary"/>Laporan Aktivitas Harian</CardTitle>
             </CardHeader>
             <CardContent className="flex-grow">
-              <p className="text-sm text-muted-foreground mb-3">Ringkasan aktivitas dan penyelesaian pekerjaan kurir per hari. (Segera Hadir)</p>
+              <p className="text-sm text-muted-foreground mb-3">Laporan detail log aktivitas absensi dan penyelesaian pekerjaan kurir per hari.</p>
             </CardContent>
             <CardFooter>
-              <Button onClick={() => {}} className="w-full sm:w-auto" variant="secondary" disabled>
-                <Download className="mr-2 h-4 w-4" /> Unduh Laporan
+               <Button onClick={() => handleDownloadReport('Laporan Aktivitas Harian')} className="w-full sm:w-auto" disabled={isDownloading}>
+                <Download className="mr-2 h-4 w-4" /> {reportTypeDownloading === 'Laporan Aktivitas Harian' ? 'Memproses...' : 'Unduh Laporan'}
               </Button>
             </CardFooter>
           </Card>
@@ -332,11 +473,11 @@ export default function ReportsPage() {
               <CardTitle className="flex items-center text-lg"><FileText className="mr-2 h-5 w-5 text-primary"/>Laporan Ringkasan Mingguan</CardTitle>
             </CardHeader>
             <CardContent className="flex-grow">
-              <p className="text-sm text-muted-foreground mb-3">Laporan komprehensif semua aktivitas dan performa selama satu minggu. (Segera Hadir)</p>
+              <p className="text-sm text-muted-foreground mb-3">Laporan agregat performa dan kehadiran kurir yang dikelompokkan per minggu.</p>
             </CardContent>
             <CardFooter>
-              <Button onClick={() => {}} className="w-full sm:w-auto" variant="secondary" disabled>
-                <Download className="mr-2 h-4 w-4" /> Unduh Laporan
+              <Button onClick={() => handleDownloadReport('Laporan Ringkasan Mingguan')} className="w-full sm:w-auto" disabled={isDownloading}>
+                <Download className="mr-2 h-4 w-4" /> {reportTypeDownloading === 'Laporan Ringkasan Mingguan' ? 'Memproses...' : 'Unduh Laporan'}
               </Button>
             </CardFooter>
           </Card>
@@ -345,5 +486,3 @@ export default function ReportsPage() {
     </div>
   );
 }
-
-    
