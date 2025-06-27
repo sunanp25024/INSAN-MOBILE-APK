@@ -1,0 +1,34 @@
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Aturan umum: Secara default, tolak semua akses baca/tulis.
+    // Aturan yang lebih spesifik di bawah ini akan menggantikan ini.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Izinkan pengguna yang sudah login untuk mengubah avatar mereka sendiri.
+    // Izinkan siapa saja untuk membaca avatar.
+    match /avatars/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Izinkan pengguna yang sudah login (kurir) untuk mengunggah bukti pengiriman.
+    // Izinkan siapa saja untuk membaca bukti pengiriman (untuk dilihat oleh PIC/Admin).
+    match /delivery_proofs/{taskId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Izinkan pengguna yang sudah login (kurir) untuk mengunggah bukti retur.
+    // Izinkan siapa saja untuk membaca bukti retur (untuk dilihat oleh PIC/Admin).
+    match /return_proofs/{taskId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}
