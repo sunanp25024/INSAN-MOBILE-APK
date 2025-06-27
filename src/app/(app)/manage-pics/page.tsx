@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Briefcase, FileUp, UserPlus, Edit, Trash2, AlertCircle, Download } from 'lucide-react';
+import { Briefcase, FileUp, UserPlus, Edit, Trash2, AlertCircle, Download, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus, requestUserDeletion } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus, requestUserDeletion, resetUserPassword } from '@/lib/firebaseAdminActions';
 import * as XLSX from 'xlsx';
 
 const picSchema = z.object({
@@ -42,7 +42,9 @@ export default function ManagePICsPage() {
   const [isAddPICDialogOpen, setIsAddPICDialogOpen] = useState(false);
   const [isEditPICDialogOpen, setIsEditPICDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
+  const [userToManage, setUserToManage] = useState<UserProfile | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const [currentEditingPIC, setCurrentEditingPIC] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -242,19 +244,19 @@ export default function ManagePICsPage() {
   };
   
   const handleOpenDeleteDialog = (user: UserProfile) => {
-    setUserToDelete(user);
+    setUserToManage(user);
     setIsDeleteDialogOpen(true);
   };
   
   const handleConfirmDelete = async () => {
-    if (!userToDelete || !currentUser) return;
+    if (!userToManage || !currentUser) return;
 
     setIsSubmitting(true);
     let result;
     if (currentUser.role === 'MasterAdmin') {
-        result = await deleteUserAccount(userToDelete.uid);
+        result = await deleteUserAccount(userToManage.uid);
     } else if (currentUser.role === 'Admin') {
-        result = await requestUserDeletion(userToDelete, { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role });
+        result = await requestUserDeletion(userToManage, { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role });
     }
 
     if (result && result.success) {
@@ -266,8 +268,33 @@ export default function ManagePICsPage() {
     
     setIsSubmitting(false);
     setIsDeleteDialogOpen(false);
-    setUserToDelete(null);
+    setUserToManage(null);
   };
+  
+  const handleOpenResetPasswordDialog = (user: UserProfile) => {
+    setUserToManage(user);
+    setNewPassword('');
+    setIsResetPasswordDialogOpen(true);
+  };
+
+  const handleConfirmResetPassword = async () => {
+    if (!userToManage || !newPassword) return;
+    setIsSubmitting(true);
+    
+    const result = await resetUserPassword(userToManage.uid, newPassword);
+
+    if (result.success) {
+      toast({ title: 'Password Direset', description: `Password untuk ${userToManage.fullName} telah berhasil direset.` });
+      setIsResetPasswordDialogOpen(false);
+    } else {
+      toast({ title: 'Gagal Mereset Password', description: result.message, variant: 'destructive' });
+    }
+
+    setIsSubmitting(false);
+    setUserToManage(null);
+    setNewPassword('');
+  };
+
 
   const handleFileSelectAndImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (isImporting || !currentUser) return;
@@ -502,13 +529,16 @@ export default function ManagePICsPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-center space-x-1">
+                          {currentUser.role === 'MasterAdmin' && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenResetPasswordDialog(pic)} disabled={currentUser.uid === pic.uid}><KeyRound size={16}/></Button>
+                          )}
                           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(pic)}><Edit size={16}/></Button>
                           <Button 
                               variant="destructive" 
                               size="icon" 
                               className="h-8 w-8" 
                               onClick={() => handleOpenDeleteDialog(pic)} 
-                              disabled={isSubmitting}
+                              disabled={isSubmitting || (currentUser.role === 'MasterAdmin' && currentUser.uid === pic.uid)}
                           >
                             <Trash2 size={16}/>
                           </Button>
@@ -537,8 +567,8 @@ export default function ManagePICsPage() {
             <DialogTitle>Konfirmasi Aksi</DialogTitle>
             <DialogDescription>
               {currentUser?.role === 'MasterAdmin'
-                ? `Apakah Anda yakin ingin menghapus pengguna ${userToDelete?.fullName}? Tindakan ini tidak dapat dibatalkan.`
-                : `Ajukan penghapusan untuk pengguna ${userToDelete?.fullName}? Permintaan ini memerlukan persetujuan dari MasterAdmin.`}
+                ? `Apakah Anda yakin ingin menghapus pengguna ${userToManage?.fullName}? Tindakan ini tidak dapat dibatalkan.`
+                : `Ajukan penghapusan untuk pengguna ${userToManage?.fullName}? Permintaan ini memerlukan persetujuan dari MasterAdmin.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -552,6 +582,40 @@ export default function ManagePICsPage() {
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Memproses...' : (currentUser?.role === 'MasterAdmin' ? 'Ya, Hapus Pengguna' : 'Ya, Ajukan Penghapusan')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Reset Password Dialog */}
+      <Dialog open={isResetPasswordDialogOpen} onOpenChange={setIsResetPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password untuk {userToManage?.fullName}</DialogTitle>
+            <DialogDescription>
+              Masukkan password sementara yang baru. Pengguna dapat mengubahnya lagi nanti di halaman Pengaturan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Label htmlFor="newPasswordPic">Password Baru (minimal 6 karakter)</Label>
+            <Input 
+              id="newPasswordPic" 
+              type="text" 
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Masukkan password baru"
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Batal</Button>
+            </DialogClose>
+            <Button
+              type="button"
+              onClick={handleConfirmResetPassword}
+              disabled={isSubmitting || newPassword.length < 6}
+            >
+              {isSubmitting ? 'Memproses...' : 'Reset Password'}
             </Button>
           </DialogFooter>
         </DialogContent>

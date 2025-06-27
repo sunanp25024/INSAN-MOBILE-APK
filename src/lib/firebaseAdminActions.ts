@@ -434,3 +434,34 @@ export async function updateUserStatus(
     };
   }
 }
+
+/**
+ * Resets a user's password using the Firebase Admin SDK.
+ * This is a privileged action only for MasterAdmins.
+ *
+ * @param uid The UID of the user whose password will be reset.
+ * @param newPassword The new temporary password for the user.
+ * @returns An object with the success status and a message.
+ */
+export async function resetUserPassword(uid: string, newPassword: string) {
+  if (!uid || !newPassword) {
+    return { success: false, message: 'User UID and new password are required.' };
+  }
+  if (newPassword.length < 6) {
+    return { success: false, message: 'Password baru minimal 6 karakter.' };
+  }
+
+  try {
+    await adminAuth.updateUser(uid, {
+      password: newPassword,
+    });
+    return { success: true, message: 'Password pengguna berhasil direset.' };
+  } catch (error: any) {
+    console.error(`Error resetting password for user ${uid}:`, error);
+    return {
+      success: false,
+      message: `Gagal mereset password: ${error.message}`,
+      errorCode: error.code,
+    };
+  }
+}
