@@ -5,29 +5,18 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
-// Aliasing BarChart from recharts to avoid conflict with lucide-react's BarChart icon
 import { ResponsiveContainer, BarChart as RechartsBarChart, LineChart, PieChart, Pie, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
-// Importing icons, including BarChart icon from lucide-react
 import { TrendingUp, Package, CheckCircle, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon as LucideCalendarIcon, AlertCircle, BarChart as BarChartIcon } from 'lucide-react';
-import type { UserProfile, KurirDailyTaskDoc, AttendanceRecord } from '@/types';
+import type { UserProfile, KurirPerformancePageData } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format, startOfWeek, endOfWeek, parseISO, startOfDay, subDays, isValid } from "date-fns";
+import { format, parseISO, subDays, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
-import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-
-// Interface for the processed performance data
-interface PerformanceData {
-  daily: { date: string; totalDelivered: number; totalPending: number; successRate: number; }[];
-  weekly: { weekLabel: string; delivered: number; pending: number; }[];
-  attendance: { totalAttendanceDays: number; totalWorkingDays: number; attendanceRate: number; };
-  overall: { totalPackagesEver: number; totalSuccessfulDeliveriesEver: number; };
-}
+import { getKurirPerformanceData } from '@/lib/kurirActions';
 
 export default function PerformancePage() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [performanceData, setPerformanceData] = useState<PerformanceData | null>(null);
+  const [performanceData, setPerformanceData] = useState<KurirPerformancePageData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -54,88 +43,8 @@ export default function PerformancePage() {
     const fetchPerformanceData = async () => {
       setIsLoading(true);
       try {
-        const ninetyDaysAgo = startOfDay(subDays(new Date(), 90));
-        
-        // Fetch task data for the user, filtering by status
-        const tasksQuery = query(
-          collection(db, "kurir_daily_tasks"),
-          where("kurirUid", "==", currentUser.uid),
-          where("taskStatus", "==", "completed")
-        );
-        const tasksSnapshot = await getDocs(tasksQuery);
-        
-        // Client-side filtering for date range
-        const dailyTasks: KurirDailyTaskDoc[] = tasksSnapshot.docs
-          .map(doc => doc.data() as KurirDailyTaskDoc)
-          .filter(task => {
-            try {
-              return parseISO(task.date) >= ninetyDaysAgo;
-            } catch (e) { return false; }
-          })
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-
-        // Fetch attendance data for the user
-        const attendanceQuery = query(
-          collection(db, "attendance"),
-          where("kurirUid", "==", currentUser.uid)
-        );
-        const attendanceSnapshot = await getDocs(attendanceQuery);
-        
-        // Client-side filtering for date range
-        const attendanceRecords: AttendanceRecord[] = attendanceSnapshot.docs
-          .map(doc => doc.data() as AttendanceRecord)
-          .filter(record => {
-            try {
-              return parseISO(record.date) >= ninetyDaysAgo;
-            } catch(e) { return false; }
-          });
-
-        // Process data
-        const dailyPerformance = dailyTasks.map(task => ({
-          date: task.date,
-          totalDelivered: task.finalDeliveredCount || 0,
-          totalPending: task.finalPendingReturnCount || 0,
-          successRate: task.totalPackages > 0 ? ((task.finalDeliveredCount || 0) / task.totalPackages) * 100 : 0,
-        }));
-
-        const weeklyPerformanceMap = new Map<string, { delivered: number, pending: number }>();
-        dailyTasks.forEach(task => {
-          try {
-            const taskDate = parseISO(task.date);
-            const weekStart = startOfWeek(taskDate, { weekStartsOn: 1 });
-            const weekLabel = `W-${format(weekStart, 'W')}`;
-            
-            const existing = weeklyPerformanceMap.get(weekLabel) || { delivered: 0, pending: 0 };
-            existing.delivered += task.finalDeliveredCount || 0;
-            existing.pending += task.finalPendingReturnCount || 0;
-            weeklyPerformanceMap.set(weekLabel, existing);
-          } catch (e) {
-            console.warn(`Could not parse date for weekly performance: ${task.date}`, e)
-          }
-        });
-
-        const weeklyPerformance = Array.from(weeklyPerformanceMap.entries())
-            .map(([weekLabel, data]) => ({ weekLabel, ...data }))
-            .sort((a, b) => a.weekLabel.localeCompare(b.weekLabel));
-
-        const totalAttendanceDays = attendanceRecords.filter(rec => rec.status === 'Present' || rec.status === 'Late').length;
-        const totalWorkingDays = dailyTasks.length; 
-        const attendanceRate = totalWorkingDays > 0 ? (totalAttendanceDays / totalWorkingDays) * 100 : 0;
-        
-        const overall = dailyTasks.reduce((acc, task) => {
-            acc.totalPackagesEver += task.totalPackages || 0;
-            acc.totalSuccessfulDeliveriesEver += task.finalDeliveredCount || 0;
-            return acc;
-        }, { totalPackagesEver: 0, totalSuccessfulDeliveriesEver: 0 });
-
-        setPerformanceData({
-          daily: dailyPerformance,
-          weekly: weeklyPerformance,
-          attendance: { totalAttendanceDays, totalWorkingDays, attendanceRate },
-          overall: overall,
-        });
-
+        const data = await getKurirPerformanceData(currentUser.uid);
+        setPerformanceData(data);
       } catch (error) {
         console.error("Error fetching performance data:", error);
       } finally {
@@ -154,7 +63,7 @@ export default function PerformancePage() {
         const itemDate = parseISO(item.date);
         return itemDate >= thirtyDaysAgo;
       } catch (e) { return false; }
-    }).map(d => ({...d, name: format(new Date(d.date), 'dd/MM')})).reverse();
+    }).map(d => ({...d, name: format(parseISO(d.date), 'dd/MM')})).reverse();
   }, [performanceData]);
 
   const selectedDayPerformance = useMemo(() => {
@@ -168,7 +77,6 @@ export default function PerformancePage() {
   ] : [];
 
   if (isLoading || !currentUser) {
-    // Skeleton loading UI
     return (
         <div className="space-y-6">
             <Card><CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader></Card>
@@ -184,7 +92,6 @@ export default function PerformancePage() {
   }
 
   if (currentUser.role !== 'Kurir') {
-    // Role check UI
     return (
       <Card className="shadow-lg">
         <CardHeader>
@@ -199,7 +106,6 @@ export default function PerformancePage() {
   
   const overallSuccessRate = (performanceData?.overall.totalPackagesEver ?? 0) > 0 ? (performanceData!.overall.totalSuccessfulDeliveriesEver / performanceData!.overall.totalPackagesEver * 100) : 0;
 
-  // Main page content
   return (
     <div className="space-y-6">
       <Card className="shadow-xl">

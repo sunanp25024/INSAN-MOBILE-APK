@@ -3,36 +3,34 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
-import { CheckCircle, XCircle, Clock, CalendarDays, BarChartHorizontalBig, CalendarIcon as LucideCalendarIcon, ChevronsUpDown, BarChart as BarChartIcon, TrendingUp, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, CalendarDays, BarChartIcon, ChevronsUpDown, LucideCalendarIcon, AlertCircle } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import type { AttendanceRecord, UserProfile } from '@/types';
+import type { AttendanceRecord, UserProfile, KurirAttendancePageData } from '@/types';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate as getDayOfMonthDateFns, subDays, startOfDay, parseISO, isValid } from "date-fns";
+import { format, endOfMonth, eachDayOfInterval, getDate as getDayOfMonthDateFns, parseISO, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
-import type { Locale } from "date-fns";
 import { db } from '@/lib/firebase';
-import { doc, setDoc, updateDoc, getDoc, collection, query, where, getDocs, Timestamp, orderBy, limit } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-
+import { getKurirAttendancePageData } from '@/lib/kurirActions';
 
 const generateMonthlyAttendanceData = (
   startDate: Date,
   endDate: Date,
-  history: AttendanceRecord[],
-  locale: Locale
+  history: AttendanceRecord[]
 ): { chartData: { name: string; Kehadiran: number }[], presentDays: number } => {
-  if (startDate > endDate) return { chartData: [], presentDays: 0 };
+  if (!isValid(startDate) || !isValid(endDate) || startDate > endDate) return { chartData: [], presentDays: 0 };
 
   const daysInInterval = eachDayOfInterval({ start: startDate, end: endDate });
   let presentCount = 0;
 
   const chartData = daysInInterval.map(day => {
-    const dayOfMonthStr = format(day, 'd', { locale }); 
+    const dayOfMonthStr = format(day, 'd', { locale: indonesiaLocale }); 
     const isoDateString = format(day, 'yyyy-MM-dd');
     const record = history.find(rec => rec.date === isoDateString);
     const isPresent = record && (record.status === 'Present' || record.status === 'Late');
@@ -50,9 +48,8 @@ const generateMonthlyAttendanceData = (
 
 export default function AttendancePage() {
   const [currentUser, setCurrentUser] = React.useState<UserProfile | null>(null);
-  const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
+  const [pageData, setPageData] = useState<KurirAttendancePageData | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>([]);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,66 +57,12 @@ export default function AttendancePage() {
 
   const todayISO = format(new Date(), 'yyyy-MM-dd');
 
-  useEffect(() => {
-    const userDataString = localStorage.getItem('loggedInUser');
-    if (userDataString) {
-      try {
-        setCurrentUser(JSON.parse(userDataString) as UserProfile);
-      } catch (error) { console.error("Error parsing user data for attendance page", error); }
-    } else {
-        setIsLoading(false);
-    }
-  }, []);
-
   const fetchAttendanceData = useCallback(async (user: UserProfile) => {
     setIsLoading(true);
     try {
-        // Fetch today's record specifically
-        const todayDocId = `${user.uid}_${todayISO}`;
-        const todayDocRef = doc(db, "attendance", todayDocId);
-        const todayDocSnap = await getDoc(todayDocRef);
-        
-        if (todayDocSnap.exists()) {
-            const record = todayDocSnap.data() as AttendanceRecord;
-            setTodayRecord({ id: todayDocSnap.id, ...record });
-            localStorage.setItem('courierCheckedInToday', record.checkInTime ? todayISO : 'false');
-        } else {
-            setTodayRecord({ 
-                id: todayDocId,
-                kurirUid: user.uid,
-                kurirId: user.id,
-                kurirName: user.fullName,
-                date: todayISO, 
-                status: 'Not Checked In' 
-            });
-            localStorage.setItem('courierCheckedInToday', 'false');
-        }
-
-        // Fetch all historical records for the user
-        const historyQuery = query(
-            collection(db, "attendance"),
-            where("kurirUid", "==", user.uid)
-        );
-        const querySnapshot = await getDocs(historyQuery);
-        
-        const sixtyDaysAgo = startOfDay(subDays(new Date(), 60));
-        const fetchedHistory: AttendanceRecord[] = [];
-        querySnapshot.forEach((doc) => {
-            const record = { id: doc.id, ...doc.data() } as AttendanceRecord;
-            // Client-side filtering for the last 60 days
-            try {
-              const recordDate = parseISO(record.date);
-              if (isValid(recordDate) && recordDate >= sixtyDaysAgo) {
-                  fetchedHistory.push(record);
-              }
-            } catch(e) { /* ignore invalid dates */ }
-        });
-        
-        // Sort data on the client to ensure newest records are first
-        fetchedHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setAttendanceHistory(fetchedHistory);
-
-    } catch(error: any) {
+      const data = await getKurirAttendancePageData(user.uid);
+      setPageData(data);
+    } catch (error: any) {
         console.error("Error fetching attendance data:", error);
         toast({ 
             title: "Error", 
@@ -130,17 +73,31 @@ export default function AttendancePage() {
     } finally {
         setIsLoading(false);
     }
-  }, [toast, todayISO]);
-  
+  }, [toast]);
+
   useEffect(() => {
-    if (currentUser) {
-      fetchAttendanceData(currentUser);
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      try {
+        const user = JSON.parse(userDataString) as UserProfile;
+        setCurrentUser(user);
+        if (user.role === 'Kurir') {
+          fetchAttendanceData(user);
+        } else {
+          setIsLoading(false);
+        }
+      } catch (error) { 
+        console.error("Error parsing user data for attendance page", error); 
+        setIsLoading(false);
+      }
+    } else {
+        setIsLoading(false);
     }
-  }, [currentUser, fetchAttendanceData]);
+  }, [fetchAttendanceData]);
 
 
   const handleCheckIn = async () => {
-    if (!currentUser || todayRecord?.checkInTime) {
+    if (!currentUser || pageData?.todayRecord?.checkInTime) {
       toast({ title: "Sudah Check-In", description: "Anda sudah melakukan check-in hari ini.", variant: "default" });
       return;
     }
@@ -149,7 +106,6 @@ export default function AttendancePage() {
     const docId = `${currentUser.uid}_${todayISO}`;
     const recordRef = doc(db, "attendance", docId);
     
-    // We don't store the ID in the document itself
     const newRecord: Omit<AttendanceRecord, 'id'> = {
       kurirUid: currentUser.uid,
       kurirId: currentUser.id,
@@ -165,11 +121,8 @@ export default function AttendancePage() {
     try {
         await setDoc(recordRef, newRecord, { merge: true });
         toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Status: ${newRecord.status}.` });
-        // REFETCH ALL data from Firestore to ensure UI consistency
-        if (currentUser) {
-            await fetchAttendanceData(currentUser);
-        }
         localStorage.setItem('courierCheckedInToday', todayISO);
+        await fetchAttendanceData(currentUser);
     } catch (error) {
         console.error("Error during check-in: ", error);
         toast({ title: "Check-In Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
@@ -179,11 +132,11 @@ export default function AttendancePage() {
   };
 
   const handleCheckOut = async () => {
-    if (!currentUser || !todayRecord?.checkInTime) {
+    if (!currentUser || !pageData?.todayRecord?.checkInTime) {
       toast({ title: "Belum Check-In", description: "Anda harus check-in terlebih dahulu.", variant: "destructive" });
       return;
     }
-    if (todayRecord?.checkOutTime) {
+    if (pageData?.todayRecord?.checkOutTime) {
       toast({ title: "Sudah Check-Out", description: "Anda sudah melakukan check-out hari ini.", variant: "default" });
       return;
     }
@@ -200,10 +153,7 @@ export default function AttendancePage() {
             checkOutTimestamp: Timestamp.fromDate(now),
         });
         toast({ title: "Check-Out Berhasil", description: `Anda check-out pukul ${checkOutTime}.` });
-        // REFETCH ALL data from Firestore to ensure UI consistency
-        if (currentUser) {
-            await fetchAttendanceData(currentUser);
-        }
+        await fetchAttendanceData(currentUser);
     } catch(error) {
         console.error("Error during check-out:", error);
         toast({ title: "Check-Out Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
@@ -217,38 +167,23 @@ export default function AttendancePage() {
     if (!checkInTime || !checkOutTime) {
       return null;
     }
-
     const [inHours, inMinutes] = checkInTime.split(':').map(Number);
     const [outHours, outMinutes] = checkOutTime.split(':').map(Number);
-
     const dateRef = new Date(); 
-    const checkInDate = new Date(dateRef.getFullYear(), dateRef.getMonth(), dateRef.getDate(), inHours, inMinutes, 0, 0);
-    const checkOutDate = new Date(dateRef.getFullYear(), dateRef.getMonth(), dateRef.getDate(), outHours, outMinutes, 0, 0);
-
-    if (checkOutDate < checkInDate) {
-      return "Durasi tidak valid (check-out sebelum check-in)";
-    }
-
+    const checkInDate = new Date(dateRef.getFullYear(), dateRef.getMonth(), dateRef.getDate(), inHours, inMinutes);
+    const checkOutDate = new Date(dateRef.getFullYear(), dateRef.getMonth(), dateRef.getDate(), outHours, outMinutes);
+    if (checkOutDate < checkInDate) return "Durasi tidak valid";
     let diffMillis = checkOutDate.getTime() - checkInDate.getTime();
-
     const hours = Math.floor(diffMillis / (1000 * 60 * 60));
     diffMillis -= hours * (1000 * 60 * 60);
     const minutes = Math.floor(diffMillis / (1000 * 60));
-
-    if (hours < 0 || minutes < 0) return "Durasi tidak valid";
-    if (hours === 0 && minutes === 0) return "Kurang dari 1 menit";
-    
     let durationString = "";
-    if (hours > 0) {
-      durationString += `${hours} jam `;
-    }
-    if (minutes > 0) {
-      durationString += `${minutes} menit`;
-    }
-    
+    if (hours > 0) durationString += `${hours} jam `;
+    if (minutes > 0) durationString += `${minutes} menit`;
     return durationString.trim() || null;
   };
 
+  const attendanceHistory = pageData?.history || [];
   const selectedRecord = attendanceHistory.find(rec => selectedDate && rec.date === format(selectedDate, 'yyyy-MM-dd'));
   const workDuration = selectedRecord ? calculateWorkDuration(selectedRecord.checkInTime, selectedRecord.checkOutTime) : null;
 
@@ -265,8 +200,8 @@ export default function AttendancePage() {
   const sixteenthCurrentMonth = new Date(currentYear, currentMonth, 16);
   const lastDayCurrentMonth = endOfMonth(today);
 
-  const { chartData: firstHalfMonthAttendance, presentDays: presentDaysFirstHalf } = generateMonthlyAttendanceData(firstDayCurrentMonth, fifteenthCurrentMonth, attendanceHistory, indonesiaLocale);
-  const { chartData: secondHalfMonthAttendance, presentDays: presentDaysSecondHalf } = generateMonthlyAttendanceData(sixteenthCurrentMonth, lastDayCurrentMonth, attendanceHistory, indonesiaLocale);
+  const { chartData: firstHalfMonthAttendance, presentDays: presentDaysFirstHalf } = generateMonthlyAttendanceData(firstDayCurrentMonth, fifteenthCurrentMonth, attendanceHistory);
+  const { chartData: secondHalfMonthAttendance, presentDays: presentDaysSecondHalf } = generateMonthlyAttendanceData(sixteenthCurrentMonth, lastDayCurrentMonth, attendanceHistory);
 
   if (isLoading || !currentUser) {
     return (
@@ -299,11 +234,11 @@ export default function AttendancePage() {
           <CardDescription>Tanggal: {format(new Date(), "eeee, dd MMMM yyyy", { locale: indonesiaLocale })}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {todayRecord?.checkInTime ? (
-            <Alert variant={todayRecord.status === 'Late' ? 'destructive' : 'default'}>
-              <CheckCircle className={`h-4 w-4 ${todayRecord.status === 'Present' ? 'text-primary' : ''}`} />
-              <AlertTitle>Sudah Check-In pukul {todayRecord.checkInTime}</AlertTitle>
-              <AlertDescription>Status Kehadiran: {todayRecord.status}</AlertDescription>
+          {pageData?.todayRecord?.checkInTime ? (
+            <Alert variant={pageData.todayRecord.status === 'Late' ? 'destructive' : 'default'}>
+              <CheckCircle className={`h-4 w-4 ${pageData.todayRecord.status === 'Present' ? 'text-primary' : ''}`} />
+              <AlertTitle>Sudah Check-In pukul {pageData.todayRecord.checkInTime}</AlertTitle>
+              <AlertDescription>Status Kehadiran: {pageData.todayRecord.status}</AlertDescription>
             </Alert>
           ) : (
             <Alert variant="destructive">
@@ -313,10 +248,10 @@ export default function AttendancePage() {
             </Alert>
           )}
 
-          {todayRecord?.checkOutTime && (
+          {pageData?.todayRecord?.checkOutTime && (
             <Alert variant="default">
               <CheckCircle className="h-4 w-4 text-primary" />
-              <AlertTitle>Sudah Check-Out pukul {todayRecord.checkOutTime}</AlertTitle>
+              <AlertTitle>Sudah Check-Out pukul {pageData.todayRecord.checkOutTime}</AlertTitle>
               <AlertDescription>Hari kerja Anda telah selesai.</AlertDescription>
             </Alert>
           )}
@@ -325,7 +260,7 @@ export default function AttendancePage() {
             <Button 
               variant="default"
               onClick={handleCheckIn} 
-              disabled={!!todayRecord?.checkInTime || isSubmitting}
+              disabled={!!pageData?.todayRecord?.checkInTime || isSubmitting}
               className="flex-1"
             >
               {isSubmitting ? 'Memproses...' : <><CheckCircle className="mr-2 h-4 w-4" /> Check In</>}
@@ -333,7 +268,7 @@ export default function AttendancePage() {
             <Button 
               variant="destructive"
               onClick={handleCheckOut} 
-              disabled={!todayRecord?.checkInTime || !!todayRecord?.checkOutTime || isSubmitting}
+              disabled={!pageData?.todayRecord?.checkInTime || !!pageData?.todayRecord?.checkOutTime || isSubmitting}
               className="flex-1"
             >
               {isSubmitting ? 'Memproses...' : <><XCircle className="mr-2 h-4 w-4" /> Check Out</>}
@@ -400,12 +335,12 @@ export default function AttendancePage() {
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="text-xl text-primary flex items-center"><TrendingUp className="mr-2 h-5 w-5"/>Performa Absensi Keseluruhan</CardTitle>
+          <CardTitle className="text-xl text-primary flex items-center"><BarChartIcon className="mr-2 h-5 w-5"/>Performa Absensi Bulanan</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span>Tingkat Kehadiran (Total Keseluruhan)</span>
+              <span>Tingkat Kehadiran (60 Hari Terakhir)</span>
               <span className="font-bold text-lg text-primary">{attendanceRate.toFixed(1)}%</span>
             </div>
             <Progress value={attendanceRate} className="h-3" />

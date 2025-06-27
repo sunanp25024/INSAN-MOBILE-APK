@@ -111,6 +111,7 @@ export default function DashboardPage() {
   // Main effect to initialize dashboard based on user role
   useEffect(() => {
     const initializeDashboard = async () => {
+      setIsDashboardLoading(true);
       const userDataString = localStorage.getItem('loggedInUser');
       if (!userDataString) {
         setIsDashboardLoading(false);
@@ -128,8 +129,6 @@ export default function DashboardPage() {
       }
 
       if (user.role === 'Kurir') {
-        // For couriers, we must first check their attendance status directly from Firestore
-        setIsDashboardLoading(true);
         try {
           const attendanceDocId = `${user.uid}_${todayDateString}`;
           const attendanceDocRef = doc(db, "attendance", attendanceDocId);
@@ -146,12 +145,8 @@ export default function DashboardPage() {
           console.error("Error checking courier attendance status:", error);
           toast({ title: "Error", description: "Gagal memeriksa status absensi.", variant: "destructive" });
           setIsCourierCheckedIn(false);
-        } finally {
-          setIsDashboardLoading(false);
         }
       } else {
-        // For managerial roles, fetch dashboard statistics
-        setIsDashboardLoading(true);
         try {
             const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
             const attendanceQuery = query(collection(db, 'attendance'), where('date', '>=', ninetyDaysAgo));
@@ -174,10 +169,9 @@ export default function DashboardPage() {
         } catch (error: any) {
             console.error("Error fetching managerial dashboard data:", error);
             toast({ title: "Error", description: "Gagal memuat data dashboard.", variant: "destructive"});
-        } finally {
-            setIsDashboardLoading(false);
         }
       }
+      setIsDashboardLoading(false);
     };
 
     initializeDashboard();
@@ -434,11 +428,10 @@ export default function DashboardPage() {
 
                 if (isScanning) { 
                   if (dailyTaskData && managedPackages.length < dailyTaskData.totalPackages) {
-                    const isCODForScanned = managedPackages.filter(p => p.isCOD).length < dailyTaskData.codPackages;
                     const newPackage: PackageItem = { 
                         id: scannedText, 
                         status: 'process', 
-                        isCOD: isCODForScanned, 
+                        isCOD: false, // Safer default. Can be edited manually.
                         lastUpdateTime: new Date().toISOString() 
                     };
                     try {
@@ -446,7 +439,7 @@ export default function DashboardPage() {
                         const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", scannedText);
                         await setDoc(packageDocRef, { ...newPackage, lastUpdateTime: serverTimestamp() });
                         setManagedPackages(prev => [...prev, newPackage]);
-                        setIsManualCOD(false);
+                        setCurrentScannedResi('');
                         if (managedPackages.length + 1 === dailyTaskData.totalPackages) setIsScanning(false);
                     } catch (e) {
                         console.error("Error saving scanned package:", e);
@@ -777,7 +770,7 @@ export default function DashboardPage() {
     }
   };
 
-  const resetDay = async () => {
+  const resetDayTask = async () => {
     setDailyTaskDocId(null);
     setDailyTaskData(null);
     resetPackageInputForm({ totalPackages: 0, codPackages: 0, nonCodPackages: 0 });
@@ -791,11 +784,7 @@ export default function DashboardPage() {
     setPackagePhotoMap({});
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
     
-    if (currentUser?.role === 'Kurir') {
-        setIsCourierCheckedIn(false); 
-        localStorage.removeItem('courierCheckedInToday'); 
-    }
-    toast({ title: "Hari Baru Dimulai", description: "Semua data lokal telah direset. Selamat bekerja!" });
+    toast({ title: "Tugas Baru Siap Dimulai", description: "Semua data tugas lokal telah direset. Selamat bekerja!" });
   };
 
   const handleOpenDeliveryScan = () => { setIsScanningForDeliveryUpdate(true) };
@@ -952,8 +941,8 @@ export default function DashboardPage() {
           </CardContent>
           <CardFooter className="flex flex-col items-center space-y-4 pt-6 border-t mt-6">
              <p className="text-lg italic text-muted-foreground text-center px-4">{motivationalQuote}</p>
-            <Button onClick={resetDay} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto">
-              Mulai Hari Baru
+            <Button onClick={resetDayTask} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto">
+              Mulai Tugas Baru
             </Button>
           </CardFooter>
         </Card>
@@ -966,7 +955,7 @@ export default function DashboardPage() {
       <div className="space-y-8">
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center space-x-4">
-            <Avatar className="h-16 w-16"><AvatarImage src={currentUser.avatarUrl || `https://placehold.co/100x100.png?text=${currentUser.fullName.split(" ").map(n=>n[0]).join("")}`} alt={currentUser.fullName} data-ai-hint="man face"/><AvatarFallback>{currentUser.fullName.split(" ").map(n=>n[0]).join("")}</AvatarFallback></Avatar>
+            <Avatar className="h-16 w-16"><AvatarImage src={currentUser.avatarUrl || `https://placehold.co/150x150.png?text=${currentUser.fullName.split(" ").map(n=>n[0]).join("")}`} alt={currentUser.fullName} data-ai-hint="man face"/><AvatarFallback>{currentUser.fullName.split(" ").map(n=>n[0]).join("")}</AvatarFallback></Avatar>
             <div><CardTitle className="text-2xl">{currentUser.fullName}</CardTitle><CardDescription>{currentUser.id} - {currentUser.workLocation}</CardDescription></div>
           </CardHeader>
         </Card>

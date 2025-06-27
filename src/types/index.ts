@@ -1,5 +1,4 @@
 
-
 export type UserRole = 'MasterAdmin' | 'Admin' | 'PIC' | 'Kurir';
 
 export interface UserProfile {
@@ -107,6 +106,19 @@ export interface AttendanceRecord {
   checkInTimestamp?: any; // Firestore Timestamp for precise check-in time
   checkOutTimestamp?: any; // Firestore Timestamp for precise check-out time
 }
+
+export interface KurirAttendancePageData {
+  todayRecord: AttendanceRecord | null;
+  history: AttendanceRecord[];
+}
+
+export interface KurirPerformancePageData {
+  daily: { date: string; totalDelivered: number; totalPending: number; successRate: number; }[];
+  weekly: { weekLabel: string; delivered: number; pending: number; }[];
+  attendance: { totalAttendanceDays: number; totalWorkingDays: number; attendanceRate: number; };
+  overall: { totalPackagesEver: number; totalSuccessfulDeliveriesEver: number; };
+}
+
 
 export interface DailyPerformance {
   date: string; 
