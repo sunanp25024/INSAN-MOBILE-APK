@@ -4,130 +4,94 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to get user's role from their profile document
-    function getUserRole(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
-    }
-
-    // Helper function to check if the user is authenticated
-    function isAuthenticated() {
-      return request.auth != null;
+    // Helper function to check role
+    function isRole(role) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
     
-    // Helper function to check if the requesting user is a MasterAdmin
-    function isMasterAdmin() {
-      return isAuthenticated() && getUserRole(request.auth.uid) == 'MasterAdmin';
-    }
-
-    // Helper function to check if the requesting user is an Admin
-    function isAdmin() {
-      return isAuthenticated() && getUserRole(request.auth.uid) == 'Admin';
-    }
-    
-    // Helper function to check if the requesting user is a PIC
-    function isPIC() {
-      return isAuthenticated() && getUserRole(request.auth.uid) == 'PIC';
-    }
-
-    // Helper function to check if the user is the owner of the document
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    // Helper function to get today's date string in 'yyyy-MM-dd' format.
+    // NOTE: This uses the request time, so it's consistent.
+    function getTodayDateString() {
+      let today = request.time.toMillis();
+      let year = string(request.time.year());
+      let month = string(request.time.month());
+      let day = string(request.time.day());
+      // Pad month and day with leading zero if needed
+      let paddedMonth = month.size() == 1 ? '0' + month : month;
+      let paddedDay = day.size() == 1 ? '0' + day : day;
+      return year + '-' + paddedMonth + '-' + paddedDay;
     }
 
     // Rules for the 'users' collection
     match /users/{userId} {
-      // Anyone authenticated can read their own profile.
-      // MasterAdmins and Admins can read any user profile.
-      // PICs can read Kurir profiles.
-      allow read: if isAuthenticated() && (
-                    isOwner(userId) || 
-                    isMasterAdmin() || 
-                    isAdmin() ||
-                    (isPIC() && get(/databases/$(database)/documents/users/$(userId)).data.role == 'Kurir')
-                  );
+      // ANY authenticated user can read their OWN profile.
+      allow get: if request.auth.uid == userId;
 
-      // Only an authenticated user can update their own profile data.
-      // MasterAdmins and Admins can update any user's data (approval flow handled by backend).
-      allow update: if isAuthenticated() && (
-                      isOwner(userId) ||
-                      isMasterAdmin() ||
-                      isAdmin()
-                    );
+      // MasterAdmins can read any user profile.
+      allow list: if isRole('MasterAdmin') || isRole('Admin') || isRole('PIC');
       
-      // Creating users is handled by a backend function with admin privileges.
-      // We deny client-side creation for security. Deletion is also admin-only.
-      allow create, delete: if isMasterAdmin();
-    }
+      // Only MasterAdmins can create users directly.
+      // Admins can create users through an approval process, which is handled by backend functions.
+      allow create: if isRole('MasterAdmin');
 
-    // Rules for the 'attendance' collection
-    match /attendance/{attendanceId} {
-      // A Kurir can read their own attendance records.
-      // PICs, Admins, and MasterAdmins can read all attendance records.
-      allow read: if isAuthenticated() && (
-                    isOwner(resource.data.kurirUid) ||
-                    isPIC() ||
-                    isAdmin() ||
-                    isMasterAdmin()
-                  );
-
-      // A Kurir can only create or update their own attendance record.
-      allow create, update: if isAuthenticated() && isOwner(request.resource.data.kurirUid);
+      // A user can update their own profile (e.g., name, avatar).
+      // A MasterAdmin can update any user profile.
+      allow update: if request.auth.uid == userId || isRole('MasterAdmin');
+      
+      // Only a MasterAdmin can delete a user.
+      allow delete: if isRole('MasterAdmin');
     }
     
-    // Rules for the 'kurir_daily_tasks' collection
+    // Rules for the 'attendance' collection
+    match /attendance/{docId} {
+      // Kurir can create/update their own attendance record for today.
+      allow create: if request.auth.uid == request.resource.data.kurirUid
+                    && docId == request.auth.uid + '_' + getTodayDateString();
+      allow update: if request.auth.uid == resource.data.kurirUid
+                    && docId == request.auth.uid + '_' + getTodayDateString();
+      
+      // A user can read their OWN attendance records.
+      // PICs can read attendance records of any courier (they filter on client-side).
+      // Admins/MasterAdmins can read any record.
+      allow read: if request.auth.uid == resource.data.kurirUid 
+                  || isRole('PIC') || isRole('Admin') || isRole('MasterAdmin');
+    }
+    
+    // Rules for 'kurir_daily_tasks' collection and its 'packages' subcollection
     match /kurir_daily_tasks/{taskId} {
-      // A Kurir can read their own tasks.
-      // PICs, Admins, and MasterAdmins can read all tasks.
-      allow read: if isAuthenticated() && (
-                    isOwner(resource.data.kurirUid) ||
-                    isPIC() ||
-                    isAdmin() ||
-                    isMasterAdmin()
-                  );
+      // A Kurir can create/update their own task for today.
+      // Admins/MasterAdmins can also manage these tasks if needed.
+      allow write: if request.auth.uid == request.resource.data.kurirUid || isRole('Admin') || isRole('MasterAdmin');
+      
+      // A Kurir can read their own task.
+      // PIC, Admin, and MasterAdmin can read any task document.
+      allow read: if request.auth.uid == resource.data.kurirUid 
+                  || isRole('PIC') || isRole('Admin') || isRole('MasterAdmin');
 
-      // A Kurir can only create or update their own daily task.
-      allow create, update: if isAuthenticated() && isOwner(request.resource.data.kurirUid);
-
-      // Rules for the 'packages' subcollection within each task
+      // Rules for the 'packages' subcollection within a task
       match /packages/{packageId} {
-        // A Kurir can read packages within their own task document.
-        // Management roles can also read.
-        allow read: if isAuthenticated() && (
-                      isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid) ||
-                      isPIC() || isAdmin() || isMasterAdmin()
-                    );
-
-        // A Kurir can create, update, and delete packages within their own task.
-        allow write: if isAuthenticated() && isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid);
+        // The Kurir who owns the parent task document can manage packages.
+        allow read, write, delete: if request.auth.uid == get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid
+                                  || isRole('Admin') || isRole('MasterAdmin');
       }
     }
-
-    // Rules for the 'approval_requests' collection
+    
+    // Rules for 'approval_requests' collection
     match /approval_requests/{requestId} {
-      // MasterAdmins can read all requests.
-      // Admins can only read the requests they created.
-      allow read: if isAuthenticated() && (
-                    isMasterAdmin() ||
-                    (isAdmin() && resource.data.requestedByUid == request.auth.uid)
-                  );
+      // Only Admins can create new requests.
+      allow create: if isRole('Admin');
       
-      // Admins can create new approval requests.
-      allow create: if isAdmin();
-      
-      // Only MasterAdmins can update requests (to approve/reject them).
-      allow update: if isMasterAdmin();
+      // MasterAdmins can read/update/delete any request.
+      // The Admin who created the request can read it to see its status.
+      allow read, update, delete: if isRole('MasterAdmin') || request.auth.uid == resource.data.requestedByUid;
+      allow list: if isRole('MasterAdmin') || isRole('Admin');
     }
 
-    // Rules for the 'notifications' collection
+    // Rules for 'notifications' collection
     match /notifications/{notificationId} {
-      // Only management roles should see notifications. MasterAdmin has a dedicated page.
-      allow read: if isMasterAdmin();
-      
-      // Only a MasterAdmin can update a notification (e.g., mark as read).
-      allow update: if isMasterAdmin();
-
-      // Notifications should only be created by the backend.
-      allow create: if false; 
+        // Only readable by MasterAdmin and PICs for now. Backend functions can create them.
+        allow read: if isRole('MasterAdmin') || isRole('PIC');
+        allow write: if false; // No client should write directly.
     }
   }
 }
