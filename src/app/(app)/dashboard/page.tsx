@@ -27,7 +27,6 @@ import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDo
 import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
-import { usePathname } from 'next/navigation';
 
 
 const packageInputSchema = z.object({
@@ -96,7 +95,6 @@ export default function DashboardPage() {
   const [hubOptions, setHubOptions] = useState<Hub[]>([]);
 
   const { toast } = useToast();
-  const pathname = usePathname();
 
   const { register, handleSubmit: handlePackageFormSubmit, formState: { errors }, setValue, reset: resetPackageInputForm } = useForm<DailyPackageInput>({
     resolver: zodResolver(packageInputSchema),
@@ -110,9 +108,84 @@ export default function DashboardPage() {
     return `${kurirUid}_${todayDateString}`;
   };
 
+  // Main effect to initialize dashboard based on user role
+  useEffect(() => {
+    const initializeDashboard = async () => {
+      const userDataString = localStorage.getItem('loggedInUser');
+      if (!userDataString) {
+        setIsDashboardLoading(false);
+        return;
+      }
+
+      let user: UserProfile;
+      try {
+        user = JSON.parse(userDataString);
+        setCurrentUser(user);
+      } catch (error) {
+        console.error("Failed to parse user data:", error);
+        setIsDashboardLoading(false);
+        return;
+      }
+
+      if (user.role === 'Kurir') {
+        // For couriers, we must first check their attendance status directly from Firestore
+        setIsDashboardLoading(true);
+        try {
+          const attendanceDocId = `${user.uid}_${todayDateString}`;
+          const attendanceDocRef = doc(db, "attendance", attendanceDocId);
+          const attendanceDocSnap = await getDoc(attendanceDocRef);
+          
+          if (attendanceDocSnap.exists() && attendanceDocSnap.data().checkInTime) {
+            setIsCourierCheckedIn(true);
+            localStorage.setItem('courierCheckedInToday', todayDateString);
+          } else {
+            setIsCourierCheckedIn(false);
+            localStorage.setItem('courierCheckedInToday', 'false');
+          }
+        } catch (error) {
+          console.error("Error checking courier attendance status:", error);
+          toast({ title: "Error", description: "Gagal memeriksa status absensi.", variant: "destructive" });
+          setIsCourierCheckedIn(false);
+        } finally {
+          setIsDashboardLoading(false);
+        }
+      } else {
+        // For managerial roles, fetch dashboard statistics
+        setIsDashboardLoading(true);
+        try {
+            const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+            const attendanceQuery = query(collection(db, 'attendance'), where('date', '>=', ninetyDaysAgo));
+            const workSummaryQuery = query(collection(db, 'kurir_daily_tasks'), where('date', '>=', ninetyDaysAgo));
+            const usersQuery = query(collection(db, 'users'), where('role', '==', 'Kurir'));
+
+            const [attendanceSnapshot, workSummarySnapshot, usersSnapshot] = await Promise.all([
+                getDocs(attendanceQuery),
+                getDocs(workSummaryQuery),
+                getDocs(usersQuery)
+            ]);
+
+            const fetchedAttendanceRecords = attendanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceRecord));
+            const fetchedWorkRecords = workSummarySnapshot.docs.map(doc => doc.data() as KurirDailyTaskDoc);
+            const fetchedUserProfiles = usersSnapshot.docs.map(doc => doc.data() as UserProfile);
+
+            setAllAttendanceRecords(fetchedAttendanceRecords);
+            setAllWorkRecords(fetchedWorkRecords);
+            setAllUserProfiles(fetchedUserProfiles);
+        } catch (error: any) {
+            console.error("Error fetching managerial dashboard data:", error);
+            toast({ title: "Error", description: "Gagal memuat data dashboard.", variant: "destructive"});
+        } finally {
+            setIsDashboardLoading(false);
+        }
+      }
+    };
+
+    initializeDashboard();
+  }, [toast, todayDateString]);
+  
   // Fetch or create daily task and packages for Kurir
   useEffect(() => {
-    if (currentUser?.role === 'Kurir' && currentUser.uid && isCourierCheckedIn) {
+    if (currentUser?.role === 'Kurir' && currentUser.uid && isCourierCheckedIn === true) {
       const docId = generateDailyTaskDocId(currentUser.uid);
       setDailyTaskDocId(docId);
       const dailyTaskRef = doc(db, "kurir_daily_tasks", docId);
@@ -176,52 +249,6 @@ export default function DashboardPage() {
     }
   }, [currentUser, isCourierCheckedIn, setValue, todayDateString, toast, resetPackageInputForm]);
 
-
- useEffect(() => {
-    const userDataString = localStorage.getItem('loggedInUser');
-    if (userDataString) {
-      try {
-        const parsedUser = JSON.parse(userDataString) as UserProfile;
-        setCurrentUser(parsedUser);
-      } catch (error) {
-        console.error("Failed to parse user data from localStorage for dashboard", error);
-      }
-    }
-  }, []);
-
-  // Fetch managerial dashboard data (feeds and stats)
-  useEffect(() => {
-    if (currentUser?.role && currentUser.role !== 'Kurir') {
-      const fetchManagerialData = async () => {
-        setIsDashboardLoading(true);
-        try {
-            const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
-
-            const attendanceQuery = query(collection(db, 'attendance'), where('date', '>=', ninetyDaysAgo));
-            const attendanceSnapshot = await getDocs(attendanceQuery);
-            const fetchedAttendanceRecords = attendanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceRecord));
-            setAllAttendanceRecords(fetchedAttendanceRecords);
-
-            const workSummaryQuery = query(collection(db, 'kurir_daily_tasks'), where('date', '>=', ninetyDaysAgo));
-            const workSummarySnapshot = await getDocs(workSummaryQuery);
-            const fetchedWorkRecords = workSummarySnapshot.docs.map(doc => doc.data() as KurirDailyTaskDoc);
-            setAllWorkRecords(fetchedWorkRecords);
-            
-            const usersQuery = query(collection(db, 'users'), where('role', '==', 'Kurir'));
-            const usersSnapshot = await getDocs(usersQuery);
-            const fetchedUserProfiles = usersSnapshot.docs.map(doc => doc.data() as UserProfile);
-            setAllUserProfiles(fetchedUserProfiles);
-
-        } catch (error: any) {
-            console.error("Error fetching managerial dashboard data:", error);
-            toast({ title: "Error", description: "Gagal memuat data dashboard.", variant: "destructive"});
-        } finally {
-          setIsDashboardLoading(false);
-        }
-      };
-      fetchManagerialData();
-    }
-  }, [currentUser, toast]);
 
     // Effect for cascading dropdowns
   useEffect(() => {
@@ -352,24 +379,6 @@ export default function DashboardPage() {
         courierWorkSummaries,
     };
   }, [allWorkRecords, allAttendanceRecords, allUserProfiles, selectedWilayah, selectedArea, selectedHub, searchKurir]);
-
-
-  useEffect(() => {
-    const checkStatus = () => {
-        if (currentUser?.role === 'Kurir') {
-          const checkedInDate = localStorage.getItem('courierCheckedInToday');
-          const today = new Date().toISOString().split('T')[0];
-          setIsCourierCheckedIn(checkedInDate === today);
-        }
-    };
-
-    checkStatus();
-    window.addEventListener('focus', checkStatus);
-
-    return () => {
-      window.removeEventListener('focus', checkStatus);
-    };
-  }, [currentUser, pathname]);
 
   useEffect(() => {
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
@@ -878,6 +887,10 @@ export default function DashboardPage() {
   };
 
 
+  if (isDashboardLoading) {
+    return ( <div className="flex justify-center items-center h-screen"><p>Memuat ringkasan dashboard...</p></div> );
+  }
+
   if (!currentUser) {
     return <div className="flex justify-center items-center h-screen"><p>Memuat data pengguna...</p></div>;
   }
@@ -1031,83 +1044,93 @@ export default function DashboardPage() {
   }
 
 
-  if (isDashboardLoading) {
-    return ( <div className="flex justify-center items-center h-screen"><p>Memuat ringkasan dashboard...</p></div> );
+  if (currentUser.role !== 'Kurir') {
+    return (
+      <div className="space-y-6">
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-2xl text-primary flex items-center">
+              {currentUser.role === 'MasterAdmin' ? <UserCog className="mr-2 h-7 w-7" /> : currentUser.role === 'Admin' ? <Users className="mr-2 h-7 w-7" /> : <Briefcase className="mr-2 h-7 w-7" />}
+              Selamat Datang, {currentUser.fullName}!
+            </CardTitle>
+            <CardDescription>Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir.</CardDescription>
+          </CardHeader>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-xl"><FilterIcon className="mr-2 h-5 w-5 text-primary" />Filter & Aksi Cepat Dashboard</CardTitle>
+            <CardDescription>Saring data yang ditampilkan untuk mendapatkan wawasan yang lebih spesifik.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+              <div>
+                  <Label htmlFor="dashboard-wilayah">Wilayah</Label>
+                  <Select value={selectedWilayah} onValueChange={handleWilayahChange}>
+                      <SelectTrigger id="dashboard-wilayah"><SelectValue placeholder="Pilih Wilayah" /></SelectTrigger>
+                      <SelectContent>{mockLocationsData.map(w => (<SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>))}</SelectContent>
+                  </Select>
+              </div>
+              <div>
+                  <Label htmlFor="dashboard-area">Area Operasional</Label>
+                  <Select value={selectedArea} onValueChange={handleAreaChange}>
+                      <SelectTrigger id="dashboard-area"><SelectValue placeholder="Pilih Area" /></SelectTrigger>
+                      <SelectContent>{areaOptions.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
+                  </Select>
+              </div>
+              <div>
+                  <Label htmlFor="dashboard-lokasi-kerja">Lokasi Kerja (Hub)</Label>
+                  <Select value={selectedHub} onValueChange={handleHubChange}>
+                      <SelectTrigger id="dashboard-lokasi-kerja"><SelectValue placeholder="Pilih Hub" /></SelectTrigger>
+                      <SelectContent>{hubOptions.map(h => (<SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>))}</SelectContent>
+                  </Select>
+              </div>
+              <div className="lg:col-span-3">
+                  <Label htmlFor="dashboard-search-kurir">Cari Kurir (Nama)</Label>
+                  <div className="relative">
+                      <SearchIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input id="dashboard-search-kurir" type="search" placeholder="Masukkan Nama Kurir..." className="pl-8" value={searchKurir} onChange={handleSearchKurirChange}/>
+                  </div>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter>
+              <Button onClick={handleDownloadDashboardSummary} variant="outline" className="w-full sm:w-auto">
+                  <DownloadIcon className="mr-2 h-4 w-4" /> Unduh Ringkasan Dashboard
+              </Button>
+          </CardFooter>
+        </Card>
+        
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Kurir Aktif Hari Ini</CardTitle><Users className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.activeCouriersToday}</div><p className="text-xs text-muted-foreground">Total kurir beroperasi</p></CardContent></Card>
+          <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Diproses Hari Ini</CardTitle><PackageIcon className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesProcessedToday}</div><p className="text-xs text-muted-foreground">Total paket ditugaskan</p></CardContent></Card>
+          <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Terkirim Hari Ini</CardTitle><PackageCheck className="h-5 w-5 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesDeliveredToday}</div><p className="text-xs text-muted-foreground">Dari {displayData.totalPackagesProcessedToday} paket</p></CardContent></Card>
+          <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Rate Tepat Waktu</CardTitle><Clock className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.onTimeDeliveryRateToday.toFixed(1)}%</div><p className="text-xs text-muted-foreground">Kurir check-in tepat waktu</p></CardContent></Card>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5"/>Ringkasan Pengiriman (7 Hari)</CardTitle><CardDescription>Visualisasi paket terkirim & pending.</CardDescription></CardHeader><CardContent className="h-[300px] pt-4"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={displayData.dailyShipmentSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="name" tick={{fontSize: '0.75rem'}}/><YAxis tick={{fontSize: '0.75rem'}}/><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}}/><Bar dataKey="terkirim" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={20}/><Bar dataKey="pending" name="Pending/Retur" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={20}/></RechartsBarChart></ResponsiveContainer></CardContent></Card>
+          <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><TrendingUp className="mr-2 h-5 w-5" />Tren Pengiriman Mingguan (4 Minggu)</CardTitle><CardDescription>Performa mingguan.</CardDescription></CardHeader><CardContent className="h-[300px] pt-4"><ResponsiveContainer width="100%" height="100%"><LineChart data={displayData.weeklyShipmentSummary} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="week" tick={{fontSize: '0.75rem'}} /><YAxis tick={{fontSize: '0.75rem'}} /><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}} /><Line type="monotone" dataKey="terkirim" name="Terkirim" stroke="hsl(var(--chart-3))" strokeWidth={2} activeDot={{ r: 6 }} /><Line type="monotone" dataKey="pending" name="Pending/Retur" stroke="hsl(var(--chart-4))" strokeWidth={2} activeDot={{ r: 6 }} /></LineChart></ResponsiveContainer></CardContent></Card>
+          <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5" />Ringkasan Performa Bulanan (3 Bulan)</CardTitle><CardDescription>Perbandingan bulanan.</CardDescription></CardHeader><CardContent className="h-[320px] pt-4"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={displayData.monthlyPerformanceSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="month" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="left" orientation="left" stroke="hsl(var(--chart-1))" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-5))" tick={{fontSize: '0.75rem'}} /><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}} /><Bar yAxisId="left" dataKey="totalDelivered" name="Total Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={25} /><Bar yAxisId="right" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-5))" radius={[4, 4, 0, 0]} barSize={25} /></RechartsBarChart></ResponsiveContainer></CardContent></Card>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><Activity className="mr-2 h-5 w-5"/>Aktivitas Absensi Terkini</CardTitle><CardDescription>Update check-in/out kurir.</CardDescription></CardHeader><CardContent className="max-h-[400px] overflow-y-auto pr-2">{displayData.attendanceActivities.length > 0 ? (<ul className="space-y-3">{displayData.attendanceActivities.map(activity => ( <li key={activity.id} className="flex items-start space-x-3 p-3 bg-card-foreground/5 rounded-md"><div className="flex-shrink-0 mt-0.5">{getAttendanceActionIcon(activity.action)}</div><div className="flex-grow"><p className="text-sm font-medium">{activity.kurirName} <span className="text-xs text-muted-foreground">({activity.kurirId})</span></p><p className="text-sm text-muted-foreground">{activity.action === 'check-in' ? 'melakukan check-in' : activity.action === 'check-out' ? 'melakukan check-out' : 'melaporkan keterlambatan'}{activity.location && <span className="text-xs"> di {activity.location}</span>}</p><p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(activity.timestamp)}</p></div></li>))}</ul>) : (<p className="text-muted-foreground text-center py-4">Belum ada aktivitas absensi.</p>)}</CardContent></Card>
+          <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><ListChecks className="mr-2 h-5 w-5"/>Ringkasan Penyelesaian Kerja Kurir</CardTitle><CardDescription>Laporan ringkas setelah kurir selesai.</CardDescription></CardHeader><CardContent className="max-h-[400px] overflow-y-auto pr-2">{displayData.courierWorkSummaries.length > 0 ? (<ul className="space-y-3">{displayData.courierWorkSummaries.map(summary => ( <li key={summary.id} className="flex items-start space-x-3 p-3 bg-card-foreground/5 rounded-md"><div className="flex-shrink-0 mt-0.5">{getCourierWorkSummaryIcon()}</div><div className="flex-grow"><p className="text-sm font-medium">{summary.kurirName} <span className="text-xs text-muted-foreground">({summary.kurirId})</span></p><p className="text-sm text-muted-foreground">Menyelesaikan: <strong className="text-foreground">{summary.totalPackagesAssigned}</strong> paket, <strong className="text-green-500">{summary.packagesDelivered}</strong> terkirim, <strong className="text-red-500">{summary.packagesPendingOrReturned}</strong> retur/pending.</p><p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(summary.timestamp)}</p></div></li>))}</ul>) : (<p className="text-muted-foreground text-center py-4">Belum ada ringkasan kerja.</p>)}</CardContent></Card>
+        </div>
+      </div>
+    );
   }
 
+  // This part of the return is for non-courier roles.
+  // It seems there's a logic error where it could be reached by a courier.
+  // The code above handles all courier cases. Let's assume this is unreachable by couriers.
+  // But for safety, I will wrap it.
+  
   return (
-    <div className="space-y-6">
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-2xl text-primary flex items-center">
-            {currentUser.role === 'MasterAdmin' ? <UserCog className="mr-2 h-7 w-7" /> : currentUser.role === 'Admin' ? <Users className="mr-2 h-7 w-7" /> : <Briefcase className="mr-2 h-7 w-7" />}
-             Selamat Datang, {currentUser.fullName}!
-          </CardTitle>
-          <CardDescription>Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir.</CardDescription>
-        </CardHeader>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center text-xl"><FilterIcon className="mr-2 h-5 w-5 text-primary" />Filter & Aksi Cepat Dashboard</CardTitle>
-          <CardDescription>Saring data yang ditampilkan untuk mendapatkan wawasan yang lebih spesifik.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
-            <div>
-                <Label htmlFor="dashboard-wilayah">Wilayah</Label>
-                <Select value={selectedWilayah} onValueChange={handleWilayahChange}>
-                    <SelectTrigger id="dashboard-wilayah"><SelectValue placeholder="Pilih Wilayah" /></SelectTrigger>
-                    <SelectContent>{mockLocationsData.map(w => (<SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>))}</SelectContent>
-                </Select>
-            </div>
-            <div>
-                <Label htmlFor="dashboard-area">Area Operasional</Label>
-                <Select value={selectedArea} onValueChange={handleAreaChange}>
-                    <SelectTrigger id="dashboard-area"><SelectValue placeholder="Pilih Area" /></SelectTrigger>
-                    <SelectContent>{areaOptions.map(a => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}</SelectContent>
-                </Select>
-            </div>
-            <div>
-                <Label htmlFor="dashboard-lokasi-kerja">Lokasi Kerja (Hub)</Label>
-                <Select value={selectedHub} onValueChange={handleHubChange}>
-                    <SelectTrigger id="dashboard-lokasi-kerja"><SelectValue placeholder="Pilih Hub" /></SelectTrigger>
-                    <SelectContent>{hubOptions.map(h => (<SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>))}</SelectContent>
-                </Select>
-            </div>
-            <div className="lg:col-span-3">
-                <Label htmlFor="dashboard-search-kurir">Cari Kurir (Nama)</Label>
-                <div className="relative">
-                    <SearchIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input id="dashboard-search-kurir" type="search" placeholder="Masukkan Nama Kurir..." className="pl-8" value={searchKurir} onChange={handleSearchKurirChange}/>
-                </div>
-            </div>
-          </div>
-        </CardContent>
-        <CardFooter>
-            <Button onClick={handleDownloadDashboardSummary} variant="outline" className="w-full sm:w-auto">
-                <DownloadIcon className="mr-2 h-4 w-4" /> Unduh Ringkasan Dashboard
-            </Button>
-        </CardFooter>
-      </Card>
-      
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Kurir Aktif Hari Ini</CardTitle><Users className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.activeCouriersToday}</div><p className="text-xs text-muted-foreground">Total kurir beroperasi</p></CardContent></Card>
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Diproses Hari Ini</CardTitle><PackageIcon className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesProcessedToday}</div><p className="text-xs text-muted-foreground">Total paket ditugaskan</p></CardContent></Card>
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Terkirim Hari Ini</CardTitle><PackageCheck className="h-5 w-5 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesDeliveredToday}</div><p className="text-xs text-muted-foreground">Dari {displayData.totalPackagesProcessedToday} paket</p></CardContent></Card>
-        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Rate Tepat Waktu</CardTitle><Clock className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.onTimeDeliveryRateToday.toFixed(1)}%</div><p className="text-xs text-muted-foreground">Kurir check-in tepat waktu</p></CardContent></Card>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5"/>Ringkasan Pengiriman (7 Hari)</CardTitle><CardDescription>Visualisasi paket terkirim & pending.</CardDescription></CardHeader><CardContent className="h-[300px] pt-4"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={displayData.dailyShipmentSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="name" tick={{fontSize: '0.75rem'}}/><YAxis tick={{fontSize: '0.75rem'}}/><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}}/><Bar dataKey="terkirim" name="Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={20}/><Bar dataKey="pending" name="Pending/Retur" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} barSize={20}/></RechartsBarChart></ResponsiveContainer></CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><TrendingUp className="mr-2 h-5 w-5" />Tren Pengiriman Mingguan (4 Minggu)</CardTitle><CardDescription>Performa mingguan.</CardDescription></CardHeader><CardContent className="h-[300px] pt-4"><ResponsiveContainer width="100%" height="100%"><LineChart data={displayData.weeklyShipmentSummary} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="week" tick={{fontSize: '0.75rem'}} /><YAxis tick={{fontSize: '0.75rem'}} /><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}} /><Line type="monotone" dataKey="terkirim" name="Terkirim" stroke="hsl(var(--chart-3))" strokeWidth={2} activeDot={{ r: 6 }} /><Line type="monotone" dataKey="pending" name="Pending/Retur" stroke="hsl(var(--chart-4))" strokeWidth={2} activeDot={{ r: 6 }} /></LineChart></ResponsiveContainer></CardContent></Card>
-        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center text-xl text-primary"><BarChart2 className="mr-2 h-5 w-5" />Ringkasan Performa Bulanan (3 Bulan)</CardTitle><CardDescription>Perbandingan bulanan.</CardDescription></CardHeader><CardContent className="h-[320px] pt-4"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={displayData.monthlyPerformanceSummary} margin={{ top: 5, right: 0, left: -25, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.5)" /><XAxis dataKey="month" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="left" orientation="left" stroke="hsl(var(--chart-1))" tick={{fontSize: '0.75rem'}} /><YAxis yAxisId="right" orientation="right" stroke="hsl(var(--chart-5))" tick={{fontSize: '0.75rem'}} /><Tooltip contentStyle={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))", borderRadius: "var(--radius)", fontSize: "0.8rem", padding: "0.5rem" }} cursor={{ fill: "hsl(var(--accent)/0.2)" }}/><Legend wrapperStyle={{fontSize: "0.8rem"}} /><Bar yAxisId="left" dataKey="totalDelivered" name="Total Terkirim" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} barSize={25} /><Bar yAxisId="right" dataKey="totalPending" name="Total Pending" fill="hsl(var(--chart-5))" radius={[4, 4, 0, 0]} barSize={25} /></RechartsBarChart></ResponsiveContainer></CardContent></Card>
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><Activity className="mr-2 h-5 w-5"/>Aktivitas Absensi Terkini</CardTitle><CardDescription>Update check-in/out kurir.</CardDescription></CardHeader><CardContent className="max-h-[400px] overflow-y-auto pr-2">{displayData.attendanceActivities.length > 0 ? (<ul className="space-y-3">{displayData.attendanceActivities.map(activity => ( <li key={activity.id} className="flex items-start space-x-3 p-3 bg-card-foreground/5 rounded-md"><div className="flex-shrink-0 mt-0.5">{getAttendanceActionIcon(activity.action)}</div><div className="flex-grow"><p className="text-sm font-medium">{activity.kurirName} <span className="text-xs text-muted-foreground">({activity.kurirId})</span></p><p className="text-sm text-muted-foreground">{activity.action === 'check-in' ? 'melakukan check-in' : activity.action === 'check-out' ? 'melakukan check-out' : 'melaporkan keterlambatan'}{activity.location && <span className="text-xs"> di {activity.location}</span>}</p><p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(activity.timestamp)}</p></div></li>))}</ul>) : (<p className="text-muted-foreground text-center py-4">Belum ada aktivitas absensi.</p>)}</CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center text-xl text-primary"><ListChecks className="mr-2 h-5 w-5"/>Ringkasan Penyelesaian Kerja Kurir</CardTitle><CardDescription>Laporan ringkas setelah kurir selesai.</CardDescription></CardHeader><CardContent className="max-h-[400px] overflow-y-auto pr-2">{displayData.courierWorkSummaries.length > 0 ? (<ul className="space-y-3">{displayData.courierWorkSummaries.map(summary => ( <li key={summary.id} className="flex items-start space-x-3 p-3 bg-card-foreground/5 rounded-md"><div className="flex-shrink-0 mt-0.5">{getCourierWorkSummaryIcon()}</div><div className="flex-grow"><p className="text-sm font-medium">{summary.kurirName} <span className="text-xs text-muted-foreground">({summary.kurirId})</span></p><p className="text-sm text-muted-foreground">Menyelesaikan: <strong className="text-foreground">{summary.totalPackagesAssigned}</strong> paket, <strong className="text-green-500">{summary.packagesDelivered}</strong> terkirim, <strong className="text-red-500">{summary.packagesPendingOrReturned}</strong> retur/pending.</p><p className="text-xs text-muted-foreground/80 mt-0.5">{formatActivityTimestamp(summary.timestamp)}</p></div></li>))}</ul>) : (<p className="text-muted-foreground text-center py-4">Belum ada ringkasan kerja.</p>)}</CardContent></Card>
-      </div>
+    <div>
+        <p>Dashboard untuk peran Anda sedang dalam pengembangan.</p>
     </div>
-  );
+  )
+
 }
