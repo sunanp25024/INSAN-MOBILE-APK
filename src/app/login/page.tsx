@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,11 +9,21 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { AppLogo } from '@/components/icons/AppLogo';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { Eye, EyeOff, LogIn, Download } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
+
+// Define the type for the install prompt event for better type safety
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: Array<string>;
+  readonly userChoice: Promise<{
+    outcome: 'accepted' | 'dismissed',
+    platform: string,
+  }>;
+  prompt(): Promise<void>;
+}
+
 
 export default function LoginPage() {
   const [emailInput, setEmailInput] = useState('');
@@ -22,6 +32,42 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  
+  // State to hold the install prompt event
+  const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      // Stash the event so it can be triggered later.
+      setInstallPromptEvent(e as BeforeInstallPromptEvent);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = () => {
+    if (!installPromptEvent) {
+      return;
+    }
+    // Show the install prompt
+    installPromptEvent.prompt();
+    // Wait for the user to respond to the prompt
+    installPromptEvent.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        toast({ title: 'Instalasi Berhasil', description: 'Aplikasi sedang diinstal di perangkat Anda.' });
+      } else {
+        toast({ title: 'Instalasi Dibatalkan', description: 'Anda dapat menginstal aplikasi nanti.', variant: 'default' });
+      }
+      // We can only use the prompt once, so clear it.
+      setInstallPromptEvent(null);
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,13 +179,26 @@ export default function LoginPage() {
                 </Button>
               </div>
             </div>
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground text-lg py-3" disabled={isLoading}>
-              {isLoading ? 'Loading...' : (
-                <>
-                  <LogIn className="mr-2 h-5 w-5" /> Login
-                </>
+            <div className="flex flex-col gap-3">
+              <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground text-lg py-3" disabled={isLoading}>
+                {isLoading ? 'Loading...' : (
+                  <>
+                    <LogIn className="mr-2 h-5 w-5" /> Login
+                  </>
+                )}
+              </Button>
+               {installPromptEvent && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full text-lg py-3"
+                  onClick={handleInstallClick}
+                >
+                  <Download className="mr-2 h-5 w-5" />
+                  Instal Aplikasi
+                </Button>
               )}
-            </Button>
+            </div>
           </form>
         </CardContent>
         <CardFooter className="flex flex-col items-center text-center text-sm text-muted-foreground space-y-2 pt-4">
