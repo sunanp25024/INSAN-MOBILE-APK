@@ -143,7 +143,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         localStorage.removeItem('courierCheckedInToday');
         setCurrentUser(null);
         setNavItems([]);
-        const publicPages = ['/', '/setup-admin'];
+        const publicPages = ['/', '/login', '/setup-admin'];
         if (!publicPages.includes(pathname)) {
           router.replace('/');
         }
@@ -172,9 +172,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return <div className="flex h-screen items-center justify-center">Memverifikasi sesi...</div>;
   }
   
-  const publicPages = ['/', '/setup-admin'];
+  const publicPages = ['/', '/login', '/setup-admin'];
   if (!currentUser && !publicPages.includes(pathname)) {
-    return <div className="flex h-screen items-center justify-center">Mengalihkan ke halaman login...</div>;
+    return <div className="flex h-screen items-center justify-center">Mengalihkan ke halaman utama...</div>;
   }
   
   if (publicPages.includes(pathname)) {

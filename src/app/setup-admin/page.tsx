@@ -91,7 +91,7 @@ export default function SetupAdminPage() {
     } finally {
       setIsLoading(false);
       if (success) {
-        router.push('/'); // Redirect to login page ONLY on success
+        router.push('/login'); // Redirect to login page ONLY on success
       }
     }
   };
@@ -142,7 +142,7 @@ export default function SetupAdminPage() {
           </form>
         </CardContent>
          <CardFooter className="flex flex-col items-center text-center text-sm text-muted-foreground space-y-2">
-            <Link href="/" passHref>
+            <Link href="/login" passHref>
                 <Button variant="link" className="text-sm">
                     <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login
                 </Button>
