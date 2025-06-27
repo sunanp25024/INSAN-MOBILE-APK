@@ -85,6 +85,16 @@ const allNavItems: NavItem[] = [
   { href: "/settings", icon: Settings, label: "Pengaturan Akun", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
 ];
 
+const LoadingScreen = ({ message }: { message: string }) => (
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
+        <div className="relative flex h-24 w-24 items-center justify-center">
+            <div className="absolute h-full w-full animate-spin rounded-full border-4 border-primary/20 border-t-primary"></div>
+            <AppLogo className="h-16 w-16" />
+        </div>
+        <p className="mt-4 text-lg text-muted-foreground">{message}</p>
+    </div>
+);
+
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -169,12 +179,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   if (loadingAuth) {
-    return <div className="flex h-screen items-center justify-center">Memverifikasi sesi...</div>;
+    return <LoadingScreen message="Memverifikasi sesi..." />;
   }
   
   const publicPages = ['/', '/login', '/setup-admin'];
   if (!currentUser && !publicPages.includes(pathname)) {
-    return <div className="flex h-screen items-center justify-center">Mengalihkan ke halaman utama...</div>;
+    return <LoadingScreen message="Mengalihkan..." />;
   }
   
   if (publicPages.includes(pathname)) {

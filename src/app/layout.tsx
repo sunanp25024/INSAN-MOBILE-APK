@@ -27,7 +27,7 @@ export default function RootLayout({
         <meta name="description" content="Aplikasi INSAN MOBILE" />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#1c1f26" />
+        <meta name="theme-color" content="#3399CC" />
         
         <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
