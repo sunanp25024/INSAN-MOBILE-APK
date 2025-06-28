@@ -121,6 +121,16 @@ export default function DashboardPage() {
     if (!currentUser) {
         return;
     }
+
+    // Immediately check localStorage for check-in status to provide a faster UI update.
+    // This avoids waiting for the server action if the user just checked in.
+    if (currentUser.role === 'Kurir') {
+        const todayISO = format(new Date(), 'yyyy-MM-dd');
+        const hasCheckedInLocally = localStorage.getItem('courierCheckedInToday') === todayISO;
+        if (hasCheckedInLocally) {
+            setIsCourierCheckedIn(true);
+        }
+    }
     
     const initializeDashboard = async () => {
       setIsDashboardLoading(true);
