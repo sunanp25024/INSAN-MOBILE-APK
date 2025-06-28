@@ -2,7 +2,7 @@
 'use server';
 
 import { admin, adminDb } from '@/lib/firebaseAdmin';
-import type { KurirAttendancePageData, KurirPerformancePageData, AttendanceRecord, KurirDailyTaskDoc, PackageItem, DashboardData } from '@/types';
+import type { KurirAttendancePageData, KurirPerformancePageData, AttendanceRecord, KurirDailyTaskDoc, PackageItem, DashboardData, UserProfile, DashboardSummaryData } from '@/types';
 import { format, subDays, startOfWeek, parseISO, isValid, getWeek } from 'date-fns';
 
 function serializeData(doc: admin.firestore.DocumentData | admin.firestore.QueryDocumentSnapshot): any {
@@ -15,8 +15,6 @@ function serializeData(doc: admin.firestore.DocumentData | admin.firestore.Query
         if (value instanceof admin.firestore.Timestamp) {
             serialized[key] = value.toDate().toISOString();
         } else if (value instanceof admin.firestore.FieldValue) {
-            // Firestore FieldValues like serverTimestamp() don't have a serializable value on the client
-            // until after they're written. We'll represent them as null.
             serialized[key] = null;
         }
         else {
@@ -26,74 +24,69 @@ function serializeData(doc: admin.firestore.DocumentData | admin.firestore.Query
     return serialized;
 }
 
-export async function checkCourierAttendanceStatus(uid: string) {
-  if (!uid) {
-    return { isCheckedIn: false };
-  }
-  const todayDateString = format(new Date(), 'yyyy-MM-dd');
-  const attendanceDocId = `${uid}_${todayDateString}`;
-  try {
-    const attendanceDocRef = adminDb.collection("attendance").doc(attendanceDocId);
-    const attendanceDocSnap = await attendanceDocRef.get();
+export async function getDashboardData(uid: string, role: string): Promise<DashboardData> {
+    try {
+        if (role === 'Kurir') {
+            const todayDateString = format(new Date(), 'yyyy-MM-dd');
+            const attendanceDocId = `${uid}_${todayDateString}`;
+            const attendanceDoc = await adminDb.collection("attendance").doc(attendanceDocId).get();
+            const isCheckedIn = attendanceDoc.exists && attendanceDoc.data()?.checkInTime;
 
-    if (attendanceDocSnap.exists && attendanceDocSnap.data()?.checkInTime) {
-      return { isCheckedIn: true };
-    }
-    return { isCheckedIn: false };
-  } catch (error) {
-    console.error(`[Server Action] Error checking attendance for ${uid}:`, error);
-    return { isCheckedIn: false, error: 'Gagal memeriksa status di server.' };
-  }
-}
+            const dailyTaskRef = adminDb.collection("kurir_daily_tasks").doc(`${uid}_${todayDateString}`);
+            const taskSnap = await dailyTaskRef.get();
+            let taskData: KurirDailyTaskDoc | null = null;
+            let packages: PackageItem[] = [];
+            let photoMap: Record<string, string> = {};
 
-export async function getKurirDashboardData(uid: string): Promise<{ taskData: KurirDailyTaskDoc | null, packages: PackageItem[], photoMap: Record<string, string> }> {
-    const todayDateString = format(new Date(), 'yyyy-MM-dd');
-    const docId = `${uid}_${todayDateString}`;
-    
-    const dailyTaskRef = adminDb.collection("kurir_daily_tasks").doc(docId);
-    const packagesColRef = dailyTaskRef.collection("packages");
-    
-    const taskSnap = await dailyTaskRef.get();
-    
-    if (!taskSnap.exists()) {
-        return { taskData: null, packages: [], photoMap: {} };
-    }
+            if (taskSnap.exists) {
+                taskData = serializeData(taskSnap);
+                const packagesSnapshot = await dailyTaskRef.collection("packages").get();
+                packages = packagesSnapshot.docs.map(serializeData);
+                packages.forEach(p => {
+                    if (p.status === 'delivered' && p.deliveryProofPhotoUrl) {
+                        photoMap[p.id] = p.deliveryProofPhotoUrl;
+                    }
+                });
+            }
 
-    const taskData = serializeData(taskSnap) as KurirDailyTaskDoc;
-    
-    const packagesQuerySnapshot = await packagesColRef.get();
-    const packages = packagesQuerySnapshot.docs.map(pkgDoc => serializeData(pkgDoc) as PackageItem);
+            return {
+                kurirData: {
+                    isCheckedIn: !!isCheckedIn,
+                    taskData,
+                    packages,
+                    photoMap
+                }
+            };
+        } else {
+            const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+            
+            const attendanceQuery = adminDb.collection('attendance').where('date', '>=', ninetyDaysAgo);
+            const workSummaryQuery = adminDb.collection('kurir_daily_tasks').where('date', '>=', ninetyDaysAgo);
+            const usersQuery = adminDb.collection('users').where('role', '==', 'Kurir');
 
-    const photoMap: Record<string, string> = {};
-    packages.forEach(p => {
-        if (p.status === 'delivered' && p.deliveryProofPhotoUrl) {
-            photoMap[p.id] = p.deliveryProofPhotoUrl;
+            const [attendanceSnapshot, workSummarySnapshot, usersSnapshot] = await Promise.all([
+                attendanceQuery.get(),
+                workSummaryQuery.get(),
+                usersQuery.get()
+            ]);
+
+            const attendanceRecords = attendanceSnapshot.docs.map(doc => serializeData(doc) as AttendanceRecord);
+            const workRecords = workSummarySnapshot.docs.map(doc => serializeData(doc) as KurirDailyTaskDoc);
+            const userProfiles = usersSnapshot.docs.map(doc => serializeData(doc) as UserProfile);
+
+            return {
+                managerialData: {
+                    attendanceRecords,
+                    workRecords,
+                    userProfiles
+                }
+            };
         }
-    });
-
-    return { taskData, packages, photoMap };
+    } catch (error: any) {
+        console.error(`[Server Action] Error getting dashboard data for UID ${uid} and role ${role}:`, error);
+        return { error: 'Gagal memuat data dashboard dari server.' };
+    }
 }
-
-export async function getManagerialDashboardData(): Promise<{ attendanceRecords: AttendanceRecord[], workRecords: KurirDailyTaskDoc[], userProfiles: UserProfile[] }> {
-    const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
-    
-    const attendanceQuery = adminDb.collection('attendance').where('date', '>=', ninetyDaysAgo);
-    const workSummaryQuery = adminDb.collection('kurir_daily_tasks').where('date', '>=', ninetyDaysAgo);
-    const usersQuery = adminDb.collection('users').where('role', '==', 'Kurir');
-
-    const [attendanceSnapshot, workSummarySnapshot, usersSnapshot] = await Promise.all([
-        attendanceQuery.get(),
-        workSummaryQuery.get(),
-        usersQuery.get()
-    ]);
-
-    const attendanceRecords = attendanceSnapshot.docs.map(doc => serializeData(doc) as AttendanceRecord);
-    const workRecords = workSummarySnapshot.docs.map(doc => serializeData(doc) as KurirDailyTaskDoc);
-    const userProfiles = usersSnapshot.docs.map(doc => serializeData(doc) as UserProfile);
-
-    return { attendanceRecords, workRecords, userProfiles };
-}
-
 
 export async function getKurirAttendancePageData(kurirUid: string): Promise<KurirAttendancePageData> {
     if (!kurirUid) {
@@ -213,5 +206,3 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
         hasAnyTasksInPeriod,
     };
 }
-
-    

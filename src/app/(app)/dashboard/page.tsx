@@ -27,7 +27,7 @@ import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDo
 import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
-import { checkCourierAttendanceStatus, getKurirDashboardData, getManagerialDashboardData } from '@/lib/kurirActions';
+import { getDashboardData } from '@/lib/kurirActions';
 
 
 const packageInputSchema = z.object({
@@ -83,9 +83,7 @@ export default function DashboardPage() {
 
   // Dashboard states for managerial roles
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
-  const [allWorkRecords, setAllWorkRecords] = useState<KurirDailyTaskDoc[]>([]);
-  const [allAttendanceRecords, setAllAttendanceRecords] = useState<AttendanceRecord[]>([]);
-  const [allUserProfiles, setAllUserProfiles] = useState<UserProfile[]>([]);
+  const [dashboardData, setDashboardData] = useState<DashboardSummaryData | null>(null);
 
   // Filter states
   const [selectedWilayah, setSelectedWilayah] = useState<string>('all-wilayah');
@@ -121,29 +119,28 @@ export default function DashboardPage() {
   // Main effect to initialize dashboard based on user role
   useEffect(() => {
     if (!currentUser) {
-        // Still waiting for user data to be set from the first effect
         return;
     }
     
-    const todayDateString = format(new Date(), 'yyyy-MM-dd');
-    
     const initializeDashboard = async () => {
       setIsDashboardLoading(true);
+      try {
+        const data = await getDashboardData(currentUser.uid, currentUser.role);
 
-      if (currentUser.role === 'Kurir') {
-        try {
-          const attendanceStatus = await checkCourierAttendanceStatus(currentUser.uid);
-          if (attendanceStatus.error) throw new Error(attendanceStatus.error);
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        if (currentUser.role === 'Kurir') {
+          const { isCheckedIn, taskData, packages, photoMap } = data.kurirData || {};
+          setIsCourierCheckedIn(isCheckedIn ?? false);
           
-          setIsCourierCheckedIn(attendanceStatus.isCheckedIn);
-          localStorage.setItem('courierCheckedInToday', attendanceStatus.isCheckedIn ? todayDateString : 'false');
-          
-          if (attendanceStatus.isCheckedIn) {
-             const { taskData, packages, photoMap } = await getKurirDashboardData(currentUser.uid);
-             const docId = `${currentUser.uid}_${todayDateString}`;
-             setDailyTaskDocId(docId);
+          if (isCheckedIn) {
+            const todayDateString = format(new Date(), 'yyyy-MM-dd');
+            const docId = `${currentUser.uid}_${todayDateString}`;
+            setDailyTaskDocId(docId);
              
-             if (taskData) {
+            if (taskData) {
                 setDailyTaskData(taskData);
                 setValue("totalPackages", taskData.totalPackages);
                 setValue("codPackages", taskData.codPackages);
@@ -157,14 +154,13 @@ export default function DashboardPage() {
                 }
 
                 if (taskData.taskStatus === 'pending_setup') {
-                  setManagedPackages(packages.filter(p => p.status === 'process'));
+                  setManagedPackages(packages?.filter(p => p.status === 'process') || []);
                 } else {
-                  setInTransitPackages(packages.filter(p => p.status === 'in_transit' || p.status === 'delivered'));
-                  setPendingReturnPackages(packages.filter(p => p.status === 'pending_return' || p.status === 'returned'));
-                  setPackagePhotoMap(photoMap);
+                  setInTransitPackages(packages?.filter(p => p.status === 'in_transit' || p.status === 'delivered') || []);
+                  setPendingReturnPackages(packages?.filter(p => p.status === 'pending_return' || p.status === 'returned') || []);
+                  setPackagePhotoMap(photoMap || {});
                 }
-             } else {
-                // No task for today, ready for new input
+            } else {
                 setDailyTaskData(null);
                 setManagedPackages([]);
                 setInTransitPackages([]);
@@ -172,24 +168,17 @@ export default function DashboardPage() {
                 setDeliveryStarted(false);
                 setDayFinished(false);
                 resetPackageInputForm();
-             }
+            }
           }
-        } catch (error: any) {
-          console.error("Error initializing Kurir dashboard:", error);
-          toast({ title: "Error", description: `Gagal memuat data dashboard: ${error.message}`, variant: "destructive" });
+        } else {
+          setDashboardData(data.managerialData || null);
         }
-      } else { // For Admin, MasterAdmin, PIC roles
-        try {
-            const { attendanceRecords, workRecords, userProfiles } = await getManagerialDashboardData();
-            setAllAttendanceRecords(attendanceRecords);
-            setAllWorkRecords(workRecords);
-            setAllUserProfiles(userProfiles);
-        } catch (error: any) {
-            console.error("Error fetching managerial dashboard data:", error);
-            toast({ title: "Error", description: "Gagal memuat data dashboard.", variant: "destructive"});
-        }
+      } catch (error: any) {
+        console.error("Error initializing dashboard:", error);
+        toast({ title: "Error", description: `Gagal memuat data dashboard: ${error.message}`, variant: "destructive" });
+      } finally {
+        setIsDashboardLoading(false);
       }
-      setIsDashboardLoading(false);
     };
 
     initializeDashboard();
@@ -225,19 +214,42 @@ export default function DashboardPage() {
 
 
   const displayData = useMemo(() => {
+    if (!dashboardData) {
+      return {
+        activeCouriersToday: 0,
+        totalPackagesProcessedToday: 0,
+        totalPackagesDeliveredToday: 0,
+        onTimeDeliveryRateToday: 0,
+        dailyShipmentSummary: [],
+        weeklyShipmentSummary: [],
+        monthlyPerformanceSummary: [],
+        attendanceActivities: [],
+        courierWorkSummaries: [],
+      };
+    }
+
+    const { attendanceRecords, workRecords, userProfiles } = dashboardData;
+    
     // Filter users first based on location
-    const filteredUserUIDs = allUserProfiles
+    const filteredUserUIDs = userProfiles
       .filter(user => {
-        const matchesWilayah = selectedWilayah === 'all-wilayah' || user.wilayah === mockLocationsData.find(w => w.id === selectedWilayah)?.name;
-        const matchesArea = selectedArea === 'all-area' || selectedArea.startsWith('all-area-') || user.area === areaOptions.find(a => a.id === selectedArea)?.name;
-        const matchesHub = selectedHub === 'all-hub' || selectedHub.startsWith('all-hub-') || user.workLocation === hubOptions.find(h => h.id === selectedHub)?.name;
+        const wilayah = mockLocationsData.find(w => w.id === selectedWilayah);
+        const area = areaOptions.find(a => a.id === selectedArea);
+        const hub = hubOptions.find(h => h.id === selectedHub);
+
+        const matchesWilayah = !wilayah || selectedWilayah === 'all-wilayah' || user.wilayah === wilayah.name;
+        const matchesArea = !area || selectedArea === 'all-area' || selectedArea.startsWith('all-area-') || user.area === area.name;
+        const matchesHub = !hub || selectedHub === 'all-hub' || selectedHub.startsWith('all-hub-') || user.workLocation === hub.name;
+        
         return matchesWilayah && matchesArea && matchesHub;
       })
       .map(user => user.uid);
 
+    const uidsSet = new Set(filteredUserUIDs);
+
     // Filter attendance and work records based on the filtered user UIDs
-    const filteredWorkRecords = allWorkRecords.filter(record => filteredUserUIDs.includes(record.kurirUid));
-    const filteredAttendanceRecords = allAttendanceRecords.filter(record => filteredUserUIDs.includes(record.kurirUid));
+    const filteredWorkRecords = workRecords.filter(record => uidsSet.has(record.kurirUid));
+    const filteredAttendanceRecords = attendanceRecords.filter(record => uidsSet.has(record.kurirUid));
     
     // Further filter by search term
     const finalFilteredWorkRecords = filteredWorkRecords.filter(r => r.kurirFullName.toLowerCase().includes(searchKurir.toLowerCase()));
@@ -328,7 +340,7 @@ export default function DashboardPage() {
         attendanceActivities,
         courierWorkSummaries,
     };
-  }, [allWorkRecords, allAttendanceRecords, allUserProfiles, selectedWilayah, selectedArea, selectedHub, searchKurir, areaOptions, hubOptions]);
+  }, [dashboardData, selectedWilayah, selectedArea, selectedHub, searchKurir, areaOptions, hubOptions]);
 
   useEffect(() => {
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
@@ -787,6 +799,7 @@ export default function DashboardPage() {
   const handleSearchKurirChange = (event: React.ChangeEvent<HTMLInputElement>) => { setSearchKurir(event.target.value) };
   
   const handleDownloadDashboardSummary = () => {
+    if (!displayData) return;
     toast({ title: "Mempersiapkan Unduhan..."});
     
     // 1. Summary Sheet
@@ -991,7 +1004,7 @@ export default function DashboardPage() {
   }
 
 
-  if (currentUser.role !== 'Kurir') {
+  if (currentUser.role !== 'Kurir' && displayData) {
     return (
       <div className="space-y-6">
         <Card className="shadow-lg">
@@ -1069,11 +1082,6 @@ export default function DashboardPage() {
     );
   }
 
-  // This part of the return is for non-courier roles.
-  // It seems there's a logic error where it could be reached by a courier.
-  // The code above handles all courier cases. Let's assume this is unreachable by couriers.
-  // But for safety, I will wrap it.
-  
   return (
     <div>
         <p>Dashboard untuk peran Anda sedang dalam pengembangan.</p>
@@ -1081,5 +1089,3 @@ export default function DashboardPage() {
   )
 
 }
-
-    

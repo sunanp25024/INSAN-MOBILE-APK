@@ -1,4 +1,5 @@
 
+
 export type UserRole = 'MasterAdmin' | 'Admin' | 'PIC' | 'Kurir';
 
 export interface UserProfile {
@@ -170,25 +171,20 @@ export interface CourierWorkSummaryActivity {
 
 
 export interface DashboardSummaryData {
-  activeCouriersToday: number;
-  totalPackagesProcessedToday: number;
-  totalPackagesDeliveredToday: number;
-  onTimeDeliveryRateToday: number;
-  dailyShipmentSummary: { date: string; name: string; terkirim: number; pending: number }[];
-  weeklyShipmentSummary: WeeklyShipmentSummary[];
-  monthlyPerformanceSummary: MonthlySummaryData[];
+  attendanceRecords: AttendanceRecord[];
+  workRecords: KurirDailyTaskDoc[];
+  userProfiles: UserProfile[];
 }
 
 export interface DashboardData {
     kurirData?: {
+        isCheckedIn: boolean;
         taskData: KurirDailyTaskDoc | null;
         packages: PackageItem[];
+        photoMap: Record<string, string>;
     };
-    managerialData?: {
-        attendanceRecords: AttendanceRecord[];
-        workRecords: KurirDailyTaskDoc[];
-        userProfiles: UserProfile[];
-    };
+    managerialData?: DashboardSummaryData;
+    error?: string;
 }
 
 
@@ -279,5 +275,3 @@ export interface SystemNotification {
   linkTo?: string; // e.g., '/approvals'
   relatedEntityId?: string; // e.g., approval request ID or user UID
 }
-
-    
