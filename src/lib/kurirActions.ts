@@ -22,6 +22,27 @@ function serializeData(doc: admin.firestore.DocumentData): any {
     return serialized;
 }
 
+export async function checkCourierAttendanceStatus(uid: string) {
+  if (!uid) {
+    return { isCheckedIn: false };
+  }
+  const todayDateString = format(new Date(), 'yyyy-MM-dd');
+  const attendanceDocId = `${uid}_${todayDateString}`;
+  try {
+    const attendanceDocRef = adminDb.collection("attendance").doc(attendanceDocId);
+    const attendanceDocSnap = await attendanceDocRef.get();
+
+    if (attendanceDocSnap.exists && attendanceDocSnap.data()?.checkInTime) {
+      return { isCheckedIn: true };
+    }
+    return { isCheckedIn: false };
+  } catch (error) {
+    console.error(`[Server Action] Error checking attendance for ${uid}:`, error);
+    return { isCheckedIn: false, error: 'Gagal memeriksa status di server.' };
+  }
+}
+
+
 export async function getKurirAttendancePageData(kurirUid: string): Promise<KurirAttendancePageData> {
     if (!kurirUid) {
         throw new Error("Kurir UID is required.");
@@ -31,39 +52,42 @@ export async function getKurirAttendancePageData(kurirUid: string): Promise<Kuri
     const history: AttendanceRecord[] = [];
 
     const attendanceColRef = adminDb.collection('attendance');
-    const todayDocRef = attendanceColRef.doc(`${kurirUid}_${todayISO}`);
-    const sixtyDaysAgo = subDays(new Date(), 60);
+    
+    const historyQuerySnap = await attendanceColRef.where('kurirUid', '==', kurirUid).get();
 
-    const [todayDocSnap, historyQuerySnap] = await Promise.all([
-        todayDocRef.get(),
-        attendanceColRef.where('kurirUid', '==', kurirUid).get()
-    ]);
+    historyQuerySnap.forEach(doc => {
+        const record = serializeData(doc) as AttendanceRecord;
+        history.push(record);
+    });
 
-    if (todayDocSnap.exists) {
-        todayRecord = serializeData(todayDocSnap) as AttendanceRecord;
+    const todayDocFromHistory = history.find(rec => rec.date === todayISO);
+
+    if (todayDocFromHistory) {
+        todayRecord = todayDocFromHistory;
     } else {
+        const userDoc = await adminDb.collection('users').doc(kurirUid).get();
+        const userData = userDoc.data();
         todayRecord = { 
             id: `${kurirUid}_${todayISO}`,
             kurirUid,
-            kurirId: '', 
-            kurirName: '',
+            kurirId: userData?.id || '', 
+            kurirName: userData?.fullName || '',
             date: todayISO, 
             status: 'Not Checked In' 
         };
     }
     
-    historyQuerySnap.forEach(doc => {
-        const record = serializeData(doc) as AttendanceRecord;
-        if (record && record.date && isValid(parseISO(record.date)) && parseISO(record.date) >= sixtyDaysAgo) {
-            history.push(record);
-        }
-    });
-
     history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const sixtyDaysAgo = subDays(new Date(), 60);
+    const filteredHistory = history.filter(rec => {
+        if (!rec.date || !isValid(parseISO(rec.date))) return false;
+        return parseISO(rec.date) >= sixtyDaysAgo;
+    });
 
     return {
         todayRecord,
-        history,
+        history: filteredHistory,
     };
 }
 

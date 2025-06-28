@@ -27,6 +27,7 @@ import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDo
 import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
+import { checkCourierAttendanceStatus } from '@/lib/kurirActions';
 
 
 const packageInputSchema = z.object({
@@ -101,15 +102,9 @@ export default function DashboardPage() {
     defaultValues: { totalPackages: 0, codPackages: 0, nonCodPackages: 0 }
   });
 
-  const todayDateString = format(new Date(), 'yyyy-MM-dd');
-
-  // Generate Document ID for daily task
-  const generateDailyTaskDocId = (kurirUid: string) => {
-    return `${kurirUid}_${todayDateString}`;
-  };
-
   // Main effect to initialize dashboard based on user role
   useEffect(() => {
+    const todayDateString = format(new Date(), 'yyyy-MM-dd');
     const initializeDashboard = async () => {
       setIsDashboardLoading(true);
       const userDataString = localStorage.getItem('loggedInUser');
@@ -130,11 +125,13 @@ export default function DashboardPage() {
 
       if (user.role === 'Kurir') {
         try {
-          const attendanceDocId = `${user.uid}_${todayDateString}`;
-          const attendanceDocRef = doc(db, "attendance", attendanceDocId);
-          const attendanceDocSnap = await getDoc(attendanceDocRef);
+          const attendanceStatus = await checkCourierAttendanceStatus(user.uid);
           
-          if (attendanceDocSnap.exists() && attendanceDocSnap.data().checkInTime) {
+          if (attendanceStatus.error) {
+            throw new Error(attendanceStatus.error);
+          }
+
+          if (attendanceStatus.isCheckedIn) {
             setIsCourierCheckedIn(true);
             localStorage.setItem('courierCheckedInToday', todayDateString);
           } else {
@@ -175,12 +172,13 @@ export default function DashboardPage() {
     };
 
     initializeDashboard();
-  }, [toast, todayDateString]);
+  }, [toast]);
   
   // Fetch or create daily task and packages for Kurir
   useEffect(() => {
     if (currentUser?.role === 'Kurir' && currentUser.uid && isCourierCheckedIn === true) {
-      const docId = generateDailyTaskDocId(currentUser.uid);
+      const todayDateString = format(new Date(), 'yyyy-MM-dd');
+      const docId = `${currentUser.uid}_${todayDateString}`;
       setDailyTaskDocId(docId);
       const dailyTaskRef = doc(db, "kurir_daily_tasks", docId);
       const packagesColRef = collection(dailyTaskRef, "packages");
@@ -241,7 +239,7 @@ export default function DashboardPage() {
       };
       fetchDailyData();
     }
-  }, [currentUser, isCourierCheckedIn, setValue, todayDateString, toast, resetPackageInputForm]);
+  }, [currentUser, isCourierCheckedIn, setValue, toast, resetPackageInputForm]);
 
 
     // Effect for cascading dropdowns
@@ -309,7 +307,7 @@ export default function DashboardPage() {
             activities.push({
                 id: `${record.id}-check-in`, kurirName: record.kurirName, kurirId: record.kurirId,
                 action: record.status === 'Late' ? 'check-in-late' : 'check-in',
-                timestamp: (record.checkInTimestamp as Timestamp).toMillis().toString(),
+                timestamp: (record.checkInTimestamp as unknown as Timestamp).toMillis().toString(),
                 location: record.workLocation || 'N/A'
             });
         }
@@ -317,7 +315,7 @@ export default function DashboardPage() {
             activities.push({
                 id: `${record.id}-check-out`, kurirName: record.kurirName, kurirId: record.kurirId,
                 action: 'check-out',
-                timestamp: (record.checkOutTimestamp as Timestamp).toMillis().toString(),
+                timestamp: (record.checkOutTimestamp as unknown as Timestamp).toMillis().toString(),
                 location: record.workLocation || 'N/A'
             });
         }
@@ -328,7 +326,7 @@ export default function DashboardPage() {
       .filter(task => task.taskStatus === 'completed' && task.finishTimestamp)
       .map(task => ({
           id: task.kurirUid + task.date, kurirName: task.kurirFullName, kurirId: task.kurirUid,
-          hubLocation: "N/A", timestamp: (task.finishTimestamp as Timestamp).toMillis().toString(),
+          hubLocation: "N/A", timestamp: (task.finishTimestamp as unknown as Timestamp).toMillis().toString(),
           totalPackagesAssigned: task.totalPackages,
           packagesDelivered: task.finalDeliveredCount || 0,
           packagesPendingOrReturned: task.finalPendingReturnCount || 0,
@@ -487,6 +485,7 @@ export default function DashboardPage() {
         toast({ title: "Error", description: "Informasi kurir tidak ditemukan.", variant: "destructive" });
         return;
     }
+    const todayDateString = format(new Date(), 'yyyy-MM-dd');
     const taskDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId);
     const newTaskData: KurirDailyTaskDoc = {
         kurirUid: currentUser.uid,
@@ -871,6 +870,7 @@ export default function DashboardPage() {
     XLSX.utils.book_append_sheet(workbook, attendanceWorksheet, "Aktivitas Absensi");
     XLSX.utils.book_append_sheet(workbook, workSummaryWorksheet, "Penyelesaian Kerja");
 
+    const todayDateString = format(new Date(), 'yyyy-MM-dd');
     XLSX.writeFile(workbook, `Ringkasan_Dashboard_${todayDateString}.xlsx`);
     toast({ title: "Unduhan Berhasil", description: "Ringkasan dashboard telah diunduh." });
   };
