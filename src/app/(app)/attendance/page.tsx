@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
-import { CheckCircle, XCircle, Clock, CalendarDays, BarChartIcon, ChevronsUpDown, LucideCalendarIcon, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, CalendarDays, BarChartIcon, ChevronsUpDown, CalendarIcon, AlertCircle } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
@@ -289,7 +289,7 @@ export default function AttendancePage() {
                 variant={"outline"}
                 className={("w-full justify-start text-left font-normal md:w-[280px]")}
               >
-                <LucideCalendarIcon className="mr-2 h-4 w-4" />
+                <CalendarIcon className="mr-2 h-4 w-4" />
                 {selectedDate ? format(selectedDate, "PPP", { locale: indonesiaLocale }) : <span>Pilih tanggal</span>}
                 <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 opacity-50" />
               </Button>
