@@ -121,20 +121,21 @@ export default function DashboardPage() {
     if (!currentUser) {
         return;
     }
-
-    // Immediately check localStorage for check-in status to provide a faster UI update.
-    // This avoids waiting for the server action if the user just checked in.
-    if (currentUser.role === 'Kurir') {
-        const todayISO = format(new Date(), 'yyyy-MM-dd');
-        const hasCheckedInLocally = localStorage.getItem('courierCheckedInToday') === todayISO;
-        if (hasCheckedInLocally) {
-            setIsCourierCheckedIn(true);
-        }
-    }
     
     const initializeDashboard = async () => {
       setIsDashboardLoading(true);
+
+      // Optimistic UI update for Kurir from localStorage to provide instant feedback
+      if (currentUser.role === 'Kurir') {
+          const todayISO = format(new Date(), 'yyyy-MM-dd');
+          const hasCheckedInLocally = localStorage.getItem('courierCheckedInToday') === todayISO;
+          if (hasCheckedInLocally) {
+            setIsCourierCheckedIn(true);
+          }
+      }
+
       try {
+        // Fetch authoritative data from server
         const data = await getDashboardData(currentUser.uid, currentUser.role);
 
         if (data.error) {
@@ -143,6 +144,7 @@ export default function DashboardPage() {
 
         if (currentUser.role === 'Kurir') {
           const { isCheckedIn, taskData, packages, photoMap } = data.kurirData || {};
+          // Server data is the source of truth
           setIsCourierCheckedIn(isCheckedIn ?? false);
           
           if (isCheckedIn) {

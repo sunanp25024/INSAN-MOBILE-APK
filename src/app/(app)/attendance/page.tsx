@@ -126,14 +126,31 @@ export default function AttendancePage() {
           timestamp: Timestamp.fromDate(now),
           checkInTimestamp: Timestamp.fromDate(now)
         }, { merge: true });
+
         toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Mengalihkan ke dashboard...` });
+        
+        // This prevents the re-check-in bug if the user navigates back.
+        // It immediately updates the state to show the check-in time.
+        if (pageData?.todayRecord) {
+            setPageData({
+                ...pageData,
+                todayRecord: {
+                    ...pageData.todayRecord,
+                    checkInTime: newRecord.checkInTime,
+                    status: newRecord.status as 'Present' | 'Late'
+                }
+            });
+        }
+        
         localStorage.setItem('courierCheckedInToday', todayISO);
-        router.push('/dashboard');
+        
+        // Use a hard reload to ensure dashboard gets fresh data and re-mounts correctly.
+        window.location.href = '/dashboard';
+
     } catch (error) {
         console.error("Error during check-in: ", error);
         toast({ title: "Check-In Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
-    } finally {
-        setIsSubmitting(false);
+        setIsSubmitting(false); // Only set submitting to false on error
     }
   };
 
