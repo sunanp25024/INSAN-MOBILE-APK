@@ -3,7 +3,7 @@
 
 import { adminDb } from '@/lib/firebaseAdmin';
 import type { KurirAttendancePageData, KurirPerformancePageData, AttendanceRecord, KurirDailyTaskDoc } from '@/types';
-import { format, subDays, startOfWeek, parseISO, isValid } from 'date-fns';
+import { format, subDays, startOfWeek, parseISO, isValid, getWeek } from 'date-fns';
 import { admin } from '@/lib/firebaseAdmin';
 
 function serializeData(doc: admin.firestore.DocumentData): any {
@@ -107,8 +107,8 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
     dailyTasks.forEach(task => {
         const taskDate = parseISO(task.date);
         if(!isValid(taskDate)) return;
-        const weekStart = startOfWeek(taskDate, { weekStartsOn: 1 });
-        const weekLabel = `W-${format(weekStart, 'W')}`;
+        const weekNumber = getWeek(taskDate, { weekStartsOn: 1 });
+        const weekLabel = `W-${weekNumber}`;
         const existing = weeklyPerformanceMap.get(weekLabel) || { delivered: 0, pending: 0 };
         existing.delivered += task.finalDeliveredCount || 0;
         existing.pending += task.finalPendingReturnCount || 0;
