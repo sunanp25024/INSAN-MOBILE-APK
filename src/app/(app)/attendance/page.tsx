@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
@@ -54,6 +55,7 @@ export default function AttendancePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
 
   const todayISO = format(new Date(), 'yyyy-MM-dd');
 
@@ -124,9 +126,9 @@ export default function AttendancePage() {
           timestamp: Timestamp.fromDate(now),
           checkInTimestamp: Timestamp.fromDate(now)
         }, { merge: true });
-        toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Status: ${newRecord.status}.` });
+        toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Mengalihkan ke dashboard...` });
         localStorage.setItem('courierCheckedInToday', todayISO);
-        await fetchAttendanceData(currentUser);
+        router.push('/dashboard');
     } catch (error) {
         console.error("Error during check-in: ", error);
         toast({ title: "Check-In Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
