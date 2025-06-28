@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, Calendar as CalendarIconLucide, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight, Filter as FilterIcon, Download as DownloadIcon, Search as SearchIcon, Briefcase } from 'lucide-react';
+import { Camera, ScanLine, PackagePlus, PackageCheck, PackageX, Upload, Info, Trash2, CheckCircle, XCircle, ChevronsUpDown, CalendarIcon, AlertCircle, UserCheck as UserCheckIcon, UserCog, Users, Package as PackageIcon, Clock, TrendingUp, BarChart2, Activity, UserRoundCheck, UserRoundX, Truck, ListChecks, ArrowLeftRight, Filter as FilterIcon, Download as DownloadIcon, Search as SearchIcon, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { DailyPackageInput, PackageItem, UserProfile, AttendanceActivity, CourierWorkSummaryActivity, DashboardSummaryData, WeeklyShipmentSummary, MonthlySummaryData, Wilayah, Area, Hub, KurirDailyTaskDoc, AttendanceRecord } from '@/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -926,7 +926,7 @@ export default function DashboardPage() {
       <div className="space-y-8">
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center space-x-4">
-            <Avatar className="h-16 w-16"><AvatarImage src={currentUser.avatarUrl || `https://placehold.co/150x150.png?text=${currentUser.fullName.split(" ").map(n=>n[0]).join("")}`} alt={currentUser.fullName} data-ai-hint="man face"/><AvatarFallback>{currentUser.fullName.split(" ").map(n=>n[0]).join("")}</AvatarFallback></Avatar>
+            <Avatar className="h-16 w-16"><AvatarImage src={currentUser.avatarUrl || `https://placehold.co/150x150.png`} alt={currentUser.fullName} data-ai-hint="man face" /><AvatarFallback>{currentUser.fullName.split(" ").map(n=>n[0]).join("")}</AvatarFallback></Avatar>
             <div><CardTitle className="text-2xl">{currentUser.fullName}</CardTitle><CardDescription>{currentUser.id} - {currentUser.workLocation}</CardDescription></div>
           </CardHeader>
         </Card>

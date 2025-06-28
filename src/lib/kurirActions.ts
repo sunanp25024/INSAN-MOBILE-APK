@@ -14,8 +14,10 @@ function serializeData(doc: admin.firestore.DocumentData | admin.firestore.Query
         const value = data[key];
         if (value instanceof admin.firestore.Timestamp) {
             serialized[key] = value.toDate().toISOString();
-        } else if (value instanceof admin.firestore.FieldValue) {
-            serialized[key] = null;
+        } else if (value instanceof admin.firestore.FieldValue || value === undefined) {
+            // Firestore FieldValues (like serverTimestamp) can't be sent to the client.
+            // Map them to null or handle as needed.
+            serialized[key] = null; 
         }
         else {
             serialized[key] = value;
@@ -98,6 +100,7 @@ export async function getKurirAttendancePageData(kurirUid: string): Promise<Kuri
 
     const attendanceColRef = adminDb.collection('attendance');
     
+    // Query based on the UID. This is efficient and doesn't require a complex index.
     const historyQuerySnap = await attendanceColRef.where('kurirUid', '==', kurirUid).get();
 
     historyQuerySnap.forEach(doc => {
@@ -122,9 +125,11 @@ export async function getKurirAttendancePageData(kurirUid: string): Promise<Kuri
         };
     }
     
+    // Sort on the server side after fetching
     history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const sixtyDaysAgo = subDays(new Date(), 60);
+    // Filter by date on the server side
     const filteredHistory = history.filter(rec => {
         if (!rec.date || !isValid(parseISO(rec.date))) return false;
         return parseISO(rec.date) >= sixtyDaysAgo;
@@ -150,9 +155,14 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
         tasksQuery.get(),
         attendanceQuery.get(),
     ]);
-
+    
     const allTasks: KurirDailyTaskDoc[] = tasksSnapshot.docs.map(doc => serializeData(doc) as KurirDailyTaskDoc);
-    const hasAnyTasksInPeriod = allTasks.some(task => task && task.date && isValid(parseISO(task.date)) && parseISO(task.date) >= ninetyDaysAgo);
+    const hasAnyTasksInPeriod = allTasks.some(task => {
+        if (!task || !task.date) return false;
+        const taskDate = parseISO(task.date);
+        return isValid(taskDate) && taskDate >= ninetyDaysAgo;
+    });
+
 
     const dailyTasks: KurirDailyTaskDoc[] = allTasks
         .filter(task => {
@@ -163,7 +173,11 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
 
     const attendanceRecords: AttendanceRecord[] = attendanceSnapshot.docs
         .map(doc => serializeData(doc) as AttendanceRecord)
-        .filter(record => record && record.date && isValid(parseISO(record.date)) && parseISO(record.date) >= ninetyDaysAgo);
+        .filter(record => {
+            if (!record || !record.date) return false;
+            const recordDate = parseISO(record.date);
+            return isValid(recordDate) && recordDate >= ninetyDaysAgo;
+        });
 
     const dailyPerformance = dailyTasks.map(task => ({
         date: task.date,

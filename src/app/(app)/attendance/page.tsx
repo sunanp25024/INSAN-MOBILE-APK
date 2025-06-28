@@ -113,13 +113,17 @@ export default function AttendancePage() {
       date: todayISO,
       checkInTime: format(now, 'HH:mm'),
       status: now.getHours() < 9 ? 'Present' : 'Late',
-      timestamp: Timestamp.fromDate(now),
-      checkInTimestamp: Timestamp.fromDate(now),
+      timestamp: new Date().toISOString(),
+      checkInTimestamp: new Date().toISOString(),
       workLocation: currentUser.workLocation,
     };
 
     try {
-        await setDoc(recordRef, newRecord, { merge: true });
+        await setDoc(recordRef, {
+          ...newRecord,
+          timestamp: Timestamp.fromDate(now),
+          checkInTimestamp: Timestamp.fromDate(now)
+        }, { merge: true });
         toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Status: ${newRecord.status}.` });
         localStorage.setItem('courierCheckedInToday', todayISO);
         await fetchAttendanceData(currentUser);

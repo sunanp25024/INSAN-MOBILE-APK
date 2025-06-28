@@ -9,7 +9,7 @@ import { ResponsiveContainer, BarChart as RechartsBarChart, LineChart, PieChart,
 import { TrendingUp, Package, CheckCircle, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon, AlertCircle, BarChart as BarChartIcon } from 'lucide-react';
 import type { UserProfile, KurirPerformancePageData } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format, parseISO, subDays, isValid } from "date-fns";
+import { format, parseISO, subDays, isValid, getWeek } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import { Skeleton } from '@/components/ui/skeleton';
 import { getKurirPerformanceData } from '@/lib/kurirActions';
@@ -62,7 +62,7 @@ export default function PerformancePage() {
       try {
         if (!item.date) return false;
         const itemDate = parseISO(item.date);
-        return itemDate >= thirtyDaysAgo;
+        return isValid(itemDate) && itemDate >= thirtyDaysAgo;
       } catch (e) { return false; }
     }).map(d => ({...d, name: format(parseISO(d.date), 'dd/MM')})).reverse();
   }, [performanceData]);
