@@ -1,12 +1,11 @@
 
 'use server';
 
-import { adminDb } from '@/lib/firebaseAdmin';
-import type { KurirAttendancePageData, KurirPerformancePageData, AttendanceRecord, KurirDailyTaskDoc } from '@/types';
+import { admin, adminDb } from '@/lib/firebaseAdmin';
+import type { KurirAttendancePageData, KurirPerformancePageData, AttendanceRecord, KurirDailyTaskDoc, PackageItem, DashboardData } from '@/types';
 import { format, subDays, startOfWeek, parseISO, isValid, getWeek } from 'date-fns';
-import { admin } from '@/lib/firebaseAdmin';
 
-function serializeData(doc: admin.firestore.DocumentData): any {
+function serializeData(doc: admin.firestore.DocumentData | admin.firestore.QueryDocumentSnapshot): any {
     const data = doc.data();
     if (!data) return null;
 
@@ -15,7 +14,12 @@ function serializeData(doc: admin.firestore.DocumentData): any {
         const value = data[key];
         if (value instanceof admin.firestore.Timestamp) {
             serialized[key] = value.toDate().toISOString();
-        } else {
+        } else if (value instanceof admin.firestore.FieldValue) {
+            // Firestore FieldValues like serverTimestamp() don't have a serializable value on the client
+            // until after they're written. We'll represent them as null.
+            serialized[key] = null;
+        }
+        else {
             serialized[key] = value;
         }
     }
@@ -40,6 +44,54 @@ export async function checkCourierAttendanceStatus(uid: string) {
     console.error(`[Server Action] Error checking attendance for ${uid}:`, error);
     return { isCheckedIn: false, error: 'Gagal memeriksa status di server.' };
   }
+}
+
+export async function getKurirDashboardData(uid: string): Promise<{ taskData: KurirDailyTaskDoc | null, packages: PackageItem[], photoMap: Record<string, string> }> {
+    const todayDateString = format(new Date(), 'yyyy-MM-dd');
+    const docId = `${uid}_${todayDateString}`;
+    
+    const dailyTaskRef = adminDb.collection("kurir_daily_tasks").doc(docId);
+    const packagesColRef = dailyTaskRef.collection("packages");
+    
+    const taskSnap = await dailyTaskRef.get();
+    
+    if (!taskSnap.exists()) {
+        return { taskData: null, packages: [], photoMap: {} };
+    }
+
+    const taskData = serializeData(taskSnap) as KurirDailyTaskDoc;
+    
+    const packagesQuerySnapshot = await packagesColRef.get();
+    const packages = packagesQuerySnapshot.docs.map(pkgDoc => serializeData(pkgDoc) as PackageItem);
+
+    const photoMap: Record<string, string> = {};
+    packages.forEach(p => {
+        if (p.status === 'delivered' && p.deliveryProofPhotoUrl) {
+            photoMap[p.id] = p.deliveryProofPhotoUrl;
+        }
+    });
+
+    return { taskData, packages, photoMap };
+}
+
+export async function getManagerialDashboardData(): Promise<{ attendanceRecords: AttendanceRecord[], workRecords: KurirDailyTaskDoc[], userProfiles: UserProfile[] }> {
+    const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+    
+    const attendanceQuery = adminDb.collection('attendance').where('date', '>=', ninetyDaysAgo);
+    const workSummaryQuery = adminDb.collection('kurir_daily_tasks').where('date', '>=', ninetyDaysAgo);
+    const usersQuery = adminDb.collection('users').where('role', '==', 'Kurir');
+
+    const [attendanceSnapshot, workSummarySnapshot, usersSnapshot] = await Promise.all([
+        attendanceQuery.get(),
+        workSummaryQuery.get(),
+        usersQuery.get()
+    ]);
+
+    const attendanceRecords = attendanceSnapshot.docs.map(doc => serializeData(doc) as AttendanceRecord);
+    const workRecords = workSummarySnapshot.docs.map(doc => serializeData(doc) as KurirDailyTaskDoc);
+    const userProfiles = usersSnapshot.docs.map(doc => serializeData(doc) as UserProfile);
+
+    return { attendanceRecords, workRecords, userProfiles };
 }
 
 
@@ -161,3 +213,5 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
         hasAnyTasksInPeriod,
     };
 }
+
+    

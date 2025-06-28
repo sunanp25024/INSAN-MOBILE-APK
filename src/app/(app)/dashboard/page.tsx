@@ -27,7 +27,7 @@ import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDo
 import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
-import { checkCourierAttendanceStatus } from '@/lib/kurirActions';
+import { checkCourierAttendanceStatus, getKurirDashboardData, getManagerialDashboardData } from '@/lib/kurirActions';
 
 
 const packageInputSchema = z.object({
@@ -102,67 +102,88 @@ export default function DashboardPage() {
     defaultValues: { totalPackages: 0, codPackages: 0, nonCodPackages: 0 }
   });
 
+  // Effect to set the current user from localStorage
+  useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+        try {
+            const user = JSON.parse(userDataString);
+            setCurrentUser(user);
+        } catch (error) {
+            console.error("Failed to parse user data:", error);
+            setIsDashboardLoading(false);
+        }
+    } else {
+        setIsDashboardLoading(false);
+    }
+  }, []);
+
   // Main effect to initialize dashboard based on user role
   useEffect(() => {
+    if (!currentUser) {
+        // Still waiting for user data to be set from the first effect
+        return;
+    }
+    
     const todayDateString = format(new Date(), 'yyyy-MM-dd');
+    
     const initializeDashboard = async () => {
       setIsDashboardLoading(true);
-      const userDataString = localStorage.getItem('loggedInUser');
-      if (!userDataString) {
-        setIsDashboardLoading(false);
-        return;
-      }
 
-      let user: UserProfile;
-      try {
-        user = JSON.parse(userDataString);
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Failed to parse user data:", error);
-        setIsDashboardLoading(false);
-        return;
-      }
-
-      if (user.role === 'Kurir') {
+      if (currentUser.role === 'Kurir') {
         try {
-          const attendanceStatus = await checkCourierAttendanceStatus(user.uid);
+          const attendanceStatus = await checkCourierAttendanceStatus(currentUser.uid);
+          if (attendanceStatus.error) throw new Error(attendanceStatus.error);
           
-          if (attendanceStatus.error) {
-            throw new Error(attendanceStatus.error);
-          }
-
+          setIsCourierCheckedIn(attendanceStatus.isCheckedIn);
+          localStorage.setItem('courierCheckedInToday', attendanceStatus.isCheckedIn ? todayDateString : 'false');
+          
           if (attendanceStatus.isCheckedIn) {
-            setIsCourierCheckedIn(true);
-            localStorage.setItem('courierCheckedInToday', todayDateString);
-          } else {
-            setIsCourierCheckedIn(false);
-            localStorage.setItem('courierCheckedInToday', 'false');
+             const { taskData, packages, photoMap } = await getKurirDashboardData(currentUser.uid);
+             const docId = `${currentUser.uid}_${todayDateString}`;
+             setDailyTaskDocId(docId);
+             
+             if (taskData) {
+                setDailyTaskData(taskData);
+                setValue("totalPackages", taskData.totalPackages);
+                setValue("codPackages", taskData.codPackages);
+                setValue("nonCodPackages", taskData.nonCodPackages);
+                
+                if (taskData.taskStatus === 'in_progress' || taskData.taskStatus === 'completed') setDeliveryStarted(true);
+                if (taskData.taskStatus === 'completed') {
+                    setDayFinished(true);
+                    setReturnProofPhotoDataUrl(taskData.finalReturnProofPhotoUrl || null);
+                    setReturnLeadReceiverName(taskData.finalReturnLeadReceiverName || '');
+                }
+
+                if (taskData.taskStatus === 'pending_setup') {
+                  setManagedPackages(packages.filter(p => p.status === 'process'));
+                } else {
+                  setInTransitPackages(packages.filter(p => p.status === 'in_transit' || p.status === 'delivered'));
+                  setPendingReturnPackages(packages.filter(p => p.status === 'pending_return' || p.status === 'returned'));
+                  setPackagePhotoMap(photoMap);
+                }
+             } else {
+                // No task for today, ready for new input
+                setDailyTaskData(null);
+                setManagedPackages([]);
+                setInTransitPackages([]);
+                setPendingReturnPackages([]);
+                setDeliveryStarted(false);
+                setDayFinished(false);
+                resetPackageInputForm();
+             }
           }
-        } catch (error) {
-          console.error("Error checking courier attendance status:", error);
-          toast({ title: "Error", description: "Gagal memeriksa status absensi.", variant: "destructive" });
-          setIsCourierCheckedIn(false);
+        } catch (error: any) {
+          console.error("Error initializing Kurir dashboard:", error);
+          toast({ title: "Error", description: `Gagal memuat data dashboard: ${error.message}`, variant: "destructive" });
         }
-      } else {
+      } else { // For Admin, MasterAdmin, PIC roles
         try {
-            const ninetyDaysAgo = format(subDays(new Date(), 90), 'yyyy-MM-dd');
-            const attendanceQuery = query(collection(db, 'attendance'), where('date', '>=', ninetyDaysAgo));
-            const workSummaryQuery = query(collection(db, 'kurir_daily_tasks'), where('date', '>=', ninetyDaysAgo));
-            const usersQuery = query(collection(db, 'users'), where('role', '==', 'Kurir'));
-
-            const [attendanceSnapshot, workSummarySnapshot, usersSnapshot] = await Promise.all([
-                getDocs(attendanceQuery),
-                getDocs(workSummaryQuery),
-                getDocs(usersQuery)
-            ]);
-
-            const fetchedAttendanceRecords = attendanceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceRecord));
-            const fetchedWorkRecords = workSummarySnapshot.docs.map(doc => doc.data() as KurirDailyTaskDoc);
-            const fetchedUserProfiles = usersSnapshot.docs.map(doc => doc.data() as UserProfile);
-
-            setAllAttendanceRecords(fetchedAttendanceRecords);
-            setAllWorkRecords(fetchedWorkRecords);
-            setAllUserProfiles(fetchedUserProfiles);
+            const { attendanceRecords, workRecords, userProfiles } = await getManagerialDashboardData();
+            setAllAttendanceRecords(attendanceRecords);
+            setAllWorkRecords(workRecords);
+            setAllUserProfiles(userProfiles);
         } catch (error: any) {
             console.error("Error fetching managerial dashboard data:", error);
             toast({ title: "Error", description: "Gagal memuat data dashboard.", variant: "destructive"});
@@ -172,75 +193,8 @@ export default function DashboardPage() {
     };
 
     initializeDashboard();
-  }, [toast]);
+  }, [currentUser, toast, setValue, resetPackageInputForm]);
   
-  // Fetch or create daily task and packages for Kurir
-  useEffect(() => {
-    if (currentUser?.role === 'Kurir' && currentUser.uid && isCourierCheckedIn === true) {
-      const todayDateString = format(new Date(), 'yyyy-MM-dd');
-      const docId = `${currentUser.uid}_${todayDateString}`;
-      setDailyTaskDocId(docId);
-      const dailyTaskRef = doc(db, "kurir_daily_tasks", docId);
-      const packagesColRef = collection(dailyTaskRef, "packages");
-
-      const fetchDailyData = async () => {
-        try {
-          const taskSnap = await getDoc(dailyTaskRef);
-          if (taskSnap.exists()) {
-            const taskData = taskSnap.data() as KurirDailyTaskDoc;
-            setDailyTaskData(taskData);
-            setValue("totalPackages", taskData.totalPackages);
-            setValue("codPackages", taskData.codPackages);
-            setValue("nonCodPackages", taskData.nonCodPackages);
-            
-            if (taskData.taskStatus === 'in_progress' || taskData.taskStatus === 'completed') {
-              setDeliveryStarted(true);
-            }
-            if (taskData.taskStatus === 'completed') {
-              setDayFinished(true);
-              setReturnProofPhotoDataUrl(taskData.finalReturnProofPhotoUrl || null);
-              setReturnLeadReceiverName(taskData.finalReturnLeadReceiverName || '');
-            }
-
-            // Fetch packages
-            const packagesQuerySnapshot = await getDocs(packagesColRef);
-            const fetchedPackages: PackageItem[] = [];
-            packagesQuerySnapshot.forEach((pkgDoc) => {
-              fetchedPackages.push({ id: pkgDoc.id, ...pkgDoc.data() } as PackageItem);
-            });
-
-            if (taskData.taskStatus === 'pending_setup') {
-              setManagedPackages(fetchedPackages.filter(p => p.status === 'process'));
-            } else if (taskData.taskStatus === 'in_progress' || taskData.taskStatus === 'completed') {
-              setInTransitPackages(fetchedPackages.filter(p => p.status === 'in_transit' || p.status === 'delivered'));
-              setPendingReturnPackages(fetchedPackages.filter(p => p.status === 'pending_return' || p.status === 'returned'));
-              
-              const photoMap: Record<string, string> = {};
-              fetchedPackages.filter(p => p.status === 'delivered' && p.deliveryProofPhotoUrl).forEach(p => {
-                photoMap[p.id] = p.deliveryProofPhotoUrl!;
-              });
-              setPackagePhotoMap(photoMap);
-            }
-
-          } else {
-            // No task for today, ready for new input
-            setDailyTaskData(null);
-            setManagedPackages([]);
-            setInTransitPackages([]);
-            setPendingReturnPackages([]);
-            setDeliveryStarted(false);
-            setDayFinished(false);
-            resetPackageInputForm();
-          }
-        } catch (error) {
-          console.error("Error fetching daily task:", error);
-          toast({ title: "Error", description: "Gagal memuat data harian.", variant: "destructive" });
-        }
-      };
-      fetchDailyData();
-    }
-  }, [currentUser, isCourierCheckedIn, setValue, toast, resetPackageInputForm]);
-
 
     // Effect for cascading dropdowns
   useEffect(() => {
@@ -307,7 +261,7 @@ export default function DashboardPage() {
             activities.push({
                 id: `${record.id}-check-in`, kurirName: record.kurirName, kurirId: record.kurirId,
                 action: record.status === 'Late' ? 'check-in-late' : 'check-in',
-                timestamp: (record.checkInTimestamp as unknown as Timestamp).toMillis().toString(),
+                timestamp: record.checkInTimestamp,
                 location: record.workLocation || 'N/A'
             });
         }
@@ -315,22 +269,22 @@ export default function DashboardPage() {
             activities.push({
                 id: `${record.id}-check-out`, kurirName: record.kurirName, kurirId: record.kurirId,
                 action: 'check-out',
-                timestamp: (record.checkOutTimestamp as unknown as Timestamp).toMillis().toString(),
+                timestamp: record.checkOutTimestamp,
                 location: record.workLocation || 'N/A'
             });
         }
         return activities;
-    }).sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
+    }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     
     const courierWorkSummaries = workRecordsToday
       .filter(task => task.taskStatus === 'completed' && task.finishTimestamp)
       .map(task => ({
           id: task.kurirUid + task.date, kurirName: task.kurirFullName, kurirId: task.kurirUid,
-          hubLocation: "N/A", timestamp: (task.finishTimestamp as unknown as Timestamp).toMillis().toString(),
+          hubLocation: "N/A", timestamp: task.finishTimestamp,
           totalPackagesAssigned: task.totalPackages,
           packagesDelivered: task.finalDeliveredCount || 0,
           packagesPendingOrReturned: task.finalPendingReturnCount || 0,
-      })).sort((a,b) => parseInt(b.timestamp) - parseInt(a.timestamp));
+      })).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
 
     // --- Process Data for Charts ---
@@ -344,7 +298,9 @@ export default function DashboardPage() {
     }).reverse();
 
     const weeklyShipmentSummary = finalFilteredWorkRecords.reduce((acc, task) => {
-        const weekNum = `W${getWeek(parseISO(task.date), { weekStartsOn: 1 })}`;
+        const taskDate = parseISO(task.date);
+        if(!isValid(taskDate)) return acc;
+        const weekNum = `W${getWeek(taskDate, { weekStartsOn: 1 })}`;
         if (!acc[weekNum]) acc[weekNum] = { week: weekNum, terkirim: 0, pending: 0 };
         acc[weekNum].terkirim += task.finalDeliveredCount || 0;
         acc[weekNum].pending += task.finalPendingReturnCount || 0;
@@ -352,7 +308,9 @@ export default function DashboardPage() {
     }, {} as Record<string, WeeklyShipmentSummary>);
 
     const monthlyPerformanceSummary = finalFilteredWorkRecords.reduce((acc, task) => {
-        const monthName = format(parseISO(task.date), 'MMMM', { locale: indonesiaLocale });
+        const taskDate = parseISO(task.date);
+        if(!isValid(taskDate)) return acc;
+        const monthName = format(taskDate, 'MMMM', { locale: indonesiaLocale });
         if (!acc[monthName]) acc[monthName] = { month: monthName, totalDelivered: 0, totalPending: 0, successRate: 0 };
         acc[monthName].totalDelivered += task.finalDeliveredCount || 0;
         acc[monthName].totalPending += task.finalPendingReturnCount || 0;
@@ -370,7 +328,7 @@ export default function DashboardPage() {
         attendanceActivities,
         courierWorkSummaries,
     };
-  }, [allWorkRecords, allAttendanceRecords, allUserProfiles, selectedWilayah, selectedArea, selectedHub, searchKurir]);
+  }, [allWorkRecords, allAttendanceRecords, allUserProfiles, selectedWilayah, selectedArea, selectedHub, searchKurir, areaOptions, hubOptions]);
 
   useEffect(() => {
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
@@ -799,7 +757,7 @@ export default function DashboardPage() {
 
   const formatActivityTimestamp = (timestamp: string): string => { 
       try {
-        const date = new Date(parseInt(timestamp));
+        const date = new Date(timestamp);
         if (isNaN(date.getTime())) return "Waktu tidak valid";
         const now = new Date();
         const diffInMinutes = (now.getTime() - date.getTime()) / (1000 * 60);
@@ -1123,3 +1081,5 @@ export default function DashboardPage() {
   )
 
 }
+
+    

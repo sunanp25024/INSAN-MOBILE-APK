@@ -101,10 +101,10 @@ export interface AttendanceRecord {
   checkInTime?: string; // 'HH:mm'
   checkOutTime?: string; // 'HH:mm'
   status: 'Present' | 'Absent' | 'Late' | 'Not Checked In';
-  timestamp?: any; // Firestore ServerTimestamp for sorting or Date object
+  timestamp?: string; // ISO string from firestore timestamp
   workLocation?: string;
-  checkInTimestamp?: any; // Firestore Timestamp for precise check-in time
-  checkOutTimestamp?: any; // Firestore Timestamp for precise check-out time
+  checkInTimestamp?: string; // ISO string from firestore timestamp
+  checkOutTimestamp?: string; // ISO string from firestore timestamp
 }
 
 export interface KurirAttendancePageData {
@@ -140,7 +140,7 @@ export interface AttendanceActivity {
   kurirId: string; 
   kurirUid?: string; 
   action: 'check-in' | 'check-out' | 'check-in-late';
-  timestamp: string; // Milliseconds as a string
+  timestamp: string; // ISO string
   location?: string; 
 }
 
@@ -162,7 +162,7 @@ export interface CourierWorkSummaryActivity {
   kurirId: string; 
   kurirUid?: string; 
   hubLocation: string; 
-  timestamp: string; 
+  timestamp: string; // ISO string
   totalPackagesAssigned: number;
   packagesDelivered: number;
   packagesPendingOrReturned: number;
@@ -178,6 +178,19 @@ export interface DashboardSummaryData {
   weeklyShipmentSummary: WeeklyShipmentSummary[];
   monthlyPerformanceSummary: MonthlySummaryData[];
 }
+
+export interface DashboardData {
+    kurirData?: {
+        taskData: KurirDailyTaskDoc | null;
+        packages: PackageItem[];
+    };
+    managerialData?: {
+        attendanceRecords: AttendanceRecord[];
+        workRecords: KurirDailyTaskDoc[];
+        userProfiles: UserProfile[];
+    };
+}
+
 
 export interface MonthlySummaryData {
   month: string;
@@ -266,3 +279,5 @@ export interface SystemNotification {
   linkTo?: string; // e.g., '/approvals'
   relatedEntityId?: string; // e.g., approval request ID or user UID
 }
+
+    
