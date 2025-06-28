@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { ResponsiveContainer, BarChart as RechartsBarChart, LineChart, PieChart, Pie, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
-import { TrendingUp, Package, CheckCircle, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon as LucideCalendarIcon, AlertCircle, BarChart as BarChartIcon } from 'lucide-react';
+import { TrendingUp, Package, CheckCircle, Clock, UserCheck, CalendarDays, ChevronsUpDown, CalendarIcon, AlertCircle, BarChart as BarChartIcon } from 'lucide-react';
 import type { UserProfile, KurirPerformancePageData } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format, parseISO, subDays, isValid } from "date-fns";
@@ -60,6 +60,7 @@ export default function PerformancePage() {
     const thirtyDaysAgo = subDays(new Date(), 30);
     return performanceData.daily.filter(item => {
       try {
+        if (!item.date) return false;
         const itemDate = parseISO(item.date);
         return itemDate >= thirtyDaysAgo;
       } catch (e) { return false; }
@@ -174,7 +175,7 @@ export default function PerformancePage() {
                         variant={"outline"}
                         className="w-full sm:w-auto justify-start text-left font-normal mt-2 sm:mt-0"
                     >
-                        <LucideCalendarIcon className="mr-2 h-4 w-4" />
+                        <CalendarIcon className="mr-2 h-4 w-4" />
                         {selectedDate ? format(selectedDate, "PPP", { locale: indonesiaLocale }) : <span>Pilih tanggal</span>}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50"/>
                     </Button>
@@ -216,7 +217,13 @@ export default function PerformancePage() {
               </div>
             </div>
           ) : (
-            <p className="text-muted-foreground text-center py-4">{selectedDate ? 'Tidak ada data pengiriman selesai untuk tanggal ini.' : 'Pilih tanggal untuk melihat detail performa.'}</p>
+            <div className="text-center py-4 text-muted-foreground flex flex-col items-center justify-center">
+                <Package className="h-10 w-10 mb-3 text-muted-foreground/50"/>
+                 <h3 className="font-semibold text-lg text-foreground mb-1">Tidak Ada Data Pengiriman</h3>
+                 <p className="text-sm">
+                    {selectedDate ? 'Tidak ada tugas yang selesai pada tanggal yang dipilih.' : 'Pilih tanggal untuk melihat detail performa.'}
+                </p>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -248,7 +255,15 @@ export default function PerformancePage() {
               </RechartsBarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">Tidak ada data untuk ditampilkan.</div>
+             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
+              <BarChartIcon className="h-12 w-12 text-muted-foreground/30 mb-3" />
+              <h3 className="font-semibold text-lg text-foreground">Data Grafik Kosong</h3>
+              {performanceData?.hasAnyTasksInPeriod ? (
+                <p className="text-sm">Belum ada tugas yang selesai dalam 30 hari terakhir. Selesaikan tugas harian Anda dan grafik akan muncul di sini.</p>
+              ) : (
+                <p className="text-sm">Anda belum memiliki riwayat pekerjaan dalam 90 hari terakhir.</p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -280,7 +295,15 @@ export default function PerformancePage() {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">Tidak cukup data untuk tren mingguan.</div>
+            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
+              <TrendingUp className="h-12 w-12 text-muted-foreground/30 mb-3" />
+              <h3 className="font-semibold text-lg text-foreground">Data Tren Mingguan Kosong</h3>
+               {performanceData?.hasAnyTasksInPeriod ? (
+                <p className="text-sm">Belum ada cukup data pekerjaan yang selesai untuk menampilkan tren mingguan.</p>
+              ) : (
+                <p className="text-sm">Anda belum memiliki riwayat pekerjaan dalam 90 hari terakhir.</p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

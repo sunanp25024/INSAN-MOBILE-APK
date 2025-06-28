@@ -54,7 +54,7 @@ export async function getKurirAttendancePageData(kurirUid: string): Promise<Kuri
     
     historyQuerySnap.forEach(doc => {
         const record = serializeData(doc) as AttendanceRecord;
-        if (record && isValid(parseISO(record.date)) && parseISO(record.date) >= sixtyDaysAgo) {
+        if (record && record.date && isValid(parseISO(record.date)) && parseISO(record.date) >= sixtyDaysAgo) {
             history.push(record);
         }
     });
@@ -82,14 +82,19 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
         attendanceQuery.get(),
     ]);
 
-    const dailyTasks: KurirDailyTaskDoc[] = tasksSnapshot.docs
-        .map(doc => serializeData(doc) as KurirDailyTaskDoc)
-        .filter(task => task && isValid(parseISO(task.date)) && parseISO(task.date) >= ninetyDaysAgo && task.taskStatus === 'completed')
+    const allTasks: KurirDailyTaskDoc[] = tasksSnapshot.docs.map(doc => serializeData(doc) as KurirDailyTaskDoc);
+    const hasAnyTasksInPeriod = allTasks.some(task => task && task.date && isValid(parseISO(task.date)) && parseISO(task.date) >= ninetyDaysAgo);
+
+    const dailyTasks: KurirDailyTaskDoc[] = allTasks
+        .filter(task => {
+            if (!task || !task.date || !isValid(parseISO(task.date))) return false;
+            return parseISO(task.date) >= ninetyDaysAgo && task.taskStatus === 'completed';
+        })
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const attendanceRecords: AttendanceRecord[] = attendanceSnapshot.docs
         .map(doc => serializeData(doc) as AttendanceRecord)
-        .filter(record => record && isValid(parseISO(record.date)) && parseISO(record.date) >= ninetyDaysAgo);
+        .filter(record => record && record.date && isValid(parseISO(record.date)) && parseISO(record.date) >= ninetyDaysAgo);
 
     const dailyPerformance = dailyTasks.map(task => ({
         date: task.date,
@@ -101,6 +106,7 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
     const weeklyPerformanceMap = new Map<string, { delivered: number, pending: number }>();
     dailyTasks.forEach(task => {
         const taskDate = parseISO(task.date);
+        if(!isValid(taskDate)) return;
         const weekStart = startOfWeek(taskDate, { weekStartsOn: 1 });
         const weekLabel = `W-${format(weekStart, 'W')}`;
         const existing = weeklyPerformanceMap.get(weekLabel) || { delivered: 0, pending: 0 };
@@ -114,7 +120,7 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
         .sort((a, b) => a.weekLabel.localeCompare(b.weekLabel));
 
     const totalAttendanceDays = attendanceRecords.filter(rec => rec.status === 'Present' || rec.status === 'Late').length;
-    const totalWorkingDays = dailyTasks.length; 
+    const totalWorkingDays = new Set(attendanceRecords.map(rec => rec.date)).size;
     const attendanceRate = totalWorkingDays > 0 ? (totalAttendanceDays / totalWorkingDays) * 100 : 0;
     
     const overall = dailyTasks.reduce((acc, task) => {
@@ -128,5 +134,6 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
         weekly: weeklyPerformance,
         attendance: { totalAttendanceDays, totalWorkingDays, attendanceRate },
         overall: overall,
+        hasAnyTasksInPeriod,
     };
 }

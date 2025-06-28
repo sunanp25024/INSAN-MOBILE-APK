@@ -117,6 +117,7 @@ export interface KurirPerformancePageData {
   weekly: { weekLabel: string; delivered: number; pending: number; }[];
   attendance: { totalAttendanceDays: number; totalWorkingDays: number; attendanceRate: number; };
   overall: { totalPackagesEver: number; totalSuccessfulDeliveriesEver: number; };
+  hasAnyTasksInPeriod: boolean;
 }
 
 
