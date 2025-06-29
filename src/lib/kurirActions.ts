@@ -220,3 +220,30 @@ export async function getKurirPerformanceData(kurirUid: string): Promise<KurirPe
         hasAnyTasksInPeriod,
     };
 }
+
+
+export async function getKurirTaskHistory(kurirUid: string, date: string): Promise<{ task: KurirDailyTaskDoc | null; packages: PackageItem[] }> {
+    if (!kurirUid || !date) {
+        return { task: null, packages: [] };
+    }
+
+    try {
+        const dailyTaskDocId = `${kurirUid}_${date}`;
+        const taskDocRef = adminDb.collection('kurir_daily_tasks').doc(dailyTaskDocId);
+        const taskSnap = await taskDocRef.get();
+
+        if (!taskSnap.exists) {
+            return { task: null, packages: [] };
+        }
+
+        const taskData = serializeData(taskSnap) as KurirDailyTaskDoc;
+        const packagesSnapshot = await taskDocRef.collection('packages').get();
+        const packagesData = packagesSnapshot.docs.map(doc => serializeData(doc) as PackageItem);
+
+        return { task: taskData, packages: packagesData };
+
+    } catch (error: any) {
+        console.error(`[Server Action] Error getting task history for UID ${kurirUid} on ${date}:`, error);
+        return { task: null, packages: [] };
+    }
+}
