@@ -57,10 +57,11 @@ export async function getAggregatedDeliveryData(days: number = 90): Promise<any[
         dateLimit.setDate(dateLimit.getDate() - days);
 
         // A collection group query is efficient for fetching all subcollection documents.
+        // The orderBy clause is removed to prevent the FAILED_PRECONDITION error that
+        // occurs when a composite index is required but not present. We will sort in-memory.
         const packagesSnapshot = await adminDb.collectionGroup('packages')
             .where('lastUpdateTime', '>=', admin.firestore.Timestamp.fromDate(dateLimit))
-            .orderBy('lastUpdateTime', 'desc')
-            .limit(1000) // A reasonable limit to prevent excessive data transfer
+            .limit(2000) // Fetch more to sort and get the latest, as order is not guaranteed
             .get();
 
         if (packagesSnapshot.empty) {
@@ -85,7 +86,7 @@ export async function getAggregatedDeliveryData(days: number = 90): Promise<any[
         });
 
         // Now, combine package data with its corresponding parent task data.
-        const aggregatedData = packagesSnapshot.docs.map(doc => {
+        let aggregatedData = packagesSnapshot.docs.map(doc => {
             const packageData = serializeData(doc);
             const taskDocId = doc.ref.parent.parent!.id;
             const taskData = tasksMap.get(taskDocId);
@@ -102,7 +103,15 @@ export async function getAggregatedDeliveryData(days: number = 90): Promise<any[
             };
         }).filter(item => item.kurirId !== 'N/A'); // Ensure data consistency
 
-        return aggregatedData;
+        // Sort in-memory on the server to show the most recent items first.
+        aggregatedData.sort((a, b) => {
+            const timeA = a.lastUpdateTime ? new Date(a.lastUpdateTime).getTime() : 0;
+            const timeB = b.lastUpdateTime ? new Date(b.lastUpdateTime).getTime() : 0;
+            return timeB - timeA;
+        });
+
+
+        return aggregatedData.slice(0, 1000); // Return up to 1000 most recent records
     } catch (error: any) {
         console.error("[Server Action] Error aggregating delivery data:", error);
         // This error often indicates a missing composite index in Firestore.
