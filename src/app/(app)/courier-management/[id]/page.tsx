@@ -6,12 +6,21 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Mail, CalendarDays, User, MapPin, FileText, Briefcase, Phone, Package, Percent, ShieldAlert, Users as UsersIcon, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Mail, CalendarDays, User, MapPin, FileText, Briefcase, Phone, Package, Percent, ShieldAlert, Users as UsersIcon, ClipboardList, AlertCircle, Calendar as CalendarIcon, PackageSearch, ZoomIn, PackageX as PackageReturnedIcon } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import type { UserProfile } from '@/types';
+import type { UserProfile, KurirDailyTaskDoc, PackageItem } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format, parseISO, isValid } from 'date-fns';
+import { id as indonesiaLocale } from 'date-fns/locale';
+import Image from 'next/image';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+import { getKurirTaskHistory } from '@/lib/kurirActions';
+
 
 function DetailItem({ icon: Icon, label, value }: { icon: React.ElementType, label: string, value?: string | React.ReactNode }) {
   if (value === undefined || value === null || value === '') return null;
@@ -30,7 +39,26 @@ export default function CourierDetailPage() {
   const router = useRouter();
   const params = useParams();
   const courierId = params.id as string;
+  const { toast } = useToast();
+  
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [courier, setCourier] = useState<UserProfile | null | undefined>(undefined);
+
+  // State for task history
+  const [selectedTaskDate, setSelectedTaskDate] = useState<Date | undefined>();
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [taskHistory, setTaskHistory] = useState<{ task: KurirDailyTaskDoc | null; packages: PackageItem[] } | null>(null);
+
+  // State for image preview
+  const [selectedImage, setSelectedImage] = useState<{ src: string, alt: string } | null>(null);
+
+  useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      setCurrentUser(JSON.parse(userDataString) as UserProfile);
+    }
+  }, []);
 
   useEffect(() => {
     if (courierId) {
@@ -57,6 +85,33 @@ export default function CourierDetailPage() {
       fetchCourier();
     }
   }, [courierId]);
+
+  useEffect(() => {
+    if (selectedTaskDate && courier?.uid) {
+        const fetchHistory = async () => {
+            setIsLoadingHistory(true);
+            try {
+                const dateString = format(selectedTaskDate, 'yyyy-MM-dd');
+                const historyData = await getKurirTaskHistory(courier.uid, dateString);
+                setTaskHistory(historyData);
+            } catch (error) {
+                console.error("Error fetching task history:", error);
+                toast({
+                    title: "Gagal Memuat Riwayat",
+                    description: "Terjadi kesalahan saat mengambil riwayat tugas kurir.",
+                    variant: "destructive",
+                });
+            } finally {
+                setIsLoadingHistory(false);
+            }
+        };
+        fetchHistory();
+    }
+  }, [selectedTaskDate, courier?.uid, toast]);
+
+  const handleImageClick = (src: string, alt: string) => {
+    setSelectedImage({ src, alt });
+  };
   
   if (courier === undefined) {
     return (
@@ -103,6 +158,19 @@ export default function CourierDetailPage() {
       </div>
     );
   }
+  
+  if (currentUser && !['MasterAdmin', 'Admin', 'PIC'].includes(currentUser.role)) {
+    return (
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="text-2xl text-primary flex items-center"><AlertCircle className="mr-2 h-6 w-6"/>Akses Ditolak</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p>Anda tidak memiliki izin untuk melihat halaman ini.</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const userInitials = courier.fullName?.split(" ").map(n => n[0]).join("").toUpperCase() || "XX";
 
@@ -146,14 +214,115 @@ export default function CourierDetailPage() {
             <DetailItem icon={Package} label="Wilayah" value={courier.wilayah || "N/A"} />
             <DetailItem icon={Percent} label="Area" value={courier.area || "N/A"} />
           </div>
-          
-          <Separator className="my-6" />
-          
-          <CardDescription className="text-center text-xs italic">
-             Halaman ini bersifat lihat-saja (view only) untuk PIC. Perubahan data kurir dilakukan oleh Admin atau MasterAdmin. Untuk melihat bukti pengiriman, gunakan menu "Bukti Pengiriman" di sidebar.
-          </CardDescription>
         </CardContent>
       </Card>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center"><PackageSearch className="mr-2 h-5 w-5 text-primary"/>Riwayat Tugas & Bukti Pengiriman</CardTitle>
+          <CardDescription>Pilih tanggal untuk melihat riwayat tugas dan bukti pengiriman kurir ini.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+           <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+              <PopoverTrigger asChild>
+                  <Button variant={"outline"} className="w-full justify-start text-left font-normal md:w-[280px]">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {selectedTaskDate ? format(selectedTaskDate, "PPP", { locale: indonesiaLocale }) : <span>Pilih tanggal tugas</span>}
+                  </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                      mode="single"
+                      selected={selectedTaskDate}
+                      onSelect={(date) => { setSelectedTaskDate(date); setIsCalendarOpen(false); }}
+                      disabled={(date) => date > new Date() || date < new Date("2023-01-01")}
+                      initialFocus
+                  />
+              </PopoverContent>
+          </Popover>
+
+          {isLoadingHistory && <p>Memuat riwayat...</p>}
+
+          {!isLoadingHistory && selectedTaskDate && (!taskHistory?.task) && (
+             <p className="text-muted-foreground text-center py-4">Tidak ada data tugas untuk tanggal yang dipilih.</p>
+          )}
+
+          {taskHistory?.task && (
+            <div className="space-y-6 mt-4">
+              <Separator />
+               {/* Delivered Packages Section */}
+                <div>
+                    <h4 className="text-lg font-semibold mb-2">Paket Terkirim ({taskHistory.packages.filter(p=>p.status === 'delivered').length})</h4>
+                    {taskHistory.packages.filter(p=>p.status === 'delivered').length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {taskHistory.packages.filter(p => p.status === 'delivered').map(pkg => (
+                            <Card key={pkg.id} className="overflow-hidden">
+                                <CardContent className="p-3">
+                                    <p className="font-semibold text-sm break-all">{pkg.id}</p>
+                                    <p className="text-xs text-muted-foreground">Penerima: {pkg.recipientName || 'N/A'}</p>
+                                    {pkg.deliveryProofPhotoUrl ? (
+                                        <div className="mt-2 relative aspect-video cursor-pointer group" onClick={() => handleImageClick(pkg.deliveryProofPhotoUrl!, `Bukti untuk ${pkg.id}`)}>
+                                            <Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti untuk ${pkg.id}`} layout="fill" objectFit="cover" className="rounded-md" data-ai-hint="package door"/>
+                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <ZoomIn className="h-8 w-8 text-white"/>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="mt-2 aspect-video bg-muted rounded-md flex items-center justify-center text-xs text-muted-foreground">Foto tidak tersedia</div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        ))}
+                      </div>
+                    ) : <p className="text-sm text-muted-foreground">Tidak ada paket terkirim pada tanggal ini.</p>}
+                </div>
+
+                {/* Returned Packages Section */}
+                <div>
+                  <h4 className="text-lg font-semibold mb-2">Paket Pending/Retur ({taskHistory.packages.filter(p=>p.status === 'returned').length})</h4>
+                  {taskHistory.packages.filter(p=>p.status === 'returned').length > 0 && taskHistory.task.finalReturnProofPhotoUrl ? (
+                     <Card className="max-w-md">
+                        <CardHeader>
+                            <CardTitle className="text-base flex items-center"><PackageReturnedIcon className="mr-2 h-4 w-4"/>Bukti Serah Terima Retur</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="relative aspect-video cursor-pointer group mb-2" onClick={() => handleImageClick(taskHistory.task!.finalReturnProofPhotoUrl!, `Bukti Retur`)}>
+                                <Image src={taskHistory.task.finalReturnProofPhotoUrl} alt="Bukti Retur" layout="fill" objectFit="cover" className="rounded-md" data-ai-hint="receipt package" />
+                                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <ZoomIn className="h-8 w-8 text-white"/>
+                                </div>
+                            </div>
+                            <p className="text-sm">Diserahkan kepada Leader: <span className="font-semibold">{taskHistory.task.finalReturnLeadReceiverName || 'N/A'}</span></p>
+                             <p className="text-xs text-muted-foreground mt-2">Resi yang diretur:</p>
+                             <ul className="list-disc list-inside text-xs text-muted-foreground">
+                                {taskHistory.packages.filter(p => p.status === 'returned').map(p => <li key={p.id}>{p.id}</li>)}
+                             </ul>
+                        </CardContent>
+                     </Card>
+                  ) : taskHistory.packages.filter(p=>p.status === 'returned').length > 0 ? (
+                      <p className="text-sm text-muted-foreground">Ada {taskHistory.packages.filter(p=>p.status === 'returned').length} paket yang diretur tetapi tidak ada bukti foto serah terima yang diunggah.</p>
+                  ) : <p className="text-sm text-muted-foreground">Tidak ada paket yang diretur pada tanggal ini.</p>}
+                </div>
+
+            </div>
+          )}
+
+        </CardContent>
+      </Card>
+      
+       <Dialog open={!!selectedImage} onOpenChange={(isOpen) => !isOpen && setSelectedImage(null)}>
+          <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                  <DialogTitle>{selectedImage?.alt}</DialogTitle>
+              </DialogHeader>
+              {selectedImage && (
+                  <div className="mt-4 flex justify-center">
+                    <Image src={selectedImage.src} alt={selectedImage.alt} width={800} height={600} className="max-w-full h-auto max-h-[80vh] rounded-lg object-contain" data-ai-hint="package receipt"/>
+                  </div>
+              )}
+          </DialogContent>
+        </Dialog>
+
     </div>
   );
 }

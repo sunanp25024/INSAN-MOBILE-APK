@@ -27,7 +27,7 @@ export default function CourierManagementPage() {
     if (userDataString) {
       const user = JSON.parse(userDataString) as UserProfile;
       setCurrentUser(user);
-      if (user.role === 'PIC') {
+       if (['MasterAdmin', 'Admin', 'PIC'].includes(user.role)) {
         fetchCouriers();
       } else {
         setIsLoading(false);
@@ -65,18 +65,18 @@ export default function CourierManagementPage() {
     setFilteredCouriers(results);
   }, [searchTerm, couriers]);
   
-  if (!currentUser) {
+  if (isLoading) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
 
-  if (currentUser.role !== 'PIC') {
+  if (!currentUser || !['MasterAdmin', 'Admin', 'PIC'].includes(currentUser.role)) {
      return (
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl text-primary flex items-center"><AlertCircle className="mr-2 h-6 w-6"/>Akses Terbatas</CardTitle>
         </CardHeader>
         <CardContent>
-          <p>Halaman ini hanya tersedia untuk peran PIC.</p>
+          <p>Halaman ini hanya tersedia untuk peran manajerial (PIC, Admin, MasterAdmin).</p>
         </CardContent>
       </Card>
     );
@@ -91,8 +91,8 @@ export default function CourierManagementPage() {
             Manajemen & Monitoring Kurir (View Only)
           </CardTitle>
           <CardDescription>
-            Pantau aktivitas dan performa kurir. Sebagai PIC, Anda memiliki akses lihat saja ke data kurir.
-            Perubahan data dilakukan oleh Admin atau MasterAdmin.
+            Pantau aktivitas dan performa kurir. Sebagai peran manajerial, Anda memiliki akses lihat saja ke data kurir.
+            Perubahan data dilakukan oleh Admin atau MasterAdmin di halaman "Manage Kurir".
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

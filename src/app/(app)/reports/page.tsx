@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { FileText, Download, Filter as FilterIcon, Search, Users, CalendarClock, CalendarCheck } from 'lucide-react';
+import { FileText, Download, Filter as FilterIcon, Search, Users, CalendarClock, CalendarCheck, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,6 +21,14 @@ export default function ReportsPage() {
   const { toast } = useToast(); 
   const [isDownloading, setIsDownloading] = useState(false);
   const [reportTypeDownloading, setReportTypeDownloading] = useState<string | null>(null);
+  
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  useEffect(() => {
+    const userDataString = localStorage.getItem('loggedInUser');
+    if (userDataString) {
+      setCurrentUser(JSON.parse(userDataString) as UserProfile);
+    }
+  }, []);
 
   // Filter states
   const [allKurirs, setAllKurirs] = useState<UserProfile[]>([]);
@@ -343,6 +351,21 @@ export default function ReportsPage() {
         setReportTypeDownloading(null);
     }
   };
+  
+  if (!currentUser) {
+    return <div className="flex h-screen items-center justify-center">Memuat...</div>;
+  }
+
+  if (!['MasterAdmin', 'Admin', 'PIC'].includes(currentUser.role)) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-destructive flex items-center"><AlertCircle className="mr-2 h-5 w-5"/>Akses Ditolak</CardTitle>
+          <CardDescription>Halaman ini hanya untuk peran manajerial (MasterAdmin, Admin, dan PIC).</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -59,31 +59,31 @@ interface NavItem {
 }
 
 const allNavItems: NavItem[] = [
+  // General Access
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
-  { href: "/profile", icon: User, label: "Profil Saya", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
   
-  // MasterAdmin specific
+  // MasterAdmin Only
   { href: "/manage-admins", icon: Users, label: "Manage Admin", roles: ['MasterAdmin'] },
   { href: "/approvals", icon: ShieldCheck, label: "Persetujuan", roles: ['MasterAdmin'] },
   { href: "/notifications", icon: Bell, label: "Notifikasi Sistem", roles: ['MasterAdmin'] },
 
-  // Admin and MasterAdmin
+  // Admin & MasterAdmin
   { href: "/manage-pics", icon: Briefcase, label: "Manage PIC", roles: ['MasterAdmin', 'Admin'] },
   { href: "/manage-kurirs", icon: Users, label: "Manage Kurir", roles: ['MasterAdmin', 'Admin'] },
-  
-  // Admin specific
   { href: "/pending-approvals", icon: MailCheck, label: "Status Persetujuan", roles: ['Admin'] },
   
-  // PIC specific
-  { href: "/courier-management", icon: ClipboardList, label: "Manajemen Kurir", roles: ['PIC'] },
-  { href: "/reports", icon: FileText, label: "Laporan", roles: ['PIC'] },
-  { href: "/courier-updates", icon: Bell, label: "Update Kurir", roles: ['PIC', 'Admin', 'MasterAdmin'] },
+  // Managerial (PIC & Up)
+  { href: "/courier-management", icon: ClipboardList, label: "Manajemen Kurir", roles: ['MasterAdmin', 'Admin', 'PIC'] },
+  { href: "/courier-updates", icon: Bell, label: "Update Kurir", roles: ['MasterAdmin', 'Admin', 'PIC'] },
   { href: "/delivery-proofs", icon: PackageSearch, label: "Bukti Pengiriman", roles: ['MasterAdmin', 'Admin', 'PIC'] },
+  { href: "/reports", icon: FileText, label: "Laporan", roles: ['MasterAdmin', 'Admin', 'PIC'] },
 
-  // Kurir specific
+  // Kurir Only
   { href: "/attendance", icon: ClipboardCheck, label: "Absen", roles: ['Kurir'] },
   { href: "/performance", icon: BarChart3, label: "Performa", roles: ['Kurir'] },
   
+  // General Access (at the bottom)
+  { href: "/profile", icon: User, label: "Profil Saya", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
   { href: "/settings", icon: Settings, label: "Pengaturan Akun", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
 ];
 
