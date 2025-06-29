@@ -1,9 +1,9 @@
-
 'use server';
 
 import { adminDb } from '@/lib/firebaseAdmin';
 import type { UserProfile } from '@/types';
 import { admin } from '@/lib/firebaseAdmin';
+import { format, subDays } from 'date-fns';
 
 // Helper to serialize Firestore Timestamps, etc.
 function serializeData(doc: admin.firestore.DocumentData | admin.firestore.QueryDocumentSnapshot): any {
@@ -53,69 +53,52 @@ export async function getAllKurirsForSelection(): Promise<{ uid: string; fullNam
 
 export async function getAggregatedDeliveryData(days: number = 90): Promise<any[]> {
     try {
-        const dateLimit = new Date();
-        dateLimit.setDate(dateLimit.getDate() - days);
+        const dateLimit = format(subDays(new Date(), days), 'yyyy-MM-dd');
 
-        // A collection group query is efficient for fetching all subcollection documents.
-        // The orderBy clause is removed to prevent the FAILED_PRECONDITION error that
-        // occurs when a composite index is required but not present. We will sort in-memory.
-        const packagesSnapshot = await adminDb.collectionGroup('packages')
-            .where('lastUpdateTime', '>=', admin.firestore.Timestamp.fromDate(dateLimit))
-            .limit(2000) // Fetch more to sort and get the latest, as order is not guaranteed
-            .get();
+        // Step 1: Query the parent collection 'kurir_daily_tasks' within the date range.
+        const tasksQuery = adminDb.collection('kurir_daily_tasks').where('date', '>=', dateLimit);
+        const tasksSnapshot = await tasksQuery.get();
 
-        if (packagesSnapshot.empty) {
-            return [];
-        }
-        
-        // To avoid fetching the parent task for each package (N+1 problem),
-        // we gather all unique task IDs and fetch them in a single batch.
-        const taskIds = new Set(packagesSnapshot.docs.map(doc => doc.ref.parent.parent!.id));
-        const taskDocsRefs = Array.from(taskIds).map(id => adminDb.collection('kurir_daily_tasks').doc(id));
-        
-        if (taskDocsRefs.length === 0) {
+        if (tasksSnapshot.empty) {
             return [];
         }
 
-        const taskDocs = await adminDb.getAll(...taskDocsRefs);
-        const tasksMap = new Map();
-        taskDocs.forEach(doc => {
-            if (doc.exists) {
-                tasksMap.set(doc.id, doc.data());
-            }
-        });
+        // Step 2: For each task, create a promise to fetch its 'packages' subcollection.
+        const packageFetchPromises = tasksSnapshot.docs.map(taskDoc =>
+            taskDoc.ref.collection('packages').get().then(packageSnapshot => ({
+                taskData: serializeData(taskDoc),
+                packages: packageSnapshot.docs.map(pkgDoc => serializeData(pkgDoc))
+            }))
+        );
 
-        // Now, combine package data with its corresponding parent task data.
-        let aggregatedData = packagesSnapshot.docs.map(doc => {
-            const packageData = serializeData(doc);
-            const taskDocId = doc.ref.parent.parent!.id;
-            const taskData = tasksMap.get(taskDocId);
-            
-            return {
+        // Step 3: Execute all promises in parallel.
+        const results = await Promise.all(packageFetchPromises);
+
+        // Step 4: Aggregate all packages into a single array, combining with parent data.
+        let aggregatedData = results.flatMap(({ taskData, packages }) =>
+            packages.map((packageData: any) => ({
                 ...packageData,
                 kurirUid: taskData?.kurirUid || 'N/A',
                 kurirFullName: taskData?.kurirFullName || 'N/A',
                 kurirId: taskData?.kurirId || 'N/A',
                 date: taskData?.date || 'N/A',
-                // Return-specific data lives on the task doc, so we attach it here.
                 finalReturnProofPhotoUrl: taskData?.finalReturnProofPhotoUrl,
                 finalReturnLeadReceiverName: taskData?.finalReturnLeadReceiverName,
-            };
-        }).filter(item => item.kurirId !== 'N/A'); // Ensure data consistency
+            }))
+        );
 
-        // Sort in-memory on the server to show the most recent items first.
+        // Step 5: Sort in-memory to show the most recent items first.
         aggregatedData.sort((a, b) => {
             const timeA = a.lastUpdateTime ? new Date(a.lastUpdateTime).getTime() : 0;
             const timeB = b.lastUpdateTime ? new Date(b.lastUpdateTime).getTime() : 0;
             return timeB - timeA;
         });
 
+        // Limit the final result size.
+        return aggregatedData.slice(0, 1000);
 
-        return aggregatedData.slice(0, 1000); // Return up to 1000 most recent records
     } catch (error: any) {
         console.error("[Server Action] Error aggregating delivery data:", error);
-        // This error often indicates a missing composite index in Firestore.
-        // The error message from Firebase is usually very helpful in creating it.
-        throw new Error(`Gagal memuat data bukti pengiriman. Mungkin perlu membuat indeks komposit di Firestore untuk collection group 'packages' pada field 'lastUpdateTime'. Detail: ${error.message}`);
+        throw new Error(`Gagal memuat data bukti pengiriman. Detail: ${error.message}`);
     }
 }
