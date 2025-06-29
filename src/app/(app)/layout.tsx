@@ -33,7 +33,8 @@ import {
   MailCheck,
   FileText,
   ShieldCheck,
-  ClipboardList
+  ClipboardList,
+  PackageSearch
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -77,6 +78,7 @@ const allNavItems: NavItem[] = [
   { href: "/courier-management", icon: ClipboardList, label: "Manajemen Kurir", roles: ['PIC'] },
   { href: "/reports", icon: FileText, label: "Laporan", roles: ['PIC'] },
   { href: "/courier-updates", icon: Bell, label: "Update Kurir", roles: ['PIC'] },
+  { href: "/delivery-proofs", icon: PackageSearch, label: "Bukti Pengiriman", roles: ['MasterAdmin', 'Admin', 'PIC'] },
 
   // Kurir specific
   { href: "/attendance", icon: ClipboardCheck, label: "Absen", roles: ['Kurir'] },
