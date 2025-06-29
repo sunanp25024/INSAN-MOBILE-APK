@@ -1,78 +1,114 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PackageSearch, Calendar as CalendarIcon, ZoomIn, PackageCheck, PackageX, Search } from 'lucide-react';
-import type { KurirDailyTaskDoc, PackageItem } from '@/types';
+import { PackageSearch, Calendar as CalendarIcon, ZoomIn, Search, PackageCheck, PackageX } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import Image from 'next/image';
-import { format } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { id as indonesiaLocale } from 'date-fns/locale';
-import { getKurirTaskHistory } from '@/lib/kurirActions';
-import { getAllKurirsForSelection } from '@/lib/managerialActions'; 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DateRange } from 'react-day-picker';
+import { getAggregatedDeliveryData } from '@/lib/managerialActions';
 import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useToast } from '@/hooks/use-toast';
+
+// Define a type for the aggregated data for better type safety
+type AggregatedPackageData = {
+  id: string; // package resi
+  status: 'delivered' | 'returned' | 'in_transit' | 'process';
+  isCOD: boolean;
+  recipientName?: string;
+  deliveryProofPhotoUrl?: string;
+  lastUpdateTime: string;
+  kurirUid: string;
+  kurirFullName: string;
+  kurirId: string;
+  date: string; // Delivery date
+  finalReturnProofPhotoUrl?: string;
+  finalReturnLeadReceiverName?: string;
+};
 
 export default function DeliveryProofsPage() {
-    const [allKurirs, setAllKurirs] = useState<{ uid: string; fullName: string; id: string }[]>([]);
-    const [selectedKurirUid, setSelectedKurirUid] = useState<string | undefined>();
-    const [selectedDate, setSelectedDate] = useState<Date | undefined>();
-    const [taskHistory, setTaskHistory] = useState<{ task: KurirDailyTaskDoc | null; packages: PackageItem[] } | null>(null);
+    const { toast } = useToast();
+    const [allPackages, setAllPackages] = useState<AggregatedPackageData[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    
+    // Filtering states
     const [searchTerm, setSearchTerm] = useState('');
-    
-    const [isKurirListLoading, setIsKurirListLoading] = useState(true);
-    const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-    
+    const [dateRange, setDateRange] = useState<DateRange | undefined>();
+
+    // UI states
     const [selectedImage, setSelectedImage] = useState<{ src: string, alt: string } | null>(null);
-    const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
 
     useEffect(() => {
-        const fetchKurirs = async () => {
-            setIsKurirListLoading(true);
-            const kurirs = await getAllKurirsForSelection();
-            setAllKurirs(kurirs);
-            setIsKurirListLoading(false);
+        const fetchAllPackageData = async () => {
+            setIsLoading(true);
+            try {
+                const data = await getAggregatedDeliveryData(90); // Fetch last 90 days of data
+                setAllPackages(data);
+            } catch (error: any) {
+                console.error("Error fetching aggregated delivery data:", error);
+                toast({
+                    title: "Gagal Memuat Data",
+                    description: error.message || "Terjadi kesalahan saat mengambil data bukti pengiriman.",
+                    variant: "destructive",
+                    duration: 9000,
+                });
+            } finally {
+                setIsLoading(false);
+            }
         };
-        fetchKurirs();
-    }, []);
+        fetchAllPackageData();
+    }, [toast]);
 
-    useEffect(() => {
-        if (!selectedDate || !selectedKurirUid) {
-          setTaskHistory(null);
-          return;
-        }
+    const filteredData = useMemo(() => {
+        return allPackages.filter(pkg => {
+            // Search term filter
+            const matchesSearch = searchTerm === '' ||
+                pkg.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                pkg.kurirFullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                pkg.kurirId.toLowerCase().includes(searchTerm.toLowerCase());
 
-        const fetchHistory = async () => {
-          setIsHistoryLoading(true);
-          setTaskHistory(null); // Clear previous history
-          const dateString = format(selectedDate, 'yyyy-MM-dd');
-          try {
-            const historyData = await getKurirTaskHistory(selectedKurirUid, dateString);
-            setTaskHistory(historyData);
-          } catch (error) {
-            console.error("Error fetching task history:", error);
-          } finally {
-            setIsHistoryLoading(false);
-          }
-        };
+            // Date range filter
+            let matchesDate = true;
+            if (dateRange?.from && isValid(parseISO(pkg.date))) {
+                const pkgDate = parseISO(pkg.date);
+                if (dateRange.to) {
+                    matchesDate = pkgDate >= dateRange.from && pkgDate <= dateRange.to;
+                } else {
+                    matchesDate = pkgDate >= dateRange.from;
+                }
+            }
+            return matchesSearch && matchesDate;
+        });
+    }, [allPackages, searchTerm, dateRange]);
 
-        fetchHistory();
-    }, [selectedDate, selectedKurirUid]);
-    
+    const deliveredPackages = useMemo(() => filteredData.filter(p => p.status === 'delivered'), [filteredData]);
+    const returnedPackages = useMemo(() => {
+        // Returned packages have a specific status and the return proof is on the task level
+        const returned = filteredData.filter(p => p.status === 'returned' && p.finalReturnProofPhotoUrl);
+        // To avoid showing the same return proof for every returned package of a task, we group them.
+        const uniqueTasks = new Map<string, AggregatedPackageData>();
+        returned.forEach(pkg => {
+            const taskKey = `${pkg.kurirUid}-${pkg.date}`;
+            if (!uniqueTasks.has(taskKey)) {
+                uniqueTasks.set(taskKey, pkg);
+            }
+        });
+        return Array.from(uniqueTasks.values());
+    }, [filteredData]);
+
+
     const handleImageClick = (src: string, alt: string) => {
         setSelectedImage({ src, alt });
-        setIsImageDialogOpen(true);
     };
-
-    const deliveredPackages = taskHistory?.packages
-        .filter(p => p.status === 'delivered' && p.id.toLowerCase().includes(searchTerm.toLowerCase())) || [];
-    const selectedKurirName = allKurirs.find(k => k.uid === selectedKurirUid)?.fullName;
 
     return (
         <div className="space-y-6">
@@ -83,133 +119,175 @@ export default function DeliveryProofsPage() {
                         Pusat Bukti Pengiriman
                     </CardTitle>
                     <CardDescription>
-                        Pilih kurir dan tanggal untuk melihat riwayat tugas. Anda juga bisa memfilter berdasarkan nomor resi.
+                        Cari dan lihat riwayat bukti pengiriman dan pengembalian paket dari semua kurir.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <Label htmlFor="kurir-select">Pilih Kurir</Label>
-                            {isKurirListLoading ? (
-                                <Skeleton className="h-10 w-full" />
-                            ) : (
-                                <Select onValueChange={setSelectedKurirUid} value={selectedKurirUid}>
-                                    <SelectTrigger id="kurir-select" className="w-full">
-                                        <SelectValue placeholder="Pilih nama kurir..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {allKurirs.map(kurir => (
-                                            <SelectItem key={kurir.uid} value={kurir.uid}>
-                                                {kurir.fullName} ({kurir.id})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
+                            <Label htmlFor="search-universal">Cari (Resi, Nama/ID Kurir)</Label>
+                             <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    id="search-universal"
+                                    placeholder="Ketik nomor resi, nama, atau ID kurir..."
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                    className="pl-8"
+                                />
+                            </div>
                         </div>
                         <div>
-                            <Label htmlFor="date-select">Pilih Tanggal</Label>
-                             <Popover>
+                            <Label htmlFor="date-range">Rentang Tanggal</Label>
+                            <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" className="w-full justify-start text-left font-normal" disabled={!selectedKurirUid}>
+                                    <Button id="date-range" variant="outline" className="w-full justify-start text-left font-normal">
                                         <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {selectedDate ? format(selectedDate, "PPP", { locale: indonesiaLocale }) : "Pilih Tanggal"}
+                                        {dateRange?.from ? (
+                                            dateRange.to ? (
+                                                <>
+                                                    {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
+                                                </>
+                                            ) : (
+                                                format(dateRange.from, "LLL dd, y")
+                                            )
+                                        ) : (
+                                            <span>Pilih rentang tanggal</span>
+                                        )}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
+                                <PopoverContent className="w-auto p-0" align="start">
                                     <Calendar
-                                        mode="single"
-                                        selected={selectedDate}
-                                        onSelect={setSelectedDate}
-                                        disabled={(date) => date > new Date()}
                                         initialFocus
+                                        mode="range"
+                                        defaultMonth={dateRange?.from}
+                                        selected={dateRange}
+                                        onSelect={setDateRange}
+                                        numberOfMonths={2}
+                                        locale={indonesiaLocale}
                                     />
                                 </PopoverContent>
                             </Popover>
                         </div>
                     </div>
-                    
-                    <div>
-                        {isHistoryLoading && <p className="text-sm text-muted-foreground p-4 text-center">Memuat riwayat...</p>}
-                        
-                        {!isHistoryLoading && selectedKurirUid && selectedDate && !taskHistory?.task && (
-                            <Card className="p-6 text-center text-muted-foreground bg-muted/50 mt-4">
-                                Tidak ada data tugas untuk <strong>{selectedKurirName}</strong> pada tanggal yang dipilih.
-                            </Card>
-                        )}
-                        
-                        {!isHistoryLoading && taskHistory?.task && (
-                            <div className="space-y-6 border-t pt-6 mt-6">
-                                <div>
-                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
-                                        <h4 className="font-semibold flex items-center text-lg">
-                                            <PackageCheck className="mr-2 h-5 w-5 text-green-500"/> Bukti Paket Terkirim ({deliveredPackages.length})
-                                        </h4>
-                                        <div className="relative w-full sm:max-w-xs">
-                                             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                            <Input 
-                                                placeholder="Cari nomor resi..." 
-                                                value={searchTerm}
-                                                onChange={e => setSearchTerm(e.target.value)}
-                                                className="pl-8"
-                                            />
-                                        </div>
-                                    </div>
-                                    {deliveredPackages.length > 0 ? (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                            {deliveredPackages.map(pkg => (
-                                                <Card key={pkg.id} className="p-3">
-                                                    <p className="font-medium text-sm break-all">{pkg.id}</p>
-                                                    <p className="text-xs text-muted-foreground">Penerima: {pkg.recipientName || 'N/A'}</p>
-                                                    {pkg.deliveryProofPhotoUrl ? (
-                                                        <div className="mt-2 relative group cursor-pointer" onClick={() => handleImageClick(pkg.deliveryProofPhotoUrl!, `Bukti untuk ${pkg.id}`)}>
-                                                            <Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti untuk ${pkg.id}`} width={200} height={150} className="rounded-md object-cover w-full h-32"/>
-                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <ZoomIn className="h-8 w-8 text-white"/>
-                                                            </div>
-                                                        </div>
-                                                    ) : <p className="text-xs text-destructive mt-2">Tidak ada foto bukti.</p>}
-                                                </Card>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                      <p className="text-sm text-muted-foreground">
-                                        {searchTerm ? 'Tidak ada resi yang cocok dengan pencarian Anda.' : 'Tidak ada paket yang ditandai terkirim pada hari ini.'}
-                                      </p>
-                                    )}
-                                </div>
-
-                                {taskHistory.task.finalReturnProofPhotoUrl && (
-                                     <div>
-                                        <h4 className="font-semibold flex items-center mb-2 text-lg">
-                                            <PackageX className="mr-2 h-5 w-5 text-red-500"/> Bukti Paket Pending/Retur
-                                        </h4>
-                                        <Card className="p-3 inline-block">
-                                            <p className="text-xs text-muted-foreground">Diserahkan ke: {taskHistory.task.finalReturnLeadReceiverName || 'N/A'}</p>
-                                            <div className="mt-2 relative group cursor-pointer" onClick={() => handleImageClick(taskHistory.task.finalReturnProofPhotoUrl!, `Bukti Retur`)}>
-                                                <Image src={taskHistory.task.finalReturnProofPhotoUrl} alt="Bukti Retur" width={200} height={150} className="rounded-md object-cover w-full h-32"/>
-                                                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <ZoomIn className="h-8 w-8 text-white"/>
-                                                </div>
-                                            </div>
-                                        </Card>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
                 </CardContent>
             </Card>
 
-            <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
+            {isLoading ? (
+                <div className="space-y-4">
+                     <Skeleton className="h-10 w-1/3" />
+                     <Skeleton className="h-40 w-full" />
+                </div>
+            ) : (
+                <>
+                    {/* Delivered Packages Section */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center text-xl">
+                                <PackageCheck className="mr-2 h-5 w-5 text-green-500" />
+                                Paket Terkirim ({deliveredPackages.length})
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                             <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>No. Resi</TableHead>
+                                            <TableHead>Kurir</TableHead>
+                                            <TableHead>Tanggal Kirim</TableHead>
+                                            <TableHead>Penerima</TableHead>
+                                            <TableHead className="text-center">Bukti Foto</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {deliveredPackages.length > 0 ? (
+                                            deliveredPackages.map(pkg => (
+                                                <TableRow key={pkg.id}>
+                                                    <TableCell className="font-medium break-all">{pkg.id}</TableCell>
+                                                    <TableCell>{pkg.kurirFullName} ({pkg.kurirId})</TableCell>
+                                                    <TableCell>{format(parseISO(pkg.date), 'dd MMM yyyy', { locale: indonesiaLocale })}</TableCell>
+                                                    <TableCell>{pkg.recipientName || 'N/A'}</TableCell>
+                                                    <TableCell className="text-center">
+                                                        {pkg.deliveryProofPhotoUrl ? (
+                                                            <Button variant="ghost" size="sm" onClick={() => handleImageClick(pkg.deliveryProofPhotoUrl!, `Bukti untuk ${pkg.id}`)}>
+                                                                <ZoomIn className="h-4 w-4 mr-2" /> Lihat
+                                                            </Button>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">Tidak Ada</span>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="text-center h-24">Tidak ada data paket terkirim yang cocok dengan filter.</TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                     {/* Returned Packages Section */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center text-xl">
+                                <PackageX className="mr-2 h-5 w-5 text-red-500" />
+                                Paket Dikembalikan ({returnedPackages.length})
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Kurir</TableHead>
+                                            <TableHead>Tanggal Kembali</TableHead>
+                                            <TableHead>Leader Penerima</TableHead>
+                                            <TableHead className="text-center">Bukti Foto Serah Terima</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {returnedPackages.length > 0 ? (
+                                            returnedPackages.map(pkg => (
+                                                <TableRow key={`${pkg.kurirUid}-${pkg.date}`}>
+                                                    <TableCell>{pkg.kurirFullName} ({pkg.kurirId})</TableCell>
+                                                    <TableCell>{format(parseISO(pkg.date), 'dd MMM yyyy', { locale: indonesiaLocale })}</TableCell>
+                                                    <TableCell>{pkg.finalReturnLeadReceiverName || 'N/A'}</TableCell>
+                                                    <TableCell className="text-center">
+                                                        {pkg.finalReturnProofPhotoUrl ? (
+                                                             <Button variant="ghost" size="sm" onClick={() => handleImageClick(pkg.finalReturnProofPhotoUrl!, `Bukti retur dari ${pkg.kurirFullName}`)}>
+                                                                <ZoomIn className="h-4 w-4 mr-2" /> Lihat
+                                                            </Button>
+                                                        ) : (
+                                                            <span className="text-xs text-muted-foreground">Tidak Ada</span>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center h-24">Tidak ada data paket yang dikembalikan yang cocok dengan filter.</TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </>
+            )}
+
+            <Dialog open={!!selectedImage} onOpenChange={(isOpen) => !isOpen && setSelectedImage(null)}>
               <DialogContent className="max-w-3xl">
                   <DialogHeader>
                       <DialogTitle>{selectedImage?.alt}</DialogTitle>
                   </DialogHeader>
                   {selectedImage && (
                       <div className="mt-4 flex justify-center">
-                        <Image src={selectedImage.src} alt={selectedImage.alt} width={800} height={600} className="max-w-full h-auto rounded-lg object-contain" data-ai-hint="package receipt"/>
+                        <Image src={selectedImage.src} alt={selectedImage.alt} width={800} height={600} className="max-w-full h-auto max-h-[80vh] rounded-lg object-contain" data-ai-hint="package receipt"/>
                       </div>
                   )}
               </DialogContent>

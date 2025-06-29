@@ -10,7 +10,7 @@ function serializeData(doc: admin.firestore.DocumentData | admin.firestore.Query
     const data = doc.data();
     if (!data) return null;
 
-    const serialized: { [key: string]: any } = { uid: doc.id };
+    const serialized: { [key: string]: any } = { uid: doc.id, id: doc.id }; // Use doc.id for both uid and id if not present
     for (const key in data) {
         const value = data[key];
         if (value instanceof admin.firestore.Timestamp) {
@@ -34,11 +34,11 @@ export async function getAllKurirsForSelection(): Promise<{ uid: string; fullNam
         }
 
         const kurirs = snapshot.docs.map(doc => {
-            const data = serializeData(doc) as UserProfile;
+            const data = doc.data() as UserProfile;
             return {
-                uid: data.uid,
+                uid: doc.id, // The UID from Firebase Auth is the document ID
                 fullName: data.fullName,
-                id: data.id,
+                id: data.id, // The application-specific ID
             };
         });
 
@@ -47,5 +47,66 @@ export async function getAllKurirsForSelection(): Promise<{ uid: string; fullNam
     } catch (error: any) {
         console.error("[Server Action] Error getting all kurirs for selection:", error);
         return [];
+    }
+}
+
+
+export async function getAggregatedDeliveryData(days: number = 90): Promise<any[]> {
+    try {
+        const dateLimit = new Date();
+        dateLimit.setDate(dateLimit.getDate() - days);
+
+        // A collection group query is efficient for fetching all subcollection documents.
+        const packagesSnapshot = await adminDb.collectionGroup('packages')
+            .where('lastUpdateTime', '>=', admin.firestore.Timestamp.fromDate(dateLimit))
+            .orderBy('lastUpdateTime', 'desc')
+            .limit(1000) // A reasonable limit to prevent excessive data transfer
+            .get();
+
+        if (packagesSnapshot.empty) {
+            return [];
+        }
+        
+        // To avoid fetching the parent task for each package (N+1 problem),
+        // we gather all unique task IDs and fetch them in a single batch.
+        const taskIds = new Set(packagesSnapshot.docs.map(doc => doc.ref.parent.parent!.id));
+        const taskDocsRefs = Array.from(taskIds).map(id => adminDb.collection('kurir_daily_tasks').doc(id));
+        
+        if (taskDocsRefs.length === 0) {
+            return [];
+        }
+
+        const taskDocs = await adminDb.getAll(...taskDocsRefs);
+        const tasksMap = new Map();
+        taskDocs.forEach(doc => {
+            if (doc.exists) {
+                tasksMap.set(doc.id, doc.data());
+            }
+        });
+
+        // Now, combine package data with its corresponding parent task data.
+        const aggregatedData = packagesSnapshot.docs.map(doc => {
+            const packageData = serializeData(doc);
+            const taskDocId = doc.ref.parent.parent!.id;
+            const taskData = tasksMap.get(taskDocId);
+            
+            return {
+                ...packageData,
+                kurirUid: taskData?.kurirUid || 'N/A',
+                kurirFullName: taskData?.kurirFullName || 'N/A',
+                kurirId: taskData?.kurirId || 'N/A',
+                date: taskData?.date || 'N/A',
+                // Return-specific data lives on the task doc, so we attach it here.
+                finalReturnProofPhotoUrl: taskData?.finalReturnProofPhotoUrl,
+                finalReturnLeadReceiverName: taskData?.finalReturnLeadReceiverName,
+            };
+        }).filter(item => item.kurirId !== 'N/A'); // Ensure data consistency
+
+        return aggregatedData;
+    } catch (error: any) {
+        console.error("[Server Action] Error aggregating delivery data:", error);
+        // This error often indicates a missing composite index in Firestore.
+        // The error message from Firebase is usually very helpful in creating it.
+        throw new Error(`Gagal memuat data bukti pengiriman. Mungkin perlu membuat indeks komposit di Firestore untuk collection group 'packages' pada field 'lastUpdateTime'. Detail: ${error.message}`);
     }
 }

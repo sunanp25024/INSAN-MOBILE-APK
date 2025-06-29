@@ -52,6 +52,7 @@ export interface DailyPackageInput {
 export interface KurirDailyTaskDoc {
   kurirUid: string;
   kurirFullName: string;
+  kurirId: string;
   date: string; 
   totalPackages: number;
   codPackages: number;

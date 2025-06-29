@@ -472,6 +472,7 @@ export default function DashboardPage() {
     const newTaskData: KurirDailyTaskDoc = {
         kurirUid: currentUser.uid,
         kurirFullName: currentUser.fullName,
+        kurirId: currentUser.id,
         date: todayDateString,
         totalPackages: data.totalPackages,
         codPackages: data.codPackages,
