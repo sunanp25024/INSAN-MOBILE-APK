@@ -10,20 +10,17 @@ if (!admin.apps.length) {
     privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
   };
 
-  const storageBucket = process.env.FIREBASE_STORAGE_BUCKET;
-
   // A more robust check to ensure all necessary parts of the configuration are present.
-  if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey || !storageBucket) {
+  if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
     throw new Error(
-      'Firebase Admin credentials or Storage Bucket URL are not found in the environment variables. Please set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, and FIREBASE_STORAGE_BUCKET.'
+      'Firebase Admin credentials are not found in the environment variables. Please set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
     );
   }
 
   try {
-    // Explicitly providing the storageBucket URL is more robust.
+    // Initialize the app with credentials only. Storage bucket will be specified at the point of use.
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      storageBucket: storageBucket,
     });
   } catch (error: any) {
     console.error('Firebase Admin SDK initialization error:', error.stack);
@@ -36,5 +33,3 @@ const adminAuth = admin.auth();
 const adminDb = admin.firestore();
 
 export { admin, adminAuth, adminDb };
-
-    

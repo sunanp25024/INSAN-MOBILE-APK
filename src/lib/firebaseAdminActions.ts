@@ -476,7 +476,11 @@ export async function resetUserPassword(uid: string, newPassword: string) {
  */
 export async function uploadFileToServer(filePath: string, dataUrl: string) {
   try {
-    const bucket = admin.storage().bucket(); // Use default bucket
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+    if (!bucketName) {
+      throw new Error('Firebase Storage bucket name is not configured in environment variables (FIREBASE_STORAGE_BUCKET).');
+    }
+    const bucket = admin.storage().bucket(bucketName);
     const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
     if (!match) {
       throw new Error('Invalid data URL format.');
