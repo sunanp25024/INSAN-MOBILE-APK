@@ -80,10 +80,14 @@ export default function DeliveryProofsPage() {
             let matchesDate = true;
             if (dateRange?.from && isValid(parseISO(pkg.date))) {
                 const pkgDate = parseISO(pkg.date);
+                // Set to start of day for accurate comparison
+                const fromDate = new Date(dateRange.from.setHours(0,0,0,0));
+                
                 if (dateRange.to) {
-                    matchesDate = pkgDate >= dateRange.from && pkgDate <= dateRange.to;
+                    const toDate = new Date(dateRange.to.setHours(23,59,59,999));
+                    matchesDate = pkgDate >= fromDate && pkgDate <= toDate;
                 } else {
-                    matchesDate = pkgDate >= dateRange.from;
+                    matchesDate = pkgDate >= fromDate;
                 }
             }
             return matchesSearch && matchesDate;
@@ -194,7 +198,7 @@ export default function DeliveryProofsPage() {
                                     <TableBody>
                                         {deliveredPackages.length > 0 ? (
                                             deliveredPackages.map(pkg => (
-                                                <TableRow key={pkg.id}>
+                                                <TableRow key={`${pkg.kurirUid}-${pkg.date}-${pkg.id}`}>
                                                     <TableCell>{pkg.kurirId}</TableCell>
                                                     <TableCell>{pkg.kurirFullName}</TableCell>
                                                     <TableCell className="font-medium break-all">{pkg.id}</TableCell>
@@ -245,7 +249,7 @@ export default function DeliveryProofsPage() {
                                     <TableBody>
                                         {returnedPackages.length > 0 ? (
                                             returnedPackages.map(pkg => (
-                                                <TableRow key={pkg.id}>
+                                                <TableRow key={`${pkg.kurirUid}-${pkg.date}-${pkg.id}`}>
                                                     <TableCell>{pkg.kurirId}</TableCell>
                                                     <TableCell>{pkg.kurirFullName}</TableCell>
                                                     <TableCell className="font-medium break-all">{pkg.id}</TableCell>
