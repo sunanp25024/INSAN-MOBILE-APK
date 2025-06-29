@@ -476,9 +476,12 @@ export async function resetUserPassword(uid: string, newPassword: string) {
  */
 export async function uploadFileToServer(filePath: string, dataUrl: string) {
   try {
-    // Let the Admin SDK determine the default bucket from the project configuration.
-    // This is more robust than relying on an environment variable.
-    const bucket = getStorage().bucket();
+    const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    if (!bucketName) {
+      throw new Error("Firebase Storage bucket name is not configured in environment variables (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET).");
+    }
+
+    const bucket = getStorage().bucket(bucketName);
     const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
     if (!match) {
       throw new Error('Invalid data URL format.');
