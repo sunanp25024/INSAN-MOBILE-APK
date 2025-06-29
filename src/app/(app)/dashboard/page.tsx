@@ -22,12 +22,12 @@ import { id as indonesiaLocale } from 'date-fns/locale';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BrowserMultiFormatReader, NotFoundException, ChecksumException, FormatException, type IScannerControls } from '@zxing/library';
-import { db, storage } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDocs, Timestamp, serverTimestamp, writeBatch, deleteDoc, runTransaction, orderBy } from 'firebase/firestore';
-import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
 import { getDashboardData } from '@/lib/kurirActions';
+import { uploadFileToServer } from '@/lib/firebaseAdminActions';
 
 
 const packageInputSchema = z.object({
@@ -608,10 +608,12 @@ export default function DashboardPage() {
     setIsSubmitting(true);
     try {
         const filePath = `delivery_proofs/${dailyTaskDocId}/${capturingForPackageId}_${Date.now()}.jpg`;
-        const proofStorageRef = storageRef(storage, filePath);
+        const uploadResult = await uploadFileToServer(filePath, photoDataUrl);
 
-        const uploadResult = await uploadString(proofStorageRef, photoDataUrl, 'data_url');
-        const downloadURL = await getDownloadURL(uploadResult.ref);
+        if (!uploadResult.success || !uploadResult.url) {
+            throw new Error(uploadResult.message || 'Failed to get upload URL.');
+        }
+        const downloadURL = uploadResult.url;
 
         const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", capturingForPackageId);
         await updateDoc(packageDocRef, {
@@ -683,9 +685,12 @@ export default function DashboardPage() {
             return;
           }
           const filePath = `return_proofs/${dailyTaskDocId}/return_proof_${Date.now()}.jpg`;
-          const returnStorageRef = storageRef(storage, filePath);
-          const uploadResult = await uploadString(returnStorageRef, returnProofPhotoDataUrl, 'data_url');
-          finalReturnProofUrl = await getDownloadURL(uploadResult.ref);
+          const uploadResult = await uploadFileToServer(filePath, returnProofPhotoDataUrl);
+
+          if (!uploadResult.success || !uploadResult.url) {
+            throw new Error(uploadResult.message || 'Gagal mengunggah foto bukti retur.');
+          }
+          finalReturnProofUrl = uploadResult.url;
         }
 
         const batch = writeBatch(db);

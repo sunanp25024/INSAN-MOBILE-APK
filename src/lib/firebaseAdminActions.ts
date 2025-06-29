@@ -3,6 +3,7 @@
 
 import { admin, adminAuth, adminDb } from '@/lib/firebaseAdmin';
 import type { UserProfile, UserRole, ApprovalRequest } from '@/types';
+import { getStorage } from 'firebase-admin/storage';
 
 /**
  * Creates a user account in Firebase Auth and their profile in Firestore
@@ -463,5 +464,45 @@ export async function resetUserPassword(uid: string, newPassword: string) {
       message: `Gagal mereset password: ${error.message}`,
       errorCode: error.code,
     };
+  }
+}
+
+/**
+ * Uploads a file from a data URL to Firebase Storage using the Admin SDK.
+ * This is used to bypass client-side CORS issues.
+ * @param filePath The full path in the storage bucket (e.g., 'delivery_proofs/task_id/image.jpg').
+ * @param dataUrl The base64 encoded data URL of the file.
+ * @returns An object with the success status and the public download URL.
+ */
+export async function uploadFileToServer(filePath: string, dataUrl: string) {
+  try {
+    const bucket = admin.storage().bucket(); // Use default bucket
+    const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
+    if (!match) {
+      throw new Error('Invalid data URL format.');
+    }
+    const contentType = match[1];
+    const base64Data = match[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    const file = bucket.file(filePath);
+
+    await file.save(buffer, {
+      metadata: {
+        contentType: contentType,
+      },
+    });
+    
+    // Using a signed URL is more secure than making files public
+    const [url] = await file.getSignedUrl({
+      action: 'read',
+      expires: '03-09-2491', // A far-future date
+    });
+    
+    return { success: true, url: url };
+
+  } catch (error: any) {
+    console.error(`Error uploading file to ${filePath}:`, error);
+    return { success: false, message: `Failed to upload file: ${error.message}` };
   }
 }
