@@ -92,17 +92,7 @@ export default function DeliveryProofsPage() {
 
     const deliveredPackages = useMemo(() => filteredData.filter(p => p.status === 'delivered'), [filteredData]);
     const returnedPackages = useMemo(() => {
-        // Returned packages have a specific status and the return proof is on the task level
-        const returned = filteredData.filter(p => p.status === 'returned' && p.finalReturnProofPhotoUrl);
-        // To avoid showing the same return proof for every returned package of a task, we group them.
-        const uniqueTasks = new Map<string, AggregatedPackageData>();
-        returned.forEach(pkg => {
-            const taskKey = `${pkg.kurirUid}-${pkg.date}`;
-            if (!uniqueTasks.has(taskKey)) {
-                uniqueTasks.set(taskKey, pkg);
-            }
-        });
-        return Array.from(uniqueTasks.values());
+        return filteredData.filter(p => p.status === 'returned');
     }, [filteredData]);
 
 
@@ -193,8 +183,9 @@ export default function DeliveryProofsPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
+                                            <TableHead>ID Kurir</TableHead>
+                                            <TableHead>Nama Kurir</TableHead>
                                             <TableHead>No. Resi</TableHead>
-                                            <TableHead>Kurir</TableHead>
                                             <TableHead>Tanggal Kirim</TableHead>
                                             <TableHead>Penerima</TableHead>
                                             <TableHead className="text-center">Bukti Foto</TableHead>
@@ -204,8 +195,9 @@ export default function DeliveryProofsPage() {
                                         {deliveredPackages.length > 0 ? (
                                             deliveredPackages.map(pkg => (
                                                 <TableRow key={pkg.id}>
+                                                    <TableCell>{pkg.kurirId}</TableCell>
+                                                    <TableCell>{pkg.kurirFullName}</TableCell>
                                                     <TableCell className="font-medium break-all">{pkg.id}</TableCell>
-                                                    <TableCell>{pkg.kurirFullName} ({pkg.kurirId})</TableCell>
                                                     <TableCell>{format(parseISO(pkg.date), 'dd MMM yyyy', { locale: indonesiaLocale })}</TableCell>
                                                     <TableCell>{pkg.recipientName || 'N/A'}</TableCell>
                                                     <TableCell className="text-center">
@@ -221,7 +213,7 @@ export default function DeliveryProofsPage() {
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="text-center h-24">Tidak ada data paket terkirim yang cocok dengan filter.</TableCell>
+                                                <TableCell colSpan={6} className="text-center h-24">Tidak ada data paket terkirim yang cocok dengan filter.</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
@@ -243,8 +235,9 @@ export default function DeliveryProofsPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Kurir</TableHead>
-                                            <TableHead>Tanggal Kembali</TableHead>
+                                            <TableHead>ID Kurir</TableHead>
+                                            <TableHead>Nama Kurir</TableHead>
+                                            <TableHead>No. Resi</TableHead>
                                             <TableHead>Leader Penerima</TableHead>
                                             <TableHead className="text-center">Bukti Foto Serah Terima</TableHead>
                                         </TableRow>
@@ -252,13 +245,14 @@ export default function DeliveryProofsPage() {
                                     <TableBody>
                                         {returnedPackages.length > 0 ? (
                                             returnedPackages.map(pkg => (
-                                                <TableRow key={`${pkg.kurirUid}-${pkg.date}`}>
-                                                    <TableCell>{pkg.kurirFullName} ({pkg.kurirId})</TableCell>
-                                                    <TableCell>{format(parseISO(pkg.date), 'dd MMM yyyy', { locale: indonesiaLocale })}</TableCell>
+                                                <TableRow key={pkg.id}>
+                                                    <TableCell>{pkg.kurirId}</TableCell>
+                                                    <TableCell>{pkg.kurirFullName}</TableCell>
+                                                    <TableCell className="font-medium break-all">{pkg.id}</TableCell>
                                                     <TableCell>{pkg.finalReturnLeadReceiverName || 'N/A'}</TableCell>
                                                     <TableCell className="text-center">
                                                         {pkg.finalReturnProofPhotoUrl ? (
-                                                             <Button variant="ghost" size="sm" onClick={() => handleImageClick(pkg.finalReturnProofPhotoUrl!, `Bukti retur dari ${pkg.kurirFullName}`)}>
+                                                             <Button variant="ghost" size="sm" onClick={() => handleImageClick(pkg.finalReturnProofPhotoUrl!, `Bukti retur untuk resi ${pkg.id}`)}>
                                                                 <ZoomIn className="h-4 w-4 mr-2" /> Lihat
                                                             </Button>
                                                         ) : (
@@ -269,7 +263,7 @@ export default function DeliveryProofsPage() {
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={4} className="text-center h-24">Tidak ada data paket yang dikembalikan yang cocok dengan filter.</TableCell>
+                                                <TableCell colSpan={5} className="text-center h-24">Tidak ada data paket yang dikembalikan yang cocok dengan filter.</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
