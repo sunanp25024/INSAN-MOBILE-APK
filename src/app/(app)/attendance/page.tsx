@@ -129,23 +129,26 @@ export default function AttendancePage() {
 
         toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Mengalihkan ke dashboard...` });
         
-        // This prevents the re-check-in bug if the user navigates back.
-        // It immediately updates the state to show the check-in time.
-        if (pageData?.todayRecord) {
-            setPageData({
-                ...pageData,
-                todayRecord: {
-                    ...pageData.todayRecord,
-                    checkInTime: newRecord.checkInTime,
-                    status: newRecord.status as 'Present' | 'Late'
-                }
-            });
-        }
+        // Optimistically update the state of the current (attendance) page.
+        // This ensures that if the user navigates back, they cannot check in again.
+        setPageData(prev => ({
+            ...prev!,
+            todayRecord: {
+                ...(prev?.todayRecord ?? {} as AttendanceRecord),
+                id: docId,
+                kurirUid: currentUser.uid,
+                kurirId: currentUser.id,
+                kurirName: currentUser.fullName,
+                date: todayISO,
+                checkInTime: newRecord.checkInTime,
+                status: newRecord.status as 'Present' | 'Late',
+            }
+        }));
         
         localStorage.setItem('courierCheckedInToday', todayISO);
         
-        // Use a hard reload to ensure dashboard gets fresh data and re-mounts correctly.
-        window.location.href = '/dashboard';
+        // Use Next.js router for a soft navigation to the dashboard.
+        router.push('/dashboard');
 
     } catch (error) {
         console.error("Error during check-in: ", error);

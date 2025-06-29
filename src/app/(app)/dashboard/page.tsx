@@ -125,15 +125,6 @@ export default function DashboardPage() {
     const initializeDashboard = async () => {
       setIsDashboardLoading(true);
 
-      // Optimistic UI update for Kurir from localStorage to provide instant feedback
-      if (currentUser.role === 'Kurir') {
-          const todayISO = format(new Date(), 'yyyy-MM-dd');
-          const hasCheckedInLocally = localStorage.getItem('courierCheckedInToday') === todayISO;
-          if (hasCheckedInLocally) {
-            setIsCourierCheckedIn(true);
-          }
-      }
-
       try {
         // Fetch authoritative data from server
         const data = await getDashboardData(currentUser.uid, currentUser.role);
@@ -143,13 +134,18 @@ export default function DashboardPage() {
         }
 
         if (currentUser.role === 'Kurir') {
-          const { isCheckedIn, taskData, packages, photoMap } = data.kurirData || {};
-          // Server data is the source of truth
-          setIsCourierCheckedIn(isCheckedIn ?? false);
+          const { isCheckedIn: isCheckedInFromServer, taskData, packages, photoMap } = data.kurirData || {};
           
-          if (isCheckedIn) {
-            const todayDateString = format(new Date(), 'yyyy-MM-dd');
-            const docId = `${currentUser.uid}_${todayDateString}`;
+          // Check local storage as a fallback for the Firestore read-after-write race condition.
+          const todayISO = format(new Date(), 'yyyy-MM-dd');
+          const hasCheckedInLocally = localStorage.getItem('courierCheckedInToday') === todayISO;
+
+          // The user is considered checked in if the server confirms it OR if the local flag is set.
+          const finalCheckInStatus = (isCheckedInFromServer ?? false) || hasCheckedInLocally;
+          setIsCourierCheckedIn(finalCheckInStatus);
+          
+          if (finalCheckInStatus) {
+            const docId = `${currentUser.uid}_${todayISO}`;
             setDailyTaskDocId(docId);
              
             if (taskData) {
@@ -181,6 +177,15 @@ export default function DashboardPage() {
                 setDayFinished(false);
                 resetPackageInputForm();
             }
+          } else {
+             // Explicitly reset state if not checked in
+             setDailyTaskData(null);
+             setManagedPackages([]);
+             setInTransitPackages([]);
+             setPendingReturnPackages([]);
+             setDeliveryStarted(false);
+             setDayFinished(false);
+             resetPackageInputForm();
           }
         } else {
           setDashboardData(data.managerialData || null);
