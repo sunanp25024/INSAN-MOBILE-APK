@@ -64,7 +64,7 @@ export default function CourierUpdatesPage() {
   }, []);
 
   useEffect(() => {
-    if (!currentUser || currentUser.role !== 'PIC') {
+    if (!currentUser || !['PIC', 'Admin', 'MasterAdmin'].includes(currentUser.role)) {
         setIsLoading(false);
         return;
     };
@@ -154,14 +154,14 @@ export default function CourierUpdatesPage() {
       );
   }
   
-  if (!currentUser || currentUser.role !== 'PIC') {
+  if (!currentUser || !['PIC', 'Admin', 'MasterAdmin'].includes(currentUser.role)) {
     return (
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl text-primary flex items-center"><AlertCircle className="mr-2 h-6 w-6"/>Akses Terbatas</CardTitle>
         </CardHeader>
         <CardContent>
-          <p>Halaman ini hanya ditujukan untuk PIC.</p>
+          <p>Halaman ini hanya ditujukan untuk PIC, Admin, dan MasterAdmin.</p>
         </CardContent>
       </Card>
     );

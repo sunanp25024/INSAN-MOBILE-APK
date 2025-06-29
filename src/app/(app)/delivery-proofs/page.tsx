@@ -4,7 +4,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PackageSearch, Calendar as CalendarIcon, ZoomIn, PackageCheck, PackageX } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { PackageSearch, Calendar as CalendarIcon, ZoomIn, PackageCheck, PackageX, Search } from 'lucide-react';
 import type { KurirDailyTaskDoc, PackageItem } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar } from '@/components/ui/calendar';
@@ -23,6 +24,7 @@ export default function DeliveryProofsPage() {
     const [selectedKurirUid, setSelectedKurirUid] = useState<string | undefined>();
     const [selectedDate, setSelectedDate] = useState<Date | undefined>();
     const [taskHistory, setTaskHistory] = useState<{ task: KurirDailyTaskDoc | null; packages: PackageItem[] } | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
     
     const [isKurirListLoading, setIsKurirListLoading] = useState(true);
     const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -68,7 +70,8 @@ export default function DeliveryProofsPage() {
         setIsImageDialogOpen(true);
     };
 
-    const deliveredPackages = taskHistory?.packages.filter(p => p.status === 'delivered') || [];
+    const deliveredPackages = taskHistory?.packages
+        .filter(p => p.status === 'delivered' && p.id.toLowerCase().includes(searchTerm.toLowerCase())) || [];
     const selectedKurirName = allKurirs.find(k => k.uid === selectedKurirUid)?.fullName;
 
     return (
@@ -80,7 +83,7 @@ export default function DeliveryProofsPage() {
                         Pusat Bukti Pengiriman
                     </CardTitle>
                     <CardDescription>
-                        Pilih kurir dan tanggal untuk melihat riwayat tugas dan bukti foto pengiriman atau retur.
+                        Pilih kurir dan tanggal untuk melihat riwayat tugas. Anda juga bisa memfilter berdasarkan nomor resi.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -138,9 +141,20 @@ export default function DeliveryProofsPage() {
                         {!isHistoryLoading && taskHistory?.task && (
                             <div className="space-y-6 border-t pt-6 mt-6">
                                 <div>
-                                    <h4 className="font-semibold flex items-center mb-2 text-lg">
-                                        <PackageCheck className="mr-2 h-5 w-5 text-green-500"/> Bukti Paket Terkirim ({deliveredPackages.length})
-                                    </h4>
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                                        <h4 className="font-semibold flex items-center text-lg">
+                                            <PackageCheck className="mr-2 h-5 w-5 text-green-500"/> Bukti Paket Terkirim ({deliveredPackages.length})
+                                        </h4>
+                                        <div className="relative w-full sm:max-w-xs">
+                                             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                            <Input 
+                                                placeholder="Cari nomor resi..." 
+                                                value={searchTerm}
+                                                onChange={e => setSearchTerm(e.target.value)}
+                                                className="pl-8"
+                                            />
+                                        </div>
+                                    </div>
                                     {deliveredPackages.length > 0 ? (
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                             {deliveredPackages.map(pkg => (
@@ -158,7 +172,11 @@ export default function DeliveryProofsPage() {
                                                 </Card>
                                             ))}
                                         </div>
-                                    ) : <p className="text-sm text-muted-foreground">Tidak ada paket yang ditandai terkirim pada hari ini.</p>}
+                                    ) : (
+                                      <p className="text-sm text-muted-foreground">
+                                        {searchTerm ? 'Tidak ada resi yang cocok dengan pencarian Anda.' : 'Tidak ada paket yang ditandai terkirim pada hari ini.'}
+                                      </p>
+                                    )}
                                 </div>
 
                                 {taskHistory.task.finalReturnProofPhotoUrl && (
