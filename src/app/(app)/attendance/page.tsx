@@ -63,20 +63,6 @@ export default function AttendancePage() {
     setIsLoading(true);
     try {
       const data = await getKurirAttendancePageData(user.uid);
-      
-      const todayISO = format(new Date(), 'yyyy-MM-dd');
-      const hasCheckedInLocally = localStorage.getItem('courierCheckedInToday') === todayISO;
-      
-      // FIX: If local storage says we've checked in, but the server data we just got
-      // is stale and doesn't reflect that, we trust our local flag and patch the data.
-      if (hasCheckedInLocally && !data.todayRecord?.checkInTime) {
-        if (data.todayRecord) {
-            // Update the existing record for today
-            data.todayRecord.checkInTime = 'sinkronisasi..'; // use a placeholder
-            data.todayRecord.status = 'Present';
-        }
-      }
-      
       setPageData(data);
     } catch (error: any) {
         console.error("Error fetching attendance data:", error);
@@ -143,22 +129,7 @@ export default function AttendancePage() {
 
         toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Mengalihkan ke dashboard...` });
         
-        // Optimistically update the state of the current (attendance) page.
-        // This ensures that if the user navigates back, they cannot check in again.
-        setPageData(prev => ({
-            ...prev!,
-            todayRecord: {
-                ...(prev?.todayRecord ?? {} as AttendanceRecord),
-                id: docId,
-                kurirUid: currentUser.uid,
-                kurirId: currentUser.id,
-                kurirName: currentUser.fullName,
-                date: todayISO,
-                checkInTime: newRecord.checkInTime,
-                status: newRecord.status as 'Present' | 'Late',
-            }
-        }));
-        
+        // Set flag for dashboard page to know it should load tasks
         localStorage.setItem('courierCheckedInToday', todayISO);
         
         // Use Next.js router for a soft navigation to the dashboard.
@@ -193,7 +164,7 @@ export default function AttendancePage() {
             checkOutTimestamp: Timestamp.fromDate(now),
         });
         toast({ title: "Check-Out Berhasil", description: `Anda check-out pukul ${checkOutTime}.` });
-        await fetchAttendanceData(currentUser);
+        await fetchAttendanceData(currentUser); // Refetch data to update UI
     } catch(error) {
         console.error("Error during check-out:", error);
         toast({ title: "Check-Out Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
