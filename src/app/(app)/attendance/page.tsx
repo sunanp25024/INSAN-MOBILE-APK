@@ -127,18 +127,19 @@ export default function AttendancePage() {
           checkInTimestamp: Timestamp.fromDate(now)
         }, { merge: true });
 
-        toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}. Mengalihkan ke dashboard...` });
+        toast({ title: "Check-In Berhasil", description: `Anda check-in pukul ${newRecord.checkInTime}.` });
         
-        // Set flag for dashboard page to know it should load tasks
+        // This is the crucial fix: Refetch data to update the UI correctly.
+        await fetchAttendanceData(currentUser);
+
+        // Set flag for dashboard page, but don't redirect
         localStorage.setItem('courierCheckedInToday', todayISO);
-        
-        // Use Next.js router for a soft navigation to the dashboard.
-        router.push('/dashboard');
 
     } catch (error) {
         console.error("Error during check-in: ", error);
         toast({ title: "Check-In Gagal", description: "Terjadi kesalahan saat menyimpan data.", variant: "destructive" });
-        setIsSubmitting(false); // Only set submitting to false on error
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
