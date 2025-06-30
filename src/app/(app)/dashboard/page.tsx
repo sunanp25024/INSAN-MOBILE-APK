@@ -613,13 +613,8 @@ export default function DashboardPage() {
     
     setIsSubmitting(true);
     try {
-        const filePath = `delivery_proofs/${dailyTaskDocId}/${capturingForPackageId}_${Date.now()}.jpg`;
-        const uploadResult = await uploadFileToServer(filePath, photoDataUrl);
-
-        if (!uploadResult.success || !uploadResult.url) {
-            throw new Error(uploadResult.message || 'Failed to get upload URL.');
-        }
-        const downloadURL = uploadResult.url;
+        // ** TEMPORARY CHANGE: Store Data URL in Firestore instead of uploading **
+        const downloadURL = photoDataUrl;
 
         const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", capturingForPackageId);
         await updateDoc(packageDocRef, {
@@ -639,10 +634,10 @@ export default function DashboardPage() {
                 lastUpdateTime: new Date().toISOString() 
             } : p
         ));
-        toast({ title: "Foto Bukti Terkirim" });
+        toast({ title: "Bukti Disimpan (Lokal)", description: "Foto bukti pengiriman disimpan sementara." });
     } catch (error) {
         console.error("Error saving delivery proof:", error);
-        toast({ title: "Error Simpan Bukti", description: "Gagal mengunggah foto bukti.", variant: "destructive" });
+        toast({ title: "Error Simpan Bukti", description: "Gagal menyimpan data bukti pengiriman.", variant: "destructive" });
     } finally {
         setIsSubmitting(false);
         setCapturingForPackageId(null);
@@ -674,13 +669,15 @@ export default function DashboardPage() {
   const handleFinishDay = async () => {
     if(!dailyTaskDocId || !currentUser || !dailyTaskData) return;
     const remainingInTransit = inTransitPackages.filter(p => p.status === 'in_transit');
-    let finalReturnProofUrl: string | null = null; 
+    
+    // ** TEMPORARY CHANGE: Use Data URL directly **
+    let finalReturnProofUrl: string | null = returnProofPhotoDataUrl;
 
     setIsSubmitting(true);
     
     try {
         if (remainingInTransit.length > 0) {
-          if (!returnProofPhotoDataUrl) { 
+          if (!finalReturnProofUrl) { 
             toast({ title: "Upload Bukti Paket Pending", description: "Untuk menyelesaikan, upload foto bukti serah terima semua paket pending.", variant: "destructive" });
             setIsSubmitting(false);
             return;
@@ -690,13 +687,6 @@ export default function DashboardPage() {
             setIsSubmitting(false);
             return;
           }
-          const filePath = `return_proofs/${dailyTaskDocId}/return_proof_${Date.now()}.jpg`;
-          const uploadResult = await uploadFileToServer(filePath, returnProofPhotoDataUrl);
-
-          if (!uploadResult.success || !uploadResult.url) {
-            throw new Error(uploadResult.message || 'Gagal mengunggah foto bukti retur.');
-          }
-          finalReturnProofUrl = uploadResult.url;
         }
 
         const batch = writeBatch(db);
@@ -744,7 +734,7 @@ export default function DashboardPage() {
         toast({ title: "Pengantaran Selesai", description: `Terima kasih! Paket retur diserahkan kepada ${returnLeadReceiverName.trim() || 'N/A'}.` });
     } catch (error) {
         console.error("Error finishing day:", error);
-        toast({ title: "Error", description: "Gagal menyelesaikan hari. Gagal mengunggah foto.", variant: "destructive"});
+        toast({ title: "Error", description: "Gagal menyelesaikan hari.", variant: "destructive"});
     } finally {
         setIsSubmitting(false);
     }
