@@ -620,7 +620,7 @@ export default function DashboardPage() {
         await updateDoc(packageDocRef, {
             status: 'delivered',
             recipientName: photoRecipientName.trim(),
-            deliveryProofPhotoUrl: downloadURL, 
+            deliveryProofPhotoUrl: downloadURL,
             lastUpdateTime: serverTimestamp()
         });
         
@@ -670,14 +670,11 @@ export default function DashboardPage() {
     if(!dailyTaskDocId || !currentUser || !dailyTaskData) return;
     const remainingInTransit = inTransitPackages.filter(p => p.status === 'in_transit');
     
-    // ** TEMPORARY CHANGE: Use Data URL directly **
-    let finalReturnProofUrl: string | null = returnProofPhotoDataUrl;
-
     setIsSubmitting(true);
     
     try {
         if (remainingInTransit.length > 0) {
-          if (!finalReturnProofUrl) { 
+          if (!returnProofPhotoDataUrl) { 
             toast({ title: "Upload Bukti Paket Pending", description: "Untuk menyelesaikan, upload foto bukti serah terima semua paket pending.", variant: "destructive" });
             setIsSubmitting(false);
             return;
@@ -694,13 +691,16 @@ export default function DashboardPage() {
         const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length;
         const pendingForReturnCount = remainingInTransit.length;
 
+        // Use a placeholder for the large data URL to avoid exceeding document size limits.
+        const finalReturnProofForDb = returnProofPhotoDataUrl ? `placeholder_for_return_proof_${Date.now()}` : null;
+
         batch.update(taskDocRef, {
             taskStatus: 'completed',
             updatedAt: serverTimestamp(),
             finishTimestamp: serverTimestamp(),
             finalDeliveredCount: deliveredCount,
             finalPendingReturnCount: pendingForReturnCount,
-            finalReturnProofPhotoUrl: finalReturnProofUrl,
+            finalReturnProofPhotoUrl: finalReturnProofForDb,
             finalReturnLeadReceiverName: returnLeadReceiverName.trim() || null,
         });
 
@@ -711,10 +711,8 @@ export default function DashboardPage() {
             batch.update(packageDocRef, { 
                 status: finalPackageStatus, 
                 lastUpdateTime: serverTimestamp(),
-                returnProofPhotoUrl: finalReturnProofUrl,
-                returnLeadReceiverName: returnLeadReceiverName.trim() || null,
             });
-            updatedPendingReturn.push({ ...pkg, status: finalPackageStatus, returnProofPhotoUrl: finalReturnProofUrl || undefined, returnLeadReceiverName: returnLeadReceiverName.trim() || undefined, lastUpdateTime: new Date().toISOString() });
+            updatedPendingReturn.push({ ...pkg, status: finalPackageStatus, lastUpdateTime: new Date().toISOString() });
         });
         
         await batch.commit();
@@ -727,14 +725,14 @@ export default function DashboardPage() {
             taskStatus: 'completed' as const,
             finalDeliveredCount: deliveredCount,
             finalPendingReturnCount: pendingForReturnCount,
-            finalReturnProofPhotoUrl: finalReturnProofUrl || undefined,
+            finalReturnProofPhotoUrl: returnProofPhotoDataUrl || undefined, // Keep full data URL for local UI
             finalReturnLeadReceiverName: returnLeadReceiverName.trim() || undefined,
         };
         setDailyTaskData(finalTaskData);
         toast({ title: "Pengantaran Selesai", description: `Terima kasih! Paket retur diserahkan kepada ${returnLeadReceiverName.trim() || 'N/A'}.` });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error finishing day:", error);
-        toast({ title: "Error", description: "Gagal menyelesaikan hari.", variant: "destructive"});
+        toast({ title: "Error", description: `Gagal menyelesaikan hari: ${error.message}`, variant: "destructive"});
     } finally {
         setIsSubmitting(false);
     }
