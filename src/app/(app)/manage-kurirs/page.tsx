@@ -822,7 +822,9 @@ export default function ManageKurirsPage() {
             Impor Kurir dari Excel
           </CardTitle>
           <CardDescription>
-            Tambahkan beberapa akun kurir sekaligus menggunakan file Excel. Hanya dapat dilakukan oleh Admin/MasterAdmin.
+            Fitur impor massal ini hanya untuk Admin/MasterAdmin untuk menjaga alur persetujuan.
+            <br />
+            <span className="text-xs italic">PIC dapat menambahkan kurir satu per satu melalui tombol 'Tambah Kurir Baru'.</span>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
