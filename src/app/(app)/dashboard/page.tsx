@@ -631,11 +631,11 @@ export default function DashboardPage() {
         });
         
         // Locally, we still use the real photo for immediate user feedback.
-        setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: photoDataUrl }));
+        setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: uploadResult.url! }));
         setInTransitPackages(prev => prev.map(p =>
             p.id === capturingForPackageId ? { 
                 ...p, 
-                deliveryProofPhotoUrl: photoDataUrl, // Show real photo locally
+                deliveryProofPhotoUrl: uploadResult.url!, 
                 status: 'delivered', 
                 recipientName: photoRecipientName.trim(),
                 lastUpdateTime: new Date().toISOString() 
@@ -742,7 +742,7 @@ export default function DashboardPage() {
             taskStatus: 'completed' as const,
             finalDeliveredCount: deliveredCount,
             finalPendingReturnCount: pendingForReturnCount,
-            finalReturnProofPhotoUrl: returnProofPhotoDataUrl || undefined, // Keep real photo for local display
+            finalReturnProofPhotoUrl: finalReturnProofUrl || undefined, 
             finalReturnLeadReceiverName: returnLeadReceiverName.trim() || undefined,
         };
         setDailyTaskData(finalTaskData);
