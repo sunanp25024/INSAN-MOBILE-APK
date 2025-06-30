@@ -48,6 +48,11 @@ const MotivationalQuotes = [
   "Terima kasih atas dedikasimu. Setiap langkahmu berarti!"
 ];
 
+// Helper to validate image URLs before rendering
+const isValidImageUrl = (url?: string): url is string => {
+    return !!url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image'));
+};
+
 
 export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -920,7 +925,7 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-            {pendingCountForChart > 0 && dailyTaskData.finalReturnProofPhotoUrl && (
+            {pendingCountForChart > 0 && dailyTaskData.finalReturnProofPhotoUrl && isValidImageUrl(dailyTaskData.finalReturnProofPhotoUrl) && (
               <div className="mt-6">
                 <h3 className="font-semibold text-lg mb-2">Bukti Paket Retur:</h3>
                 <Image
@@ -1007,7 +1012,7 @@ export default function DashboardPage() {
                 <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-1"><p className="font-semibold break-all">{pkg.id} <span className={`text-xs px-2 py-0.5 rounded-full ${pkg.isCOD ? 'bg-yellow-400/20 text-yellow-600 dark:text-yellow-300' : 'bg-blue-400/20 text-blue-600 dark:text-blue-300'}`}>{pkg.isCOD ? 'COD' : 'Non-COD'}</span></p>{pkg.status === 'delivered' ? (<span className="text-xs text-green-600 dark:text-green-400 flex items-center flex-shrink-0"><CheckCircle size={14} className="mr-1"/> Terkirim</span>) : (<span className="text-xs text-orange-500 dark:text-orange-400 flex-shrink-0">Dalam Perjalanan</span>)}</div>
                   {pkg.status === 'in_transit' && (<div className="flex items-center gap-2 mt-2"><Button variant="outline" size="sm" onClick={() => handleOpenPackageCamera(pkg.id)} className="flex-1"><Camera size={16} className="mr-1" /> Foto Bukti & Nama Penerima</Button></div>)}
-                  {pkg.deliveryProofPhotoUrl && (<div className="mt-2"><p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p><div className="flex items-end gap-2"><Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" width={96} height={96} data-ai-hint="package door"/><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}><Trash2 size={16} /></Button></div></div>)}
+                  {isValidImageUrl(pkg.deliveryProofPhotoUrl) && (<div className="mt-2"><p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p><div className="flex items-end gap-2"><Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" width={96} height={96} data-ai-hint="package door"/><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}><Trash2 size={16} /></Button></div></div>)}
                 </Card>
             ))}</CardContent>
             {capturingForPackageId && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-0 md:p-4"><Card className="w-full h-full md:h-auto md:rounded-lg md:max-w-2xl"><CardHeader><CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle><CardDescription>Ambil foto dan nama penerima.</CardDescription></CardHeader><CardContent className="space-y-4"><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}<div><Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label><Input id="photoRecipientName" type="text" placeholder="Nama penerima" value={photoRecipientName} onChange={(e) => setPhotoRecipientName(e.target.value)}/></div></CardContent><CardFooter className="flex flex-col sm:flex-row justify-between gap-2"><Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim() || isSubmitting} className="w-full sm:w-auto"><Camera className="mr-2 h-4 w-4" /> {isSubmitting ? 'Mengunggah...' : 'Ambil & Simpan'}</Button></CardFooter></Card></div>)}
@@ -1020,7 +1025,7 @@ export default function DashboardPage() {
            <Card>
             <CardHeader><CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle><CardDescription>{inTransitPackages.filter(p => p.status === 'in_transit').length} paket belum terkirim dan perlu di-retur.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              <div><Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label><Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />{returnProofPhotoDataUrl && <Image src={returnProofPhotoDataUrl} alt="Preview Bukti Retur" width={100} height={100} className="mt-2 rounded border" data-ai-hint="receipt package"/>}</div>
+              <div><Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label><Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />{returnProofPhotoDataUrl && isValidImageUrl(returnProofPhotoDataUrl) && <Image src={returnProofPhotoDataUrl} alt="Preview Bukti Retur" width={100} height={100} className="mt-2 rounded border" data-ai-hint="receipt package"/>}</div>
               <div><Label htmlFor="returnLeadReceiverName">Nama Leader Serah Terima <span className="text-destructive">*</span></Label><Input id="returnLeadReceiverName" type="text" placeholder="Nama Leader/Supervisor" value={returnLeadReceiverName} onChange={(e) => setReturnLeadReceiverName(e.target.value)}/></div>
               <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1"><h4 className="text-sm font-medium text-muted-foreground">Daftar Resi Pending:</h4>{inTransitPackages.filter(p => p.status === 'in_transit').map(pkg => (<p key={pkg.id} className="text-sm text-muted-foreground break-all">{pkg.id} - <span className="italic">Pending Retur</span></p>))}</div>
             </CardContent>

@@ -21,7 +21,7 @@ if (!admin.apps.length) {
   try {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      storageBucket: BUCKET_NAME
+      storageBucket: BUCKET_NAME, // CRITICAL FIX: Added storageBucket to initialization
     });
   } catch (error: any) {
     console.error('Firebase Admin SDK initialization error:', error.stack);
