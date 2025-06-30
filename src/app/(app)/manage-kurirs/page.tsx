@@ -22,9 +22,8 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus, requestUserDeletion, resetUserPassword } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount, requestBulkUserCreation, updateUserStatus, requestUserDeletion, resetUserPassword } from '@/lib/firebaseAdminActions';
 import * as XLSX from 'xlsx';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const kurirSchema = z.object({
   uid: z.string().optional(),
@@ -380,25 +379,28 @@ export default function ManageKurirsPage() {
             }
             
             const creatorProfile = { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role };
-            const result = await importUsers(JSON.parse(JSON.stringify(jsonData)), 'Kurir', creatorProfile);
-
-            if (result.success || result.createdCount > 0) {
-                toast({
-                    title: "Impor Selesai",
-                    description: `${result.createdCount} dari ${result.totalRows} kurir berhasil ditambahkan. ${result.failedCount > 0 ? `${result.failedCount} gagal.` : ''}`,
-                    duration: 9000,
-                });
-                if (result.errors && result.errors.length > 0) {
-                    console.error("Import Errors:", result.errors);
+            // Admins create directly, PICs create an approval request
+            if (['MasterAdmin', 'Admin'].includes(currentUser.role)) {
+                 toast({ title: "Fitur ini dalam pengembangan", description: "Impor massal oleh Admin akan segera hadir.", variant: "default" });
+            } else if (currentUser.role === 'PIC') {
+                const result = await requestBulkUserCreation(JSON.parse(JSON.stringify(jsonData)), creatorProfile);
+                if(result.success) {
+                    toast({
+                        title: "Pengajuan Impor Massal Berhasil",
+                        description: `${result.requestedCount} pengguna telah diajukan untuk persetujuan.`,
+                        duration: 9000,
+                    });
+                     if (result.errors && result.errors.length > 0) {
+                        console.error("Import Validation Errors:", result.errors);
+                    }
+                } else {
+                     toast({
+                        title: "Pengajuan Impor Gagal",
+                        description: `Gagal mengajukan impor: ${result.errors?.[0] || 'Unknown error'}`,
+                        variant: "destructive",
+                        duration: 9000,
+                    });
                 }
-                fetchKurirs();
-            } else {
-                toast({
-                    title: "Impor Gagal Total",
-                    description: `Tidak ada kurir yang berhasil ditambahkan. Error: ${result.errors?.[0] || 'Unknown error'}`,
-                    variant: "destructive",
-                    duration: 9000,
-                });
             }
         } catch (error: any) {
             console.error(error);
@@ -823,9 +825,7 @@ export default function ManageKurirsPage() {
             Impor Kurir dari Excel
           </CardTitle>
           <CardDescription>
-            Fitur impor massal ini hanya untuk Admin/MasterAdmin untuk menjaga alur persetujuan.
-            <br />
-            <span className="text-xs italic">PIC dapat menambahkan kurir satu per satu melalui tombol 'Tambah Kurir Baru'.</span>
+            Tambahkan beberapa akun kurir sekaligus. Untuk PIC, pengajuan akan dikirim untuk persetujuan.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -838,54 +838,19 @@ export default function ManageKurirsPage() {
               className="mt-1"
               onChange={handleFileSelectAndImport}
               ref={fileInputRef}
-              disabled={isImporting || currentUser?.role === 'PIC'}
+              disabled={isImporting || !['MasterAdmin', 'Admin', 'PIC'].includes(currentUser?.role || '')}
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Format kolom yang diharapkan: ID Kurir (opsional), Nama Lengkap, NIK, Password Awal, Jabatan, Wilayah, Area, Lokasi Kerja (Hub), Tanggal Join (YYYY-MM-DD), Status Kontrak (Permanent/Contract/Probation), Email (opsional), Nama Bank (opsional), No Rekening (opsional), Nama Pemilik Rekening (opsional).
+            Format kolom yang diharapkan: fullName, nik, passwordValue, jabatan, wilayah, area, workLocation, joinDate (YYYY-MM-DD), contractStatus, dll.
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
-            <TooltipProvider>
-              {currentUser?.role === 'PIC' ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="w-full sm:w-auto" tabIndex={0}>
-                      <Button className="w-full" disabled>
-                        <FileUp className="mr-2 h-4 w-4" /> Impor Data Kurir
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>PIC harus mengajukan kurir satu per satu untuk persetujuan.</p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting}>
-                  <FileUp className="mr-2 h-4 w-4" /> {isImporting ? 'Mengimpor...' : 'Impor Data Kurir'}
-                </Button>
-              )}
-            </TooltipProvider>
-
-            <TooltipProvider>
-              {currentUser?.role === 'PIC' ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="w-full sm:w-auto" tabIndex={0}>
-                      <Button variant="outline" className="w-full" disabled>
-                        <Download className="mr-2 h-4 w-4" /> Unduh Template
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Hanya Admin/MasterAdmin yang dapat menggunakan fitur ini.</p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto">
-                  <Download className="mr-2 h-4 w-4" /> Unduh Template
-                </Button>
-              )}
-            </TooltipProvider>
+              <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting}>
+                <FileUp className="mr-2 h-4 w-4" /> {isImporting ? 'Mengimpor...' : 'Impor Data Kurir'}
+              </Button>
+              <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto">
+                <Download className="mr-2 h-4 w-4" /> Unduh Template
+              </Button>
           </div>
         </CardContent>
       </Card>

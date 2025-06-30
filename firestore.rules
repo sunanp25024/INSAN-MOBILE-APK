@@ -1,132 +1,82 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-  
-    // --- Helper Functions ---
-    function isSignedIn() {
-      return request.auth != null;
+    
+    // Helper function to get user's role from the 'users' collection
+    function getUserRole(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role;
     }
     
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-    
-    function getUserData(userId) {
-        // Use `exists` to prevent errors if user doc doesn't exist yet during creation.
-        return getAfter(/databases/$(database)/documents/users/$(userId)).data;
-    }
-    
-    function requestingUserRole() {
-      return getUserData(request.auth.uid).role;
-    }
-
-    function isMasterAdmin() {
-        return isSignedIn() && requestingUserRole() == 'MasterAdmin';
-    }
-    
-    function isAdmin() {
-        return isSignedIn() && (requestingUserRole() == 'Admin' || isMasterAdmin());
-    }
-
-    function isPIC() {
-        return isSignedIn() && (requestingUserRole() == 'PIC' || isAdmin());
-    }
-    
-    function isKurir() {
-      return isSignedIn() && requestingUserRole() == 'Kurir';
-    }
-    
-    // Managerial roles (PIC, Admin, MasterAdmin)
+    // Helper function to check if the user is a manager (PIC or higher)
     function isManager() {
-      return isSignedIn() && (isPIC() || isAdmin() || isMasterAdmin());
+      return request.auth != null && getUserRole(request.auth.uid) in ['MasterAdmin', 'Admin', 'PIC'];
+    }
+    
+    // Helper function to check if the user is an Admin or higher
+    function isAdminOrHigher() {
+      return request.auth != null && getUserRole(request.auth.uid) in ['MasterAdmin', 'Admin'];
     }
 
-    // --- Collection Rules ---
-
-    // Rules for 'users' collection
+    // USERS collection
     match /users/{userId} {
-      // Any signed-in user can read another user's profile (e.g., for showing names).
-      allow read: if isSignedIn();
+      // Allow a user to read their own profile.
+      // Allow managers to read any user profile.
+      allow get: if request.auth != null && (request.auth.uid == userId || isManager());
       
-      // Managers can see lists of users (e.g., manage kurirs page).
+      // Allow managers to list users for management pages.
       allow list: if isManager();
       
-      // Only MasterAdmin can create new user records directly through this rule.
-      // Other roles use approval flows which are handled by server-side logic.
-      allow create: if isMasterAdmin();
+      // Only Admins/MasterAdmins can create users directly.
+      allow create: if isAdminOrHigher();
       
-      // A user can update their own profile, or an Admin/MasterAdmin can update any profile.
-      allow update: if isOwner(userId) || isAdmin();
+      // Users can update their own data. Admins can update anyone.
+      // PICs are handled by approval flow, this rule is for the server-side action.
+      allow update: if request.auth != null && (request.auth.uid == userId || isAdminOrHigher());
       
-      // Only MasterAdmin can delete user records directly.
-      allow delete: if isMasterAdmin();
+      // Only Admins/MasterAdmins can delete users directly.
+      allow delete: if isAdminOrHigher();
     }
-    
-    // Rules for 'kurir_daily_tasks' collection and its subcollections
-    match /kurir_daily_tasks/{taskId} {
-      // The courier who owns the task or any manager can read it.
-      allow read: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid) || isManager();
-      
-      // Only the owner can create or update their own task.
-      allow create, update: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid);
-      
-      // Managers can list tasks (for reports, monitoring).
-      allow list: if isManager();
 
-      // Nobody can delete tasks from the client. Deletion should be a backend process (e.g., archiving).
-      allow delete: if false; 
-      
-      match /packages/{packageId} {
-        // Same read permissions as the parent task.
-        allow read, list: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid) || isManager();
-        // Only the task owner can manage packages within it.
-        allow create, update, delete: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid);
-      }
-    }
-    
-    // Rules for 'attendance' collection
-    match /attendance/{attendanceId} {
-      // Any signed-in user can read any attendance record (for reports, etc.).
-      allow read: if isSignedIn();
-      
-      // Managers can list attendance records.
-      allow list: if isManager();
-      
-      // A courier can only create or update their own attendance record.
-      // The attendanceId is formatted as {kurirUid}_{yyyy-MM-dd}.
-      allow create, update: if isKurir() && isOwner(attendanceId.split('_')[0]);
-    }
-    
-    // Rules for 'approval_requests' collection
+    // APPROVAL_REQUESTS collection
     match /approval_requests/{requestId} {
-      // PICs and Admins can create new requests.
-      allow create: if isPIC() || isAdmin();
+      // The requester or an Admin/MasterAdmin can see a specific request.
+      allow get: if request.auth != null && (resource.data.requestedByUid == request.auth.uid || isAdminOrHigher());
+        
+      // Admins/MasterAdmins can list all requests.
+      // PICs/Admins can list only the requests they created.
+      allow list: if request.auth != null && (isAdminOrHigher() || request.query.where[0][2] == request.auth.uid);
       
-      // Admins/MasterAdmins can read any request.
-      // A user can also read a request they initiated.
-      allow read: if isAdmin() || isOwner(resource.data.requestedByUid);
+      // PICs and Admins can create approval requests.
+      allow create: if request.auth != null && getUserRole(request.auth.uid) in ['PIC', 'Admin'];
+        
+      // Only Admins/MasterAdmins can update (approve/reject) a request.
+      allow update: if isAdminOrHigher();
       
-      // This is the key fix: Allow any manager to perform list queries.
-      // The client-side code is responsible for filtering (e.g., show only my requests).
-      // Firestore rules secure *what kind of queries* are allowed, not *what data they return*.
-      allow list: if isManager();
-      
-      // Only Admins/MasterAdmins can update a request (to approve/reject it).
-      allow update: if isAdmin();
-      
-      // Only MasterAdmins can delete a request record.
-      allow delete: if isMasterAdmin();
+      // No one should delete approval requests, to maintain an audit trail.
+      allow delete: if false;
+    }
+
+    // ATTENDANCE collection
+    match /attendance/{attendanceId} {
+      // A Kurir can read/write their own attendance.
+      // Managers can read any attendance record for reports.
+      allow get, list: if isManager();
+      allow create, update: if request.auth != null && request.resource.data.kurirUid == request.auth.uid;
     }
     
-    // Rules for 'notifications' collection
+    // KURIR_DAILY_TASKS collection and all subcollections (e.g., packages)
+    match /kurir_daily_tasks/{taskId}/{documents=**} {
+        // A Kurir can manage their own tasks.
+        // Managers can read any task data for monitoring.
+        allow read: if isManager() || (request.auth.uid != null && request.auth.uid == get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid);
+        allow write: if request.auth.uid != null && request.auth.uid == get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid;
+    }
+    
+    // NOTIFICATIONS collection (for MasterAdmin and Admin)
     match /notifications/{notificationId} {
-        // Only MasterAdmin can read/list system-wide notifications.
-        allow read, list, update: if isMasterAdmin();
-        // Notifications are created by server-side logic, not clients.
-        allow create: if false;
-        // Nobody can delete notifications from the client.
-        allow delete: if false;
+      allow read, write: if isAdminOrHigher();
     }
   }
 }

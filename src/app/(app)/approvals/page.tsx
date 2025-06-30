@@ -13,6 +13,7 @@ import { handleApprovalRequest } from '@/lib/firebaseAdminActions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export default function ApprovalsPage() {
   const { toast } = useToast();
@@ -119,6 +120,32 @@ export default function ApprovalsPage() {
   const renderRequestDetails = (req: ApprovalRequest) => {
     const { type, payload, oldPayload } = req;
     switch(type) {
+        case 'NEW_USER_BULK':
+            return (
+                <div className="overflow-x-auto">
+                    <p className="font-semibold mb-2">Daftar Pengguna Baru yang Diajukan:</p>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Nama</TableHead>
+                                <TableHead>NIK</TableHead>
+                                <TableHead>Jabatan</TableHead>
+                                <TableHead>Lokasi</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {Array.isArray(payload.users) && payload.users.map((user: any, index: number) => (
+                                <TableRow key={index}>
+                                    <TableCell>{user.fullName}</TableCell>
+                                    <TableCell>{user.nik}</TableCell>
+                                    <TableCell>{user.jabatan}</TableCell>
+                                    <TableCell>{user.workLocation}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            )
         case 'NEW_USER_ADMIN':
         case 'NEW_USER_PIC':
         case 'NEW_USER_KURIR':
@@ -131,7 +158,7 @@ export default function ApprovalsPage() {
                     {Object.entries(payload).map(([key, value]) => {
                         if (key === 'updatedAt' || key === 'updatedBy') return null;
                         const oldValue = oldPayload ? oldPayload[key] : 'N/A';
-                        return (<p key={key}><strong>{key}:</strong> <span className="line-through text-muted-foreground">{String(oldValue)}</span> &rarr; <span className="text-green-500">{String(value)}</span></p>);
+                        return (<p key={key}><strong>{key}:</strong> <span className="line-through text-muted-foreground">{String(oldValue)}</span> &rarr; <span className="text-primary">{String(value)}</span></p>);
                     })}
                 </>
             );
@@ -172,7 +199,7 @@ export default function ApprovalsPage() {
               {requests.map((req) => (
                 <Card key={req.id} className="bg-card-foreground/5 p-4">
                   <h3 className="text-md font-semibold text-foreground mb-1">
-                    {req.type} - {req.targetEntityName || req.payload.fullName}
+                    {req.type} - {req.targetEntityName || req.payload.fullName || `Impor Massal ${req.payload?.users?.length || 0} Pengguna`}
                   </h3>
                   <div className="text-sm space-y-0.5 mb-3">
                     <p><strong>Diajukan oleh:</strong> {req.requestedByName} ({req.requestedByRole})</p>
