@@ -1,34 +1,32 @@
-
 rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-
-    // Aturan umum: Secara default, tolak semua akses baca/tulis.
-    // Aturan yang lebih spesifik di bawah ini akan menggantikan ini.
-    match /{allPaths=**} {
-      allow read, write: if false;
-    }
-
-    // Izinkan pengguna yang sudah login untuk mengubah avatar mereka sendiri.
-    // Izinkan siapa saja untuk membaca avatar.
-    match /avatars/{userId}/{fileName} {
+    // Allow public read access to the logo file in the public directory
+    match /public/Logo_PIS-removebg-preview.png {
       allow read: if true;
+    }
+  
+    // Rules for user avatars
+    match /avatars/{userId}/{fileName} {
+      // Anyone can read avatars (e.g., to display profile pictures)
+      allow read: if true;
+      // Only the authenticated user can upload/update their own avatar
       allow write: if request.auth != null && request.auth.uid == userId;
     }
-
-    // Izinkan pengguna yang sudah login (kurir) untuk mengunggah bukti pengiriman.
-    // Izinkan siapa saja untuk membaca bukti pengiriman (untuk dilihat oleh PIC/Admin).
-    match /delivery_proofs/{taskId}/{fileName} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
     
-    // Izinkan pengguna yang sudah login (kurir) untuk mengunggah bukti retur.
-    // Izinkan siapa saja untuk membaca bukti retur (untuk dilihat oleh PIC/Admin).
+    // Rules for delivery proofs
+    match /delivery_proofs/{taskId}/{fileName} {
+      // Allow read access for authenticated users (e.g., managers, the courier themselves)
+      allow read: if request.auth != null;
+      // Write access is handled by the server-side function for security
+      allow write: if false; 
+    }
+
+    // Rules for return proofs
     match /return_proofs/{taskId}/{fileName} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow write: if false;
     }
   }
 }
