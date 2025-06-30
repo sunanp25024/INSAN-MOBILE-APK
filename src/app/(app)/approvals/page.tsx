@@ -31,7 +31,7 @@ export default function ApprovalsPage() {
     if (userDataString) {
       const user = JSON.parse(userDataString) as UserProfile;
       setCurrentUser(user);
-      if (user.role === 'MasterAdmin') {
+      if (['MasterAdmin', 'Admin'].includes(user.role)) {
         fetchRequests();
       } else {
         setIsLoading(false);
@@ -60,7 +60,7 @@ export default function ApprovalsPage() {
   };
   
   const processApproval = async (requestId: string, decision: 'approved' | 'rejected', notes?: string) => {
-    if (!currentUser || currentUser.role !== 'MasterAdmin') {
+    if (!currentUser || !['MasterAdmin', 'Admin'].includes(currentUser.role)) {
         toast({ title: "Akses Ditolak", description: "Anda tidak punya izin untuk aksi ini.", variant: "destructive" });
         return;
     }
@@ -100,7 +100,7 @@ export default function ApprovalsPage() {
     return <div className="text-center p-8">Memuat permintaan...</div>;
   }
   
-  if (currentUser?.role !== 'MasterAdmin') {
+  if (!currentUser || !['MasterAdmin', 'Admin'].includes(currentUser.role)) {
      return (
       <Card className="shadow-lg">
         <CardHeader>
@@ -109,7 +109,7 @@ export default function ApprovalsPage() {
             Akses Ditolak
           </CardTitle>
           <CardDescription>
-            Halaman ini hanya untuk MasterAdmin.
+            Halaman ini hanya untuk MasterAdmin dan Admin.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -163,7 +163,7 @@ export default function ApprovalsPage() {
             Persetujuan Perubahan Data
           </CardTitle>
           <CardDescription>
-            Tinjau dan setujui atau tolak permintaan perubahan data yang diajukan oleh Admin.
+            Tinjau dan setujui atau tolak permintaan perubahan data yang diajukan oleh PIC.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -208,7 +208,7 @@ export default function ApprovalsPage() {
             <DialogHeader>
                 <DialogTitle>Tolak Permintaan Persetujuan</DialogTitle>
                 <DialogDescription>
-                    Berikan alasan penolakan. Catatan ini akan terlihat oleh Admin yang mengajukan.
+                    Berikan alasan penolakan. Catatan ini akan terlihat oleh pengguna yang mengajukan.
                 </DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-2">

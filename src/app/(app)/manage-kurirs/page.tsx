@@ -13,7 +13,7 @@ import { useForm, SubmitHandler, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import type { UserProfile } from '@/types';
+import type { UserProfile, ApprovalRequest } from '@/types';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, parseISO, isValid } from "date-fns";
@@ -70,8 +70,17 @@ export default function ManageKurirsPage() {
     const userDataString = localStorage.getItem('loggedInUser');
     if (userDataString) {
       try {
-        setCurrentUser(JSON.parse(userDataString) as UserProfile);
-      } catch (error) { console.error("Error parsing user data for manage kurirs page", error); }
+        const user = JSON.parse(userDataString) as UserProfile;
+        setCurrentUser(user);
+        if (!['MasterAdmin', 'Admin', 'PIC'].includes(user.role)) {
+            setIsLoading(false);
+        }
+      } catch (error) { 
+        console.error("Error parsing user data for manage kurirs page", error); 
+        setIsLoading(false);
+      }
+    } else {
+        setIsLoading(false);
     }
   }, []);
 
@@ -108,8 +117,10 @@ export default function ManageKurirsPage() {
   };
 
   useEffect(() => {
-    fetchKurirs();
-  }, []);
+    if (currentUser && ['MasterAdmin', 'Admin', 'PIC'].includes(currentUser.role)) {
+      fetchKurirs();
+    }
+  }, [currentUser]);
 
   const createNotification = async (message: string) => {
     try {
@@ -145,7 +156,7 @@ export default function ManageKurirsPage() {
       return;
     }
 
-    const newKurirProfile: Omit<UserProfile, 'uid'> & {passwordValue: string} = {
+    const newKurirProfile: Omit<UserProfile, 'uid'> & {passwordValue?: string} = {
       id: appKurirId,
       fullName: data.fullName,
       nik: data.nik,
@@ -162,11 +173,12 @@ export default function ManageKurirsPage() {
       bankRecipientName: data.bankRecipientName || '',
       status: 'Aktif',
       createdBy: { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role },
-      passwordValue: data.passwordValue
     };
 
-    if (currentUser.role === 'Admin') {
+    if (currentUser.role === 'PIC') {
        newKurirProfile.status = 'PendingApproval';
+       newKurirProfile.passwordValue = data.passwordValue; // Include password for request payload
+
        const approvalRequest: Omit<ApprovalRequest, 'id'> = {
         type: 'NEW_USER_KURIR',
         status: 'pending',
@@ -178,20 +190,19 @@ export default function ManageKurirsPage() {
         targetEntityId: appKurirId,
         targetEntityName: data.fullName,
         payload: newKurirProfile,
-        notesFromRequester: "Pengajuan kurir baru.",
+        notesFromRequester: "Pengajuan kurir baru dari PIC.",
       };
       try {
         await addDoc(collection(db, "approval_requests"), approvalRequest);
-        await createNotification(`Admin ${currentUser.fullName} mengajukan penambahan kurir baru: ${data.fullName}.`);
-        toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan kurir ${data.fullName} telah dikirim.` });
+        await createNotification(`PIC ${currentUser.fullName} mengajukan penambahan kurir baru: ${data.fullName}.`);
+        toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan kurir ${data.fullName} telah dikirim untuk persetujuan.` });
         reset();
         setIsAddKurirDialogOpen(false);
       } catch (error: any) {
         toast({ title: "Error Pengajuan", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
       }
-    } else if (currentUser.role === 'MasterAdmin') {
-        const { passwordValue, ...profileToCreate } = newKurirProfile;
-        const result = await createUserAccount(emailForAuth, passwordValue, profileToCreate);
+    } else if (['MasterAdmin', 'Admin'].includes(currentUser.role)) {
+        const result = await createUserAccount(emailForAuth, data.passwordValue, newKurirProfile);
         if (result.success) {
             toast({ title: "Kurir Ditambahkan", description: `Kurir ${data.fullName} berhasil ditambahkan.` });
             fetchKurirs();
@@ -252,7 +263,7 @@ export default function ManageKurirsPage() {
         workLocation: currentEditingKurir.workLocation,
     }
 
-    if (currentUser.role === 'Admin') {
+    if (currentUser.role === 'PIC') {
         const approvalRequest: Omit<ApprovalRequest, 'id'> = {
             type: 'UPDATE_USER_PROFILE',
             status: 'pending',
@@ -269,13 +280,12 @@ export default function ManageKurirsPage() {
         };
         try {
             await addDoc(collection(db, "approval_requests"), approvalRequest);
-            await createNotification(`Admin ${currentUser.fullName} mengajukan perubahan data untuk Kurir: ${currentEditingKurir.fullName}.`);
+            await createNotification(`PIC ${currentUser.fullName} mengajukan perubahan data untuk Kurir: ${currentEditingKurir.fullName}.`);
             toast({ title: "Permintaan Perubahan Diajukan", description: `Permintaan perubahan data kurir ${data.fullName} telah dikirim.` });
         } catch (error: any) {
             toast({ title: "Error Pengajuan Update", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
         }
-
-    } else if (currentUser.role === 'MasterAdmin') {
+    } else if (['MasterAdmin', 'Admin'].includes(currentUser.role)) {
         try {
             const kurirDocRef = doc(db, "users", currentEditingKurir.uid);
             await updateDoc(kurirDocRef, updatePayload);
@@ -298,18 +308,18 @@ export default function ManageKurirsPage() {
   
   const handleConfirmDelete = async () => {
     if (!userToManage || !currentUser) return;
-
     setIsSubmitting(true);
     let result;
-    if (currentUser.role === 'MasterAdmin') {
+
+    if (['MasterAdmin', 'Admin'].includes(currentUser.role)) {
         result = await deleteUserAccount(userToManage.uid);
-    } else if (currentUser.role === 'Admin') {
+    } else if (currentUser.role === 'PIC') {
         result = await requestUserDeletion(userToManage, { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role });
     }
 
     if (result && result.success) {
         toast({ title: "Sukses", description: result.message });
-        if(currentUser.role === 'MasterAdmin') fetchKurirs();
+        if(['MasterAdmin', 'Admin'].includes(currentUser.role)) fetchKurirs();
     } else if(result) {
         toast({ title: "Error", description: result.message, variant: "destructive" });
     }
@@ -424,7 +434,7 @@ export default function ManageKurirsPage() {
     if (!kurirToUpdate.uid || !currentUser) return;
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
     
-    if (currentUser.role === 'Admin') {
+    if (currentUser.role === 'PIC') {
         const approvalRequest: Omit<ApprovalRequest, 'id'> = {
             type: newStatusActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
             status: 'pending',
@@ -440,12 +450,12 @@ export default function ManageKurirsPage() {
         };
          try {
             await addDoc(collection(db, "approval_requests"), approvalRequest);
-            await createNotification(`Admin ${currentUser.fullName} mengajukan perubahan status untuk Kurir: ${kurirToUpdate.fullName} menjadi ${newStatus}.`);
+            await createNotification(`PIC ${currentUser.fullName} mengajukan perubahan status untuk Kurir: ${kurirToUpdate.fullName} menjadi ${newStatus}.`);
             toast({ title: "Permintaan Perubahan Status Diajukan", description: `Permintaan perubahan status kurir ${kurirToUpdate.fullName} menjadi ${newStatus} telah dikirim.` });
         } catch (error: any) {
             toast({ title: "Error Pengajuan", description: `Gagal mengajukan perubahan status: ${error.message}`, variant: "destructive" });
         }
-    } else if (currentUser.role === 'MasterAdmin') {
+    } else if (['MasterAdmin', 'Admin'].includes(currentUser.role)) {
         const handlerProfile = { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role };
         const result = await updateUserStatus(kurirToUpdate.uid, newStatus, handlerProfile);
         
@@ -470,6 +480,21 @@ export default function ManageKurirsPage() {
     (kurir.wilayah && kurir.wilayah.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (kurir.area && kurir.area.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+  
+  if (isLoading) {
+    return <div className="text-center p-8">Memuat data...</div>;
+  }
+  
+  if (!currentUser || !['MasterAdmin', 'Admin', 'PIC'].includes(currentUser.role)) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-destructive">Akses Ditolak</CardTitle>
+                <CardDescription>Halaman ini hanya bisa diakses oleh MasterAdmin, Admin, dan PIC.</CardDescription>
+            </CardHeader>
+        </Card>
+    )
+  }
 
   const KurirFormFields = ({ control, register, errors, isEdit = false }: { control: any, register: any, errors: any, isEdit?: boolean }) => (
     <>
@@ -510,9 +535,9 @@ export default function ManageKurirsPage() {
         </div>
         <div>
           <Label htmlFor={isEdit ? "editKurirEmail" : "addKurirEmail"} className="mb-1 block">Email (untuk login)</Label>
-          <Input id={isEdit ? "editKurirEmail" : "addKurirEmail"} type="email" {...register("email")} placeholder="Auto: [ID_Kurir]@internal.spx" autoComplete="email" readOnly={isEdit} className={isEdit ? 'bg-muted/50' : ''}/>
+          <Input id={isEdit ? "editKurirEmail" : "addKurirEmail"} type="email" {...register("email")} placeholder="Auto: [ID_Kurir]@internal.spx" autoComplete="email" readOnly={isEdit && ['MasterAdmin', 'Admin'].includes(currentUser?.role || '')} className={isEdit && ['MasterAdmin', 'Admin'].includes(currentUser?.role || '') ? 'bg-muted/50' : ''}/>
           {errors.email && <p className="text-destructive text-sm mt-1">{errors.email.message}</p>}
-          {isEdit && <p className="text-xs text-muted-foreground mt-1">Email login tidak dapat diubah dari form ini.</p>}
+          {isEdit && ['MasterAdmin', 'Admin'].includes(currentUser?.role || '') && <p className="text-xs text-muted-foreground mt-1">Email login tidak dapat diubah dari form ini.</p>}
         </div>
       </div>
 
@@ -606,7 +631,7 @@ export default function ManageKurirsPage() {
               Manajemen Akun Kurir
             </CardTitle>
             <CardDescription>
-              Kelola akun Kurir. Perubahan oleh Admin memerlukan persetujuan MasterAdmin.
+              Kelola akun Kurir. Perubahan oleh PIC memerlukan persetujuan Admin/MasterAdmin.
             </CardDescription>
           </div>
           <Dialog open={isAddKurirDialogOpen} onOpenChange={setIsAddKurirDialogOpen}>
@@ -624,7 +649,7 @@ export default function ManageKurirsPage() {
                 <KurirFormFields control={control} register={register} errors={errors} />
                 <DialogFooter className="pt-6">
                   <Button type="button" variant="outline" onClick={() => setIsAddKurirDialogOpen(false)}>Batal</Button>
-                  <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : (currentUser?.role === 'Admin' ? 'Ajukan Penambahan' : 'Simpan Kurir')}</Button>
+                  <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : (currentUser?.role === 'PIC' ? 'Ajukan Penambahan' : 'Simpan Kurir')}</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -680,8 +705,8 @@ export default function ManageKurirsPage() {
                         </span>
                       </TableCell>
                       <TableCell className="text-center space-x-1">
-                        {currentUser?.role === 'MasterAdmin' && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenResetPasswordDialog(kurir)} disabled={currentUser.uid === kurir.uid}><KeyRound size={16}/></Button>
+                        {['MasterAdmin', 'Admin'].includes(currentUser?.role || '') && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenResetPasswordDialog(kurir)} disabled={currentUser?.uid === kurir.uid}><KeyRound size={16}/></Button>
                         )}
                         <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditDialog(kurir)}><Edit size={16}/></Button>
                         <Button
@@ -717,9 +742,9 @@ export default function ManageKurirsPage() {
           <DialogHeader>
             <DialogTitle>Konfirmasi Aksi</DialogTitle>
             <DialogDescription>
-              {currentUser?.role === 'MasterAdmin'
+              {['MasterAdmin', 'Admin'].includes(currentUser?.role || '')
                 ? `Apakah Anda yakin ingin menghapus pengguna ${userToManage?.fullName}? Tindakan ini tidak dapat dibatalkan.`
-                : `Ajukan penghapusan untuk pengguna ${userToManage?.fullName}? Permintaan ini memerlukan persetujuan dari MasterAdmin.`}
+                : `Ajukan penghapusan untuk pengguna ${userToManage?.fullName}? Permintaan ini memerlukan persetujuan.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -732,7 +757,7 @@ export default function ManageKurirsPage() {
               onClick={handleConfirmDelete}
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Memproses...' : (currentUser?.role === 'MasterAdmin' ? 'Ya, Hapus Pengguna' : 'Ya, Ajukan Penghapusan')}
+              {isSubmitting ? 'Memproses...' : (['MasterAdmin', 'Admin'].includes(currentUser?.role || '') ? 'Ya, Hapus Pengguna' : 'Ya, Ajukan Penghapusan')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -783,7 +808,7 @@ export default function ManageKurirsPage() {
             <KurirFormFields control={controlEdit} register={registerEdit} errors={errorsEdit} isEdit={true}/>
             <DialogFooter className="pt-6">
               <Button type="button" variant="outline" onClick={() => setIsEditKurirDialogOpen(false)}>Batal</Button>
-              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : (currentUser?.role === 'Admin' ? 'Ajukan Perubahan' : 'Simpan Perubahan')}</Button>
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : (currentUser?.role === 'PIC' ? 'Ajukan Perubahan' : 'Simpan Perubahan')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -797,7 +822,7 @@ export default function ManageKurirsPage() {
             Impor Kurir dari Excel
           </CardTitle>
           <CardDescription>
-            Tambahkan beberapa akun kurir sekaligus menggunakan file Excel.
+            Tambahkan beberapa akun kurir sekaligus menggunakan file Excel. Hanya dapat dilakukan oleh Admin/MasterAdmin.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -810,17 +835,17 @@ export default function ManageKurirsPage() {
               className="mt-1"
               onChange={handleFileSelectAndImport}
               ref={fileInputRef}
-              disabled={isImporting}
+              disabled={isImporting || currentUser?.role === 'PIC'}
             />
           </div>
           <p className="text-xs text-muted-foreground">
             Format kolom yang diharapkan: ID Kurir (opsional), Nama Lengkap, NIK, Password Awal, Jabatan, Wilayah, Area, Lokasi Kerja (Hub), Tanggal Join (YYYY-MM-DD), Status Kontrak (Permanent/Contract/Probation), Email (opsional), Nama Bank (opsional), No Rekening (opsional), Nama Pemilik Rekening (opsional).
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
-            <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting}>
+            <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting || currentUser?.role === 'PIC'}>
               <FileUp className="mr-2 h-4 w-4" /> {isImporting ? 'Mengimpor...' : 'Impor Data Kurir'}
             </Button>
-            <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto">
+            <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto" disabled={currentUser?.role === 'PIC'}>
               <Download className="mr-2 h-4 w-4" /> Unduh Template
             </Button>
           </div>

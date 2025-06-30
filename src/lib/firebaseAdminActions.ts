@@ -99,8 +99,8 @@ export async function requestUserDeletion(
   userToDelete: UserProfile,
   requesterProfile: { uid: string; fullName: string; role: UserRole }
 ) {
-  if (requesterProfile.role !== 'Admin') {
-    return { success: false, message: 'Hanya Admin yang dapat mengajukan penghapusan.' };
+  if (!['Admin', 'PIC'].includes(requesterProfile.role)) {
+    return { success: false, message: 'Hanya Admin atau PIC yang dapat mengajukan penghapusan.' };
   }
   if (!userToDelete.uid || !userToDelete.id) {
     return { success: false, message: 'Data pengguna yang akan dihapus tidak lengkap.'};
@@ -310,8 +310,8 @@ export async function handleApprovalRequest(
   handlerProfile: { uid: string; name: string; role: UserRole },
   notesFromHandler?: string
 ) {
-  if (handlerProfile.role !== 'MasterAdmin') {
-    return { success: false, message: 'Hanya MasterAdmin yang dapat memproses persetujuan.' };
+  if (!['MasterAdmin', 'Admin'].includes(handlerProfile.role)) {
+    return { success: false, message: 'Hanya MasterAdmin atau Admin yang dapat memproses persetujuan.' };
   }
 
   const requestDocRef = adminDb.collection('approval_requests').doc(requestId);
@@ -400,8 +400,8 @@ export async function updateUserStatus(
   if (!uid) {
     return { success: false, message: 'User UID is required.' };
   }
-  if (handlerProfile.role !== 'MasterAdmin') {
-    return { success: false, message: 'Only MasterAdmin can change user status directly.' };
+  if (!['MasterAdmin', 'Admin'].includes(handlerProfile.role)) {
+    return { success: false, message: 'Only MasterAdmin or Admin can change user status directly.' };
   }
 
   try {

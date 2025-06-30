@@ -64,15 +64,15 @@ const allNavItems: NavItem[] = [
   
   // MasterAdmin Only
   { href: "/manage-admins", icon: Users, label: "Manage Admin", roles: ['MasterAdmin'] },
-  { href: "/approvals", icon: ShieldCheck, label: "Persetujuan", roles: ['MasterAdmin'] },
   { href: "/notifications", icon: Bell, label: "Notifikasi Sistem", roles: ['MasterAdmin'] },
 
   // Admin & MasterAdmin
   { href: "/manage-pics", icon: Briefcase, label: "Manage PIC", roles: ['MasterAdmin', 'Admin'] },
-  { href: "/manage-kurirs", icon: Users, label: "Manage Kurir", roles: ['MasterAdmin', 'Admin'] },
-  { href: "/pending-approvals", icon: MailCheck, label: "Status Persetujuan", roles: ['Admin'] },
+  { href: "/approvals", icon: ShieldCheck, label: "Persetujuan", roles: ['MasterAdmin', 'Admin'] },
   
   // Managerial (PIC & Up)
+  { href: "/manage-kurirs", icon: Users, label: "Manage Kurir", roles: ['MasterAdmin', 'Admin', 'PIC'] },
+  { href: "/pending-approvals", icon: MailCheck, label: "Status Persetujuan", roles: ['Admin', 'PIC'] },
   { href: "/courier-management", icon: ClipboardList, label: "Monitoring Kurir", roles: ['MasterAdmin', 'Admin', 'PIC'] },
   { href: "/courier-updates", icon: Bell, label: "Ringkasan Aktifitas", roles: ['MasterAdmin', 'Admin', 'PIC'] },
   { href: "/delivery-proofs", icon: PackageSearch, label: "Bukti Pengiriman", roles: ['MasterAdmin', 'Admin', 'PIC'] },

@@ -35,7 +35,7 @@ export default function PendingApprovalsPage() {
     if (userDataString) {
       const user = JSON.parse(userDataString) as UserProfile;
       setCurrentUser(user);
-      if (user.role === 'Admin') {
+      if (['Admin', 'PIC'].includes(user.role)) {
         fetchRequests(user.uid);
       } else {
         setIsLoading(false);
@@ -45,12 +45,12 @@ export default function PendingApprovalsPage() {
     }
   }, []);
 
-  const fetchRequests = async (adminUid: string) => {
+  const fetchRequests = async (requesterUid: string) => {
     setIsLoading(true);
     try {
       const q = query(
         collection(db, "approval_requests"), 
-        where("requestedByUid", "==", adminUid)
+        where("requestedByUid", "==", requesterUid)
       );
       const querySnapshot = await getDocs(q);
       const fetchedRequests: ApprovalRequest[] = [];
@@ -76,7 +76,7 @@ export default function PendingApprovalsPage() {
     return <div className="text-center p-8">Memuat data...</div>;
   }
   
-  if (currentUser?.role !== 'Admin') {
+  if (!currentUser || !['Admin', 'PIC'].includes(currentUser.role)) {
     return (
       <Card className="shadow-lg">
         <CardHeader>
@@ -85,7 +85,7 @@ export default function PendingApprovalsPage() {
             Akses Ditolak
           </CardTitle>
           <CardDescription>
-            Halaman ini hanya untuk Admin.
+            Halaman ini hanya untuk Admin dan PIC.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -101,7 +101,7 @@ export default function PendingApprovalsPage() {
             Status Persetujuan Saya
           </CardTitle>
           <CardDescription>
-            Lihat status permintaan perubahan data yang telah Anda ajukan kepada MasterAdmin.
+            Lihat status permintaan perubahan data yang telah Anda ajukan.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -128,7 +128,7 @@ export default function PendingApprovalsPage() {
                         Diajukan pada: {(req.requestTimestamp as Timestamp)?.toDate().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>
                       {req.notesFromHandler && (
-                        <p className="text-xs text-primary italic mt-1">Catatan MasterAdmin: {req.notesFromHandler}</p>
+                        <p className="text-xs text-primary italic mt-1">Catatan dari Atasan: {req.notesFromHandler}</p>
                       )}
                     </div>
                   </div>
