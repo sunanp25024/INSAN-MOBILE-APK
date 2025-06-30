@@ -216,7 +216,7 @@ export default function DeliveryProofsPage() {
                                                                 <ZoomIn className="h-4 w-4 mr-2" /> Lihat
                                                             </Button>
                                                         ) : (
-                                                            <span className="text-xs text-muted-foreground">Tidak Ada</span>
+                                                            <span className="text-xs text-muted-foreground">Tidak Diunggah</span>
                                                         )}
                                                     </TableCell>
                                                 </TableRow>
@@ -266,7 +266,7 @@ export default function DeliveryProofsPage() {
                                                                 <ZoomIn className="h-4 w-4 mr-2" /> Lihat
                                                             </Button>
                                                         ) : (
-                                                            <span className="text-xs text-muted-foreground">Tidak Ada</span>
+                                                            <span className="text-xs text-muted-foreground">Tidak Diunggah</span>
                                                         )}
                                                     </TableCell>
                                                 </TableRow>
@@ -299,3 +299,5 @@ export default function DeliveryProofsPage() {
         </div>
     );
 }
+
+    
