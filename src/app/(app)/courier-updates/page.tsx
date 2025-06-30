@@ -182,10 +182,10 @@ export default function CourierUpdatesPage() {
         <CardHeader>
           <CardTitle className="flex items-center text-2xl text-primary">
             <ListChecks className="mr-3 h-7 w-7" />
-            Ringkasan Aktivitas & Absensi Kurir Harian
+            Ringkasan Aktifitas Kurir
           </CardTitle>
           <CardDescription>
-            Pantau ringkasan penyelesaian pekerjaan dan status absensi kurir untuk hari ini secara real-time.
+            Pantau ringkasan aktivitas, absensi, dan penyelesaian pekerjaan kurir untuk hari ini secara real-time.
           </CardDescription>
         </CardHeader>
       </Card>

@@ -73,8 +73,8 @@ const allNavItems: NavItem[] = [
   { href: "/pending-approvals", icon: MailCheck, label: "Status Persetujuan", roles: ['Admin'] },
   
   // Managerial (PIC & Up)
-  { href: "/courier-management", icon: ClipboardList, label: "Manajemen Kurir", roles: ['MasterAdmin', 'Admin', 'PIC'] },
-  { href: "/courier-updates", icon: Bell, label: "Update Kurir", roles: ['MasterAdmin', 'Admin', 'PIC'] },
+  { href: "/courier-management", icon: ClipboardList, label: "Monitoring Kurir", roles: ['MasterAdmin', 'Admin', 'PIC'] },
+  { href: "/courier-updates", icon: Bell, label: "Ringkasan Aktifitas", roles: ['MasterAdmin', 'Admin', 'PIC'] },
   { href: "/delivery-proofs", icon: PackageSearch, label: "Bukti Pengiriman", roles: ['MasterAdmin', 'Admin', 'PIC'] },
   { href: "/reports", icon: FileText, label: "Laporan", roles: ['MasterAdmin', 'Admin', 'PIC'] },
 

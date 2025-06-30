@@ -88,11 +88,10 @@ export default function CourierManagementPage() {
         <CardHeader>
           <CardTitle className="flex items-center text-2xl text-primary">
             <ClipboardList className="mr-3 h-7 w-7" />
-            Manajemen & Monitoring Kurir (View Only)
+            Monitoring Kurir
           </CardTitle>
           <CardDescription>
             Pantau aktivitas dan performa kurir. Sebagai peran manajerial, Anda memiliki akses lihat saja ke data kurir.
-            Perubahan data dilakukan oleh Admin atau MasterAdmin di halaman "Manage Kurir".
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
