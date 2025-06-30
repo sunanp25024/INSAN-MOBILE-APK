@@ -27,7 +27,6 @@ import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDo
 import { mockLocationsData } from '@/types';
 import * as XLSX from 'xlsx';
 import { getDashboardData } from '@/lib/kurirActions';
-import { uploadFileToServer } from '@/lib/firebaseAdminActions';
 
 
 const packageInputSchema = z.object({
@@ -613,28 +612,33 @@ export default function DashboardPage() {
     
     setIsSubmitting(true);
     try {
-        // ** TEMPORARY CHANGE: Store Data URL in Firestore instead of uploading **
-        const downloadURL = photoDataUrl;
+        // ** SMART TEMPORARY FIX **
+        // Keep the full photo data ONLY for local UI preview.
+        // Save a SMALL placeholder to Firestore to avoid size limit errors.
+        const placeholderUrl = `placeholder_for_package_${capturingForPackageId}.jpg`;
 
         const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", capturingForPackageId);
+        
+        // This write to Firestore is now very small and will not fail.
         await updateDoc(packageDocRef, {
             status: 'delivered',
             recipientName: photoRecipientName.trim(),
-            deliveryProofPhotoUrl: downloadURL,
+            deliveryProofPhotoUrl: placeholderUrl, // Save placeholder
             lastUpdateTime: serverTimestamp()
         });
         
-        setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: downloadURL }));
+        // Update local state with the REAL photo data for a good testing experience.
+        setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: photoDataUrl }));
         setInTransitPackages(prev => prev.map(p =>
             p.id === capturingForPackageId ? { 
                 ...p, 
-                deliveryProofPhotoUrl: downloadURL, 
+                deliveryProofPhotoUrl: photoDataUrl, // Use real data for local UI
                 status: 'delivered', 
                 recipientName: photoRecipientName.trim(),
                 lastUpdateTime: new Date().toISOString() 
             } : p
         ));
-        toast({ title: "Bukti Disimpan (Lokal)", description: "Foto bukti pengiriman disimpan sementara." });
+        toast({ title: "Bukti Disimpan (Lokal)", description: "Foto bukti pengiriman disimpan sementara untuk pengujian." });
     } catch (error) {
         console.error("Error saving delivery proof:", error);
         toast({ title: "Error Simpan Bukti", description: "Gagal menyimpan data bukti pengiriman.", variant: "destructive" });
@@ -644,6 +648,7 @@ export default function DashboardPage() {
         setPhotoRecipientName('');
     }
   };
+
 
   const handleDeletePackagePhoto = async (packageId: string) => {
     if(!dailyTaskDocId) return;
@@ -691,7 +696,7 @@ export default function DashboardPage() {
         const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length;
         const pendingForReturnCount = remainingInTransit.length;
 
-        // Use a placeholder for the large data URL to avoid exceeding document size limits.
+        // Save a placeholder for the large return proof data URL to avoid exceeding document size limits.
         const finalReturnProofForDb = returnProofPhotoDataUrl ? `placeholder_for_return_proof_${Date.now()}` : null;
 
         batch.update(taskDocRef, {
