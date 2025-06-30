@@ -21,6 +21,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useToast } from '@/hooks/use-toast';
 import { getKurirTaskHistory } from '@/lib/kurirActions';
 
+// Helper to validate image URLs before rendering
+const isValidImageUrl = (url?: string): url is string => {
+    return !!url && url.startsWith('http');
+};
 
 function DetailItem({ icon: Icon, label, value }: { icon: React.ElementType, label: string, value?: string | React.ReactNode }) {
   if (value === undefined || value === null || value === '') return null;
@@ -260,8 +264,8 @@ export default function CourierDetailPage() {
                                 <CardContent className="p-3">
                                     <p className="font-semibold text-sm break-all">{pkg.id}</p>
                                     <p className="text-xs text-muted-foreground">Penerima: {pkg.recipientName || 'N/A'}</p>
-                                    {pkg.deliveryProofPhotoUrl ? (
-                                        <div className="mt-2 relative aspect-video cursor-pointer group" onClick={() => handleImageClick(pkg.deliveryProofPhotoUrl!, `Bukti untuk ${pkg.id}`)}>
+                                    {isValidImageUrl(pkg.deliveryProofPhotoUrl) ? (
+                                        <div className="mt-2 relative aspect-video cursor-pointer group" onClick={() => handleImageClick(pkg.deliveryProofPhotoUrl, `Bukti untuk ${pkg.id}`)}>
                                             <Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti untuk ${pkg.id}`} layout="fill" objectFit="cover" className="rounded-md" data-ai-hint="package door"/>
                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <ZoomIn className="h-8 w-8 text-white"/>
@@ -280,7 +284,7 @@ export default function CourierDetailPage() {
                 {/* Returned Packages Section */}
                 <div>
                   <h4 className="text-lg font-semibold mb-2">Paket Pending/Retur ({taskHistory.packages.filter(p=>p.status === 'returned').length})</h4>
-                  {taskHistory.packages.filter(p=>p.status === 'returned').length > 0 && taskHistory.task.finalReturnProofPhotoUrl ? (
+                  {taskHistory.packages.filter(p=>p.status === 'returned').length > 0 && isValidImageUrl(taskHistory.task.finalReturnProofPhotoUrl) ? (
                      <Card className="max-w-md">
                         <CardHeader>
                             <CardTitle className="text-base flex items-center"><PackageReturnedIcon className="mr-2 h-4 w-4"/>Bukti Serah Terima Retur</CardTitle>
