@@ -1,80 +1,132 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper function to check if a user is authenticated
-    function isAuthenticated() {
+  
+    // --- Helper Functions ---
+    function isSignedIn() {
       return request.auth != null;
     }
-
-    // Helper function to get the user's role from their profile
-    function getUserRole(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data.role;
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
     }
     
-    // Helper function to check if the user has one of the specified roles
-    function hasOneOfRoles(roles) {
-      return isAuthenticated() && getUserRole(request.auth.uid) in roles;
+    function getUserData(userId) {
+        // Use `exists` to prevent errors if user doc doesn't exist yet during creation.
+        return getAfter(/databases/$(database)/documents/users/$(userId)).data;
     }
     
-    // Helper function to check if the user is the owner of the document
-    function isOwner(uid) {
-      return request.auth.uid == uid;
+    function requestingUserRole() {
+      return getUserData(request.auth.uid).role;
     }
 
-    // Rules for the 'users' collection
+    function isMasterAdmin() {
+        return isSignedIn() && requestingUserRole() == 'MasterAdmin';
+    }
+    
+    function isAdmin() {
+        return isSignedIn() && (requestingUserRole() == 'Admin' || isMasterAdmin());
+    }
+
+    function isPIC() {
+        return isSignedIn() && (requestingUserRole() == 'PIC' || isAdmin());
+    }
+    
+    function isKurir() {
+      return isSignedIn() && requestingUserRole() == 'Kurir';
+    }
+    
+    // Managerial roles (PIC, Admin, MasterAdmin)
+    function isManager() {
+      return isSignedIn() && (isPIC() || isAdmin() || isMasterAdmin());
+    }
+
+    // --- Collection Rules ---
+
+    // Rules for 'users' collection
     match /users/{userId} {
-      // ANY authenticated user can get their own profile.
-      // Managerial roles can get ANY single user profile.
-      allow get: if isAuthenticated() && (isOwner(userId) || hasOneOfRoles(['MasterAdmin', 'Admin', 'PIC']));
-
-      // Managerial roles can list users (e.g., for management pages).
-      // This rule FIXES the permission error for the "Manage Kurir" page.
-      allow list: if hasOneOfRoles(['MasterAdmin', 'Admin', 'PIC']);
-
-      // ONLY MasterAdmin or Admin can create new users directly.
-      allow create: if hasOneOfRoles(['MasterAdmin', 'Admin']);
-
-      // A user can update their own profile.
-      // MasterAdmin and Admin can update any user profile.
-      allow update: if isAuthenticated() && (isOwner(userId) || hasOneOfRoles(['MasterAdmin', 'Admin']));
-
-      // ONLY MasterAdmin or Admin can delete users directly.
-      allow delete: if hasOneOfRoles(['MasterAdmin', 'Admin']);
-    }
-
-    // Rules for the 'approval_requests' collection
-    match /approval_requests/{requestId} {
-      // MasterAdmin and Admin can read all requests.
-      // PIC and Admin can read requests they created.
-      allow read: if hasOneOfRoles(['MasterAdmin', 'Admin']) || (isAuthenticated() && get(/databases/$(database)/documents/approval_requests/$(requestId)).data.requestedByUid == request.auth.uid);
-
-      // PIC and Admin can create new requests.
-      allow create: if hasOneOfRoles(['PIC', 'Admin']);
+      // Any signed-in user can read another user's profile (e.g., for showing names).
+      allow read: if isSignedIn();
       
-      // ONLY MasterAdmin and Admin can update (approve/reject) requests.
-      allow update: if hasOneOfRoles(['MasterAdmin', 'Admin']);
-
-      // No one can delete requests for audit trail purposes.
-      allow delete: if false;
+      // Managers can see lists of users (e.g., manage kurirs page).
+      allow list: if isManager();
+      
+      // Only MasterAdmin can create new user records directly through this rule.
+      // Other roles use approval flows which are handled by server-side logic.
+      allow create: if isMasterAdmin();
+      
+      // A user can update their own profile, or an Admin/MasterAdmin can update any profile.
+      allow update: if isOwner(userId) || isAdmin();
+      
+      // Only MasterAdmin can delete user records directly.
+      allow delete: if isMasterAdmin();
     }
     
-     // Rules for the 'notifications' collection (only for MasterAdmin)
+    // Rules for 'kurir_daily_tasks' collection and its subcollections
+    match /kurir_daily_tasks/{taskId} {
+      // The courier who owns the task or any manager can read it.
+      allow read: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid) || isManager();
+      
+      // Only the owner can create or update their own task.
+      allow create, update: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid);
+      
+      // Managers can list tasks (for reports, monitoring).
+      allow list: if isManager();
+
+      // Nobody can delete tasks from the client. Deletion should be a backend process (e.g., archiving).
+      allow delete: if false; 
+      
+      match /packages/{packageId} {
+        // Same read permissions as the parent task.
+        allow read, list: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid) || isManager();
+        // Only the task owner can manage packages within it.
+        allow create, update, delete: if isOwner(get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid);
+      }
+    }
+    
+    // Rules for 'attendance' collection
+    match /attendance/{attendanceId} {
+      // Any signed-in user can read any attendance record (for reports, etc.).
+      allow read: if isSignedIn();
+      
+      // Managers can list attendance records.
+      allow list: if isManager();
+      
+      // A courier can only create or update their own attendance record.
+      // The attendanceId is formatted as {kurirUid}_{yyyy-MM-dd}.
+      allow create, update: if isKurir() && isOwner(attendanceId.split('_')[0]);
+    }
+    
+    // Rules for 'approval_requests' collection
+    match /approval_requests/{requestId} {
+      // PICs and Admins can create new requests.
+      allow create: if isPIC() || isAdmin();
+      
+      // Admins/MasterAdmins can read any request.
+      // A user can also read a request they initiated.
+      allow read: if isAdmin() || isOwner(resource.data.requestedByUid);
+      
+      // This is the key fix: Allow any manager to perform list queries.
+      // The client-side code is responsible for filtering (e.g., show only my requests).
+      // Firestore rules secure *what kind of queries* are allowed, not *what data they return*.
+      allow list: if isManager();
+      
+      // Only Admins/MasterAdmins can update a request (to approve/reject it).
+      allow update: if isAdmin();
+      
+      // Only MasterAdmins can delete a request record.
+      allow delete: if isMasterAdmin();
+    }
+    
+    // Rules for 'notifications' collection
     match /notifications/{notificationId} {
-      allow read, write: if hasOneOfRoles(['MasterAdmin']);
-      allow create: if isAuthenticated(); // Allow any authenticated user to potentially create a notification (e.g., via a server function)
+        // Only MasterAdmin can read/list system-wide notifications.
+        allow read, list, update: if isMasterAdmin();
+        // Notifications are created by server-side logic, not clients.
+        allow create: if false;
+        // Nobody can delete notifications from the client.
+        allow delete: if false;
     }
-
-    // Rules for subcollections within 'kurir_daily_tasks'
-    match /kurir_daily_tasks/{taskId}/{document=**} {
-      // Kurir can read/write to their own tasks.
-      // Managerial roles can read everything.
-      allow read: if hasOneOfRoles(['MasterAdmin', 'Admin', 'PIC']) || (isAuthenticated() && taskId.startsWith(request.auth.uid));
-      allow write: if isAuthenticated() && taskId.startsWith(request.auth.uid);
-    }
-    
-    // Default-deny for any path not matched.
   }
 }

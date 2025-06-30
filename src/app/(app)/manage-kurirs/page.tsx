@@ -24,6 +24,7 @@ import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimest
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { createUserAccount, deleteUserAccount, importUsers, updateUserStatus, requestUserDeletion, resetUserPassword } from '@/lib/firebaseAdminActions';
 import * as XLSX from 'xlsx';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const kurirSchema = z.object({
   uid: z.string().optional(),
@@ -844,12 +845,47 @@ export default function ManageKurirsPage() {
             Format kolom yang diharapkan: ID Kurir (opsional), Nama Lengkap, NIK, Password Awal, Jabatan, Wilayah, Area, Lokasi Kerja (Hub), Tanggal Join (YYYY-MM-DD), Status Kontrak (Permanent/Contract/Probation), Email (opsional), Nama Bank (opsional), No Rekening (opsional), Nama Pemilik Rekening (opsional).
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
-            <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting || currentUser?.role === 'PIC'}>
-              <FileUp className="mr-2 h-4 w-4" /> {isImporting ? 'Mengimpor...' : 'Impor Data Kurir'}
-            </Button>
-            <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto" disabled={currentUser?.role === 'PIC'}>
-              <Download className="mr-2 h-4 w-4" /> Unduh Template
-            </Button>
+            <TooltipProvider>
+              {currentUser?.role === 'PIC' ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="w-full sm:w-auto" tabIndex={0}>
+                      <Button className="w-full" disabled>
+                        <FileUp className="mr-2 h-4 w-4" /> Impor Data Kurir
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>PIC harus mengajukan kurir satu per satu untuk persetujuan.</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting}>
+                  <FileUp className="mr-2 h-4 w-4" /> {isImporting ? 'Mengimpor...' : 'Impor Data Kurir'}
+                </Button>
+              )}
+            </TooltipProvider>
+
+            <TooltipProvider>
+              {currentUser?.role === 'PIC' ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="w-full sm:w-auto" tabIndex={0}>
+                      <Button variant="outline" className="w-full" disabled>
+                        <Download className="mr-2 h-4 w-4" /> Unduh Template
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Hanya Admin/MasterAdmin yang dapat menggunakan fitur ini.</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button onClick={handleDownloadTemplate} variant="outline" className="w-full sm:w-auto">
+                  <Download className="mr-2 h-4 w-4" /> Unduh Template
+                </Button>
+              )}
+            </TooltipProvider>
           </div>
         </CardContent>
       </Card>
