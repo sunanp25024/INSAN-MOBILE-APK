@@ -12,9 +12,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Upload, Lock, Bell, Palette, Save } from 'lucide-react';
 import type { UserProfile } from '@/types';
 import { getAuth, updatePassword, reauthenticateWithCredential, EmailAuthProvider, updateProfile } from 'firebase/auth';
-import { storage, db } from '@/lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db } from '@/lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { uploadFileToServer } from '@/lib/firebaseAdminActions';
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -59,7 +59,11 @@ export default function SettingsPage() {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setAvatarFile(file);
-      setAvatarPreview(URL.createObjectURL(file));
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatarPreview(reader.result as string); // This is a data URL
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -77,32 +81,37 @@ export default function SettingsPage() {
         return;
     }
     
-    let avatarUrl = currentUser.avatarUrl || null;
+    let avatarUrlToSave = currentUser.avatarUrl || null;
 
     try {
-        // 1. Upload new avatar if it exists
-        if (avatarFile) {
-            const storageRef = ref(storage, `avatars/${user.uid}/${avatarFile.name}`);
-            const uploadResult = await uploadBytes(storageRef, avatarFile);
-            avatarUrl = await getDownloadURL(uploadResult.ref);
+        // 1. Upload new avatar if a new file has been selected
+        if (avatarFile && avatarPreview) {
+            const filePath = `avatars/${user.uid}/${avatarFile.name}`;
+            const uploadResult = await uploadFileToServer(filePath, avatarPreview);
+            if (!uploadResult.success || !uploadResult.url) {
+                toast({ title: "Gagal Mengunggah Avatar", description: uploadResult.message, variant: "destructive" });
+                setIsProfileSubmitting(false);
+                return;
+            }
+            avatarUrlToSave = uploadResult.url;
         }
 
         // 2. Update Firebase Auth profile
         await updateProfile(user, {
             displayName: fullName,
-            photoURL: avatarUrl
+            photoURL: avatarUrlToSave
         });
 
         // 3. Update Firestore profile document
         const userDocRef = doc(db, "users", user.uid);
         await updateDoc(userDocRef, {
             fullName: fullName,
-            avatarUrl: avatarUrl,
+            avatarUrl: avatarUrlToSave,
             updatedAt: new Date().toISOString()
         });
         
         // 4. Update local state and localStorage
-        const updatedUser: UserProfile = { ...currentUser, fullName, avatarUrl: avatarUrl || undefined };
+        const updatedUser: UserProfile = { ...currentUser, fullName, avatarUrl: avatarUrlToSave || undefined };
         localStorage.setItem('loggedInUser', JSON.stringify(updatedUser));
         setCurrentUser(updatedUser);
         

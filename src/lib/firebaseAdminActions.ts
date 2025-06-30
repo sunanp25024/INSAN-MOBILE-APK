@@ -281,7 +281,7 @@ export async function importUsers(
           throw new Error("Peran tidak valid untuk impor");
       }
 
-      const result = await createUserAccount(emailForAuth, String(userData.passwordValue), profileToCreate);
+      const result = await createUserAccount(String(userData.passwordValue), profileToCreate);
       if (result.success) {
         createdCount++;
       } else {

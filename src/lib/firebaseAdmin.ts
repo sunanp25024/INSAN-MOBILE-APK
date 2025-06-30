@@ -1,6 +1,7 @@
 import admin from 'firebase-admin';
 
 // NOTE: No 'use server' here. This is a server-side utility module, not a server action file.
+const BUCKET_NAME = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
 // Check if the app is already initialized to prevent errors in hot-reloading environments
 if (!admin.apps.length) {
@@ -11,16 +12,16 @@ if (!admin.apps.length) {
   };
 
   // A more robust check to ensure all necessary parts of the configuration are present.
-  if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
+  if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey || !BUCKET_NAME) {
     throw new Error(
-      'Firebase Admin credentials are not found in the environment variables. Please set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
+      'Firebase Admin credentials or Storage Bucket are not found in environment variables. Please set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, and NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.'
     );
   }
 
   try {
-    // Initialize the app with credentials only. Storage bucket will be specified at the point of use.
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
+      storageBucket: BUCKET_NAME
     });
   } catch (error: any) {
     console.error('Firebase Admin SDK initialization error:', error.stack);
