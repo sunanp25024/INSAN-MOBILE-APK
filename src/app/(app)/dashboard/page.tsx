@@ -612,22 +612,23 @@ export default function DashboardPage() {
     
     setIsSubmitting(true);
     try {
-        // For testing, save the large data URL directly.
-        // In production, this would be an upload function returning a URL.
-        const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", capturingForPackageId);
+        // In this test version, we save a placeholder text instead of the large data URL.
+        const photoPlaceholder = `bukti_foto.jpg`; 
         
+        const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", capturingForPackageId);
         await updateDoc(packageDocRef, {
             status: 'delivered',
             recipientName: photoRecipientName.trim(),
-            deliveryProofPhotoUrl: photoDataUrl, // Storing base64 for testing
+            deliveryProofPhotoUrl: photoPlaceholder, 
             lastUpdateTime: serverTimestamp()
         });
         
+        // Locally, we still use the real photo for immediate user feedback.
         setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: photoDataUrl }));
         setInTransitPackages(prev => prev.map(p =>
             p.id === capturingForPackageId ? { 
                 ...p, 
-                deliveryProofPhotoUrl: photoDataUrl, 
+                deliveryProofPhotoUrl: photoDataUrl, // Show real photo locally
                 status: 'delivered', 
                 recipientName: photoRecipientName.trim(),
                 lastUpdateTime: new Date().toISOString() 
@@ -636,8 +637,7 @@ export default function DashboardPage() {
         toast({ title: "Bukti Disimpan", description: "Foto bukti pengiriman telah disimpan." });
     } catch (error) {
         console.error("Error saving delivery proof:", error);
-        let errorMessage = "Gagal menyimpan bukti pengiriman. Ukuran data foto mungkin terlalu besar untuk Firestore.";
-        toast({ title: "Error Simpan Bukti", description: errorMessage, variant: "destructive" });
+        toast({ title: "Error Simpan Bukti", description: "Gagal menyimpan bukti pengiriman.", variant: "destructive" });
     } finally {
         setIsSubmitting(false);
         setCapturingForPackageId(null);
@@ -692,8 +692,8 @@ export default function DashboardPage() {
         const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length;
         const pendingForReturnCount = remainingInTransit.length;
         
-        // Save the full data URL for testing purposes
-        const finalReturnProofForDb = returnProofPhotoDataUrl || null;
+        // For testing, save a placeholder string instead of the large data URL
+        const finalReturnProofForDb = returnProofPhotoDataUrl ? `placeholder_for_return_proof_${Date.now()}` : null;
 
         batch.update(taskDocRef, {
             taskStatus: 'completed',
@@ -726,7 +726,7 @@ export default function DashboardPage() {
             taskStatus: 'completed' as const,
             finalDeliveredCount: deliveredCount,
             finalPendingReturnCount: pendingForReturnCount,
-            finalReturnProofPhotoUrl: returnProofPhotoDataUrl || undefined,
+            finalReturnProofPhotoUrl: returnProofPhotoDataUrl || undefined, // Keep real photo for local display
             finalReturnLeadReceiverName: returnLeadReceiverName.trim() || undefined,
         };
         setDailyTaskData(finalTaskData);
@@ -918,7 +918,7 @@ export default function DashboardPage() {
                 />
               </div>
             )}
-             {pendingCountForChart > 0 && !dailyTaskData.finalReturnProofPhotoUrl?.startsWith('data:image') && (
+             {pendingCountForChart > 0 && dailyTaskData.finalReturnProofPhotoUrl && !dailyTaskData.finalReturnProofPhotoUrl.startsWith('data:image') && (
                 <p className="text-muted-foreground text-center">Tidak ada foto bukti retur yang diupload untuk paket pending.</p>
             )}
           </CardContent>
@@ -978,7 +978,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center space-x-2 pt-1"><Checkbox id="isManualCOD" checked={isManualCOD} onCheckedChange={(checked) => setIsManualCOD(checked as boolean)} disabled={managedPackages.length >= dailyTaskData.totalPackages}/><Label htmlFor="isManualCOD" className="text-sm font-normal text-muted-foreground">Paket COD</Label></div>
               </div>
-              {isScanning && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"> <Card className="w-[calc(100%-2rem)] max-w-2xl"><CardHeader><CardTitle>Scan Barcode Paket</CardTitle><CardDescription>Arahkan kamera ke barcode paket.</CardDescription></CardHeader><CardContent><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && ( <Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert> )}{hasCameraPermission === null && <p>Meminta izin kamera...</p>}</CardContent><CardFooter className="flex justify-end gap-2"><Button variant="outline" onClick={() => setIsScanning(false)} className="w-full sm:w-auto">Tutup</Button></CardFooter></Card></div> )}
+              {isScanning && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-0 md:p-4"> <Card className="w-full h-full md:h-auto md:rounded-lg md:max-w-2xl"><CardHeader><CardTitle>Scan Barcode Paket</CardTitle><CardDescription>Arahkan kamera ke barcode paket.</CardDescription></CardHeader><CardContent><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && ( <Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert> )}{hasCameraPermission === null && <p>Meminta izin kamera...</p>}</CardContent><CardFooter className="flex justify-end gap-2"><Button variant="outline" onClick={() => setIsScanning(false)} className="w-full sm:w-auto">Tutup</Button></CardFooter></Card></div> )}
               {managedPackages.length > 0 && ( <div className="space-y-2 max-h-60 overflow-y-auto p-1 border rounded-md"><h3 className="font-semibold text-muted-foreground px-2">Paket Diproses ({managedPackages.length}):</h3>{managedPackages.map(pkg => (<div key={pkg.id} className="flex items-center justify-between p-2 bg-card-foreground/5 rounded-md"><span className="text-sm break-all">{pkg.id} ({pkg.isCOD ? 'COD' : 'Non-COD'}) - <span className="italic text-xs text-primary">Proses</span></span><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive flex-shrink-0" onClick={() => handleDeleteManagedPackage(pkg.id)}><Trash2 size={16} /></Button></div>))}</div> )}
               <Progress value={(managedPackages.length / (dailyTaskData.totalPackages || 1)) * 100} className="w-full h-2.5" />
             </CardContent>
@@ -997,8 +997,8 @@ export default function DashboardPage() {
                   {pkg.deliveryProofPhotoUrl && pkg.deliveryProofPhotoUrl.startsWith('data:image') && (<div className="mt-2"><p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p><div className="flex items-end gap-2"><Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" width={96} height={96} data-ai-hint="package door"/><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}><Trash2 size={16} /></Button></div></div>)}
                 </Card>
             ))}</CardContent>
-            {capturingForPackageId && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><Card className="w-[calc(100%-2rem)] max-w-2xl"><CardHeader><CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle><CardDescription>Ambil foto dan nama penerima.</CardDescription></CardHeader><CardContent className="space-y-4"><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}<div><Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label><Input id="photoRecipientName" type="text" placeholder="Nama penerima" value={photoRecipientName} onChange={(e) => setPhotoRecipientName(e.target.value)}/></div></CardContent><CardFooter className="flex flex-col sm:flex-row justify-between gap-2"><Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim() || isSubmitting} className="w-full sm:w-auto"><Camera className="mr-2 h-4 w-4" /> {isSubmitting ? 'Mengunggah...' : 'Ambil & Simpan'}</Button></CardFooter></Card></div>)}
-            {isScanningForDeliveryUpdate && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><Card className="w-[calc(100%-2rem)] max-w-2xl"><CardHeader><CardTitle>Scan Resi Update Pengiriman</CardTitle><CardDescription>Arahkan kamera ke barcode.</CardDescription></CardHeader><CardContent><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}</CardContent><CardFooter className="flex justify-end gap-2"><Button variant="outline" onClick={() => setIsScanningForDeliveryUpdate(false)} className="w-full sm:w-auto">Tutup</Button></CardFooter></Card></div>)}
+            {capturingForPackageId && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-0 md:p-4"><Card className="w-full h-full md:h-auto md:rounded-lg md:max-w-2xl"><CardHeader><CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle><CardDescription>Ambil foto dan nama penerima.</CardDescription></CardHeader><CardContent className="space-y-4"><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}<div><Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label><Input id="photoRecipientName" type="text" placeholder="Nama penerima" value={photoRecipientName} onChange={(e) => setPhotoRecipientName(e.target.value)}/></div></CardContent><CardFooter className="flex flex-col sm:flex-row justify-between gap-2"><Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim() || isSubmitting} className="w-full sm:w-auto"><Camera className="mr-2 h-4 w-4" /> {isSubmitting ? 'Mengunggah...' : 'Ambil & Simpan'}</Button></CardFooter></Card></div>)}
+            {isScanningForDeliveryUpdate && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-0 md:p-4"><Card className="w-full h-full md:h-auto md:rounded-lg md:max-w-2xl"><CardHeader><CardTitle>Scan Resi Update Pengiriman</CardTitle><CardDescription>Arahkan kamera ke barcode.</CardDescription></CardHeader><CardContent><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}</CardContent><CardFooter className="flex justify-end gap-2"><Button variant="outline" onClick={() => setIsScanningForDeliveryUpdate(false)} className="w-full sm:w-auto">Tutup</Button></CardFooter></Card></div>)}
             <CardFooter><Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : 'Selesaikan Pengantaran Hari Ini'}</Button></CardFooter>
           </Card>
         )}
