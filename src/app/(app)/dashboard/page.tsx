@@ -612,36 +612,36 @@ export default function DashboardPage() {
     
     setIsSubmitting(true);
     try {
-        // ** SMART TEMPORARY FIX **
-        // Keep the full photo data ONLY for local UI preview.
-        // Save a SMALL placeholder to Firestore to avoid size limit errors.
         const placeholderUrl = `placeholder_for_package_${capturingForPackageId}.jpg`;
-
         const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", capturingForPackageId);
         
-        // This write to Firestore is now very small and will not fail.
         await updateDoc(packageDocRef, {
             status: 'delivered',
             recipientName: photoRecipientName.trim(),
-            deliveryProofPhotoUrl: placeholderUrl, // Save placeholder
+            deliveryProofPhotoUrl: photoDataUrl,
             lastUpdateTime: serverTimestamp()
         });
         
-        // Update local state with the REAL photo data for a good testing experience.
         setPackagePhotoMap(prev => ({ ...prev, [capturingForPackageId]: photoDataUrl }));
         setInTransitPackages(prev => prev.map(p =>
             p.id === capturingForPackageId ? { 
                 ...p, 
-                deliveryProofPhotoUrl: photoDataUrl, // Use real data for local UI
+                deliveryProofPhotoUrl: photoDataUrl, 
                 status: 'delivered', 
                 recipientName: photoRecipientName.trim(),
                 lastUpdateTime: new Date().toISOString() 
             } : p
         ));
-        toast({ title: "Bukti Disimpan (Lokal)", description: "Foto bukti pengiriman disimpan sementara untuk pengujian." });
+        toast({ title: "Bukti Disimpan", description: "Foto bukti pengiriman telah disimpan." });
     } catch (error) {
         console.error("Error saving delivery proof:", error);
-        toast({ title: "Error Simpan Bukti", description: "Gagal menyimpan data bukti pengiriman.", variant: "destructive" });
+        let errorMessage = "Gagal menyimpan bukti pengiriman.";
+        if (error instanceof Error && (error as any).code === 'resource-exhausted') {
+            errorMessage = "Ukuran foto terlalu besar untuk disimpan. Coba lagi atau gunakan koneksi yang lebih baik.";
+        } else if (error instanceof Error && error.message.includes("payload size exceeds the limit")) {
+            errorMessage = "Gagal: Data foto terlalu besar. Coba gunakan foto dengan resolusi lebih rendah.";
+        }
+        toast({ title: "Error Simpan Bukti", description: errorMessage, variant: "destructive" });
     } finally {
         setIsSubmitting(false);
         setCapturingForPackageId(null);
@@ -695,9 +695,8 @@ export default function DashboardPage() {
         const taskDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId);
         const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length;
         const pendingForReturnCount = remainingInTransit.length;
-
-        // Save a placeholder for the large return proof data URL to avoid exceeding document size limits.
-        const finalReturnProofForDb = returnProofPhotoDataUrl ? `placeholder_for_return_proof_${Date.now()}` : null;
+        
+        const finalReturnProofForDb = returnProofPhotoDataUrl ? "Bukti Retur Tersimpan" : null;
 
         batch.update(taskDocRef, {
             taskStatus: 'completed',
@@ -730,7 +729,7 @@ export default function DashboardPage() {
             taskStatus: 'completed' as const,
             finalDeliveredCount: deliveredCount,
             finalPendingReturnCount: pendingForReturnCount,
-            finalReturnProofPhotoUrl: returnProofPhotoDataUrl || undefined, // Keep full data URL for local UI
+            finalReturnProofPhotoUrl: returnProofPhotoDataUrl || undefined,
             finalReturnLeadReceiverName: returnLeadReceiverName.trim() || undefined,
         };
         setDailyTaskData(finalTaskData);
@@ -908,11 +907,11 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-            {pendingCountForChart > 0 && dailyTaskData.finalReturnProofPhotoUrl && (
+            {pendingCountForChart > 0 && dailyTaskData.finalReturnProofPhotoUrl && dailyTaskData.finalReturnProofPhotoUrl.startsWith('data:image') && (
               <div className="mt-6">
                 <h3 className="font-semibold text-lg mb-2">Bukti Paket Retur:</h3>
                 <Image
-                  src={dailyTaskData.finalReturnProofPhotoUrl} 
+                  src={dailyTaskData.finalReturnProofPhotoUrl}
                   alt="Bukti Retur"
                   className="max-w-sm w-full md:max-w-xs rounded-lg shadow-md border border-border"
                   width={300}
@@ -993,7 +992,7 @@ export default function DashboardPage() {
                 <Card key={pkg.id} className={`p-3 ${pkg.status === 'delivered' ? 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700' : 'bg-card'}`}>
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-1"><p className="font-semibold break-all">{pkg.id} <span className={`text-xs px-2 py-0.5 rounded-full ${pkg.isCOD ? 'bg-yellow-400/20 text-yellow-600 dark:text-yellow-300' : 'bg-blue-400/20 text-blue-600 dark:text-blue-300'}`}>{pkg.isCOD ? 'COD' : 'Non-COD'}</span></p>{pkg.status === 'delivered' ? (<span className="text-xs text-green-600 dark:text-green-400 flex items-center flex-shrink-0"><CheckCircle size={14} className="mr-1"/> Terkirim</span>) : (<span className="text-xs text-orange-500 dark:text-orange-400 flex-shrink-0">Dalam Perjalanan</span>)}</div>
                   {pkg.status === 'in_transit' && (<div className="flex items-center gap-2 mt-2"><Button variant="outline" size="sm" onClick={() => handleOpenPackageCamera(pkg.id)} className="flex-1"><Camera size={16} className="mr-1" /> Foto Bukti & Nama Penerima</Button></div>)}
-                  {pkg.deliveryProofPhotoUrl && (<div className="mt-2"><p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p><div className="flex items-end gap-2"><Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" width={96} height={96} data-ai-hint="package door"/><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}><Trash2 size={16} /></Button></div></div>)}
+                  {pkg.deliveryProofPhotoUrl && pkg.deliveryProofPhotoUrl.startsWith('data:image') && (<div className="mt-2"><p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p><div className="flex items-end gap-2"><Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" width={96} height={96} data-ai-hint="package door"/><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}><Trash2 size={16} /></Button></div></div>)}
                 </Card>
             ))}</CardContent>
             {capturingForPackageId && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><Card className="w-[calc(100%-2rem)] max-w-2xl"><CardHeader><CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle><CardDescription>Ambil foto dan nama penerima.</CardDescription></CardHeader><CardContent className="space-y-4"><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}<div><Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label><Input id="photoRecipientName" type="text" placeholder="Nama penerima" value={photoRecipientName} onChange={(e) => setPhotoRecipientName(e.target.value)}/></div></CardContent><CardFooter className="flex flex-col sm:flex-row justify-between gap-2"><Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim() || isSubmitting} className="w-full sm:w-auto"><Camera className="mr-2 h-4 w-4" /> {isSubmitting ? 'Mengunggah...' : 'Ambil & Simpan'}</Button></CardFooter></Card></div>)}
