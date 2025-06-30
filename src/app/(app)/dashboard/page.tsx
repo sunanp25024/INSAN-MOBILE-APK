@@ -612,13 +612,14 @@ export default function DashboardPage() {
     
     setIsSubmitting(true);
     try {
-        const placeholderUrl = `placeholder_for_package_${capturingForPackageId}.jpg`;
+        // For testing, save the large data URL directly.
+        // In production, this would be an upload function returning a URL.
         const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", capturingForPackageId);
         
         await updateDoc(packageDocRef, {
             status: 'delivered',
             recipientName: photoRecipientName.trim(),
-            deliveryProofPhotoUrl: photoDataUrl,
+            deliveryProofPhotoUrl: photoDataUrl, // Storing base64 for testing
             lastUpdateTime: serverTimestamp()
         });
         
@@ -635,12 +636,7 @@ export default function DashboardPage() {
         toast({ title: "Bukti Disimpan", description: "Foto bukti pengiriman telah disimpan." });
     } catch (error) {
         console.error("Error saving delivery proof:", error);
-        let errorMessage = "Gagal menyimpan bukti pengiriman.";
-        if (error instanceof Error && (error as any).code === 'resource-exhausted') {
-            errorMessage = "Ukuran foto terlalu besar untuk disimpan. Coba lagi atau gunakan koneksi yang lebih baik.";
-        } else if (error instanceof Error && error.message.includes("payload size exceeds the limit")) {
-            errorMessage = "Gagal: Data foto terlalu besar. Coba gunakan foto dengan resolusi lebih rendah.";
-        }
+        let errorMessage = "Gagal menyimpan bukti pengiriman. Ukuran data foto mungkin terlalu besar untuk Firestore.";
         toast({ title: "Error Simpan Bukti", description: errorMessage, variant: "destructive" });
     } finally {
         setIsSubmitting(false);
@@ -696,7 +692,8 @@ export default function DashboardPage() {
         const deliveredCount = inTransitPackages.filter(p => p.status === 'delivered').length;
         const pendingForReturnCount = remainingInTransit.length;
         
-        const finalReturnProofForDb = returnProofPhotoDataUrl ? "Bukti Retur Tersimpan" : null;
+        // Save the full data URL for testing purposes
+        const finalReturnProofForDb = returnProofPhotoDataUrl || null;
 
         batch.update(taskDocRef, {
             taskStatus: 'completed',
@@ -921,7 +918,7 @@ export default function DashboardPage() {
                 />
               </div>
             )}
-             {pendingCountForChart > 0 && !dailyTaskData.finalReturnProofPhotoUrl && (
+             {pendingCountForChart > 0 && !dailyTaskData.finalReturnProofPhotoUrl?.startsWith('data:image') && (
                 <p className="text-muted-foreground text-center">Tidak ada foto bukti retur yang diupload untuk paket pending.</p>
             )}
           </CardContent>
@@ -936,12 +933,17 @@ export default function DashboardPage() {
     );
   }
 
+  const userInitials = currentUser?.fullName?.split(" ").map(n=>n[0]).join("") || "XX";
+
   if (currentUser.role === 'Kurir') {
     return (
       <div className="space-y-8">
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center space-x-4">
-            <Avatar className="h-16 w-16"><AvatarImage src={currentUser.avatarUrl || `https://placehold.co/150x150.png`} alt={currentUser.fullName} data-ai-hint="man face" /><AvatarFallback>{currentUser.fullName.split(" ").map(n=>n[0]).join("")}</AvatarFallback></Avatar>
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={currentUser.avatarUrl || `https://placehold.co/150x150.png?text=${userInitials}`} alt={currentUser.fullName} data-ai-hint="man face" />
+              <AvatarFallback>{userInitials}</AvatarFallback>
+            </Avatar>
             <div><CardTitle className="text-2xl">{currentUser.fullName}</CardTitle><CardDescription>{currentUser.id} - {currentUser.workLocation}</CardDescription></div>
           </CardHeader>
         </Card>

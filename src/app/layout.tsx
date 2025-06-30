@@ -1,3 +1,4 @@
+
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -5,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 export const metadata: Metadata = {
   title: 'INSAN MOBILE',
   description: 'Aplikasi INSAN MOBILE',
+  manifest: '/manifest.json', // Added manifest for PWA
 };
 
 export default function RootLayout({
@@ -31,10 +33,7 @@ export default function RootLayout({
         
         <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
-        <link rel="shortcut icon" href="/icons/favicon.ico" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-        
-
       </head>
       <body className="font-body antialiased">
         {children}
