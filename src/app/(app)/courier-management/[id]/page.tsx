@@ -265,7 +265,7 @@ export default function CourierDetailPage() {
                                     <p className="font-semibold text-sm break-all">{pkg.id}</p>
                                     <p className="text-xs text-muted-foreground">Penerima: {pkg.recipientName || 'N/A'}</p>
                                     {isValidImageUrl(pkg.deliveryProofPhotoUrl) ? (
-                                        <div className="mt-2 relative aspect-video cursor-pointer group" onClick={() => handleImageClick(pkg.deliveryProofPhotoUrl, `Bukti untuk ${pkg.id}`)}>
+                                        <div className="mt-2 relative aspect-video cursor-pointer group" onClick={() => handleImageClick(pkg.deliveryProofPhotoUrl!, `Bukti untuk ${pkg.id}`)}>
                                             <Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti untuk ${pkg.id}`} layout="fill" objectFit="cover" className="rounded-md" data-ai-hint="package door"/>
                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <ZoomIn className="h-8 w-8 text-white"/>

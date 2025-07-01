@@ -141,15 +141,11 @@ export default function DashboardPage() {
         if (currentUser.role === 'Kurir') {
           const { isCheckedIn: isCheckedInFromServer, taskData, packages, photoMap } = data.kurirData || {};
           
-          // Check local storage as a fallback for the Firestore read-after-write race condition.
-          const todayISO = format(new Date(), 'yyyy-MM-dd');
-          const hasCheckedInLocally = localStorage.getItem('courierCheckedInToday') === todayISO;
-
-          // The user is considered checked in if the server confirms it OR if the local flag is set.
-          const finalCheckInStatus = (isCheckedInFromServer ?? false) || hasCheckedInLocally;
+          const finalCheckInStatus = isCheckedInFromServer ?? false;
           setIsCourierCheckedIn(finalCheckInStatus);
           
           if (finalCheckInStatus) {
+            const todayISO = format(new Date(), 'yyyy-MM-dd');
             const docId = `${currentUser.uid}_${todayISO}`;
             setDailyTaskDocId(docId);
              
@@ -1025,7 +1021,7 @@ export default function DashboardPage() {
            <Card>
             <CardHeader><CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle><CardDescription>{inTransitPackages.filter(p => p.status === 'in_transit').length} paket belum terkirim dan perlu di-retur.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              <div><Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label><Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />{returnProofPhotoDataUrl && isValidImageUrl(returnProofPhotoDataUrl) && <Image src={returnProofPhotoDataUrl} alt="Preview Bukti Retur" width={100} height={100} className="mt-2 rounded border" data-ai-hint="receipt package"/>}</div>
+              <div><Label htmlFor="returnProof" className="mb-1 block">Upload Foto Bukti Pengembalian Semua Paket Pending ke Gudang <span className="text-destructive">*</span></Label><Input id="returnProof" type="file" accept="image/*" onChange={handleReturnProofUpload} />{isValidImageUrl(returnProofPhotoDataUrl) && <Image src={returnProofPhotoDataUrl} alt="Preview Bukti Retur" width={100} height={100} className="mt-2 rounded border" data-ai-hint="receipt package"/>}</div>
               <div><Label htmlFor="returnLeadReceiverName">Nama Leader Serah Terima <span className="text-destructive">*</span></Label><Input id="returnLeadReceiverName" type="text" placeholder="Nama Leader/Supervisor" value={returnLeadReceiverName} onChange={(e) => setReturnLeadReceiverName(e.target.value)}/></div>
               <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-1"><h4 className="text-sm font-medium text-muted-foreground">Daftar Resi Pending:</h4>{inTransitPackages.filter(p => p.status === 'in_transit').map(pkg => (<p key={pkg.id} className="text-sm text-muted-foreground break-all">{pkg.id} - <span className="italic">Pending Retur</span></p>))}</div>
             </CardContent>

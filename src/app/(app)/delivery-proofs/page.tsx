@@ -37,7 +37,7 @@ type AggregatedPackageData = {
 
 // Helper to validate image URLs before rendering
 const isValidImageUrl = (url?: string): url is string => {
-    return !!url && url.startsWith('http');
+    return !!url && (url.startsWith('http://') || url.startsWith('https://'));
 };
 
 
@@ -212,7 +212,7 @@ export default function DeliveryProofsPage() {
                                                     <TableCell>{pkg.recipientName || 'N/A'}</TableCell>
                                                     <TableCell className="text-center">
                                                         {isValidImageUrl(pkg.deliveryProofPhotoUrl) ? (
-                                                            <Button variant="ghost" size="sm" onClick={() => handleImageClick(pkg.deliveryProofPhotoUrl, `Bukti untuk ${pkg.id}`)}>
+                                                            <Button variant="ghost" size="sm" onClick={() => handleImageClick(pkg.deliveryProofPhotoUrl!, `Bukti untuk ${pkg.id}`)}>
                                                                 <ZoomIn className="h-4 w-4 mr-2" /> Lihat
                                                             </Button>
                                                         ) : (
@@ -262,7 +262,7 @@ export default function DeliveryProofsPage() {
                                                     <TableCell>{pkg.finalReturnLeadReceiverName || 'N/A'}</TableCell>
                                                     <TableCell className="text-center">
                                                         {isValidImageUrl(pkg.finalReturnProofPhotoUrl) ? (
-                                                             <Button variant="ghost" size="sm" onClick={() => handleImageClick(pkg.finalReturnProofPhotoUrl, `Bukti retur untuk resi ${pkg.id}`)}>
+                                                             <Button variant="ghost" size="sm" onClick={() => handleImageClick(pkg.finalReturnProofPhotoUrl!, `Bukti retur untuk resi ${pkg.id}`)}>
                                                                 <ZoomIn className="h-4 w-4 mr-2" /> Lihat
                                                             </Button>
                                                         ) : (
@@ -299,5 +299,3 @@ export default function DeliveryProofsPage() {
         </div>
     );
 }
-
-    
