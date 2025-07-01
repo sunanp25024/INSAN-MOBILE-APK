@@ -50,6 +50,7 @@ import type { UserRole, UserProfile } from "@/types";
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from "firebase/firestore";
+import { SplashScreen } from "@/components/ui/SplashScreen";
 
 interface NavItem {
   href: string;
@@ -86,16 +87,6 @@ const allNavItems: NavItem[] = [
   { href: "/profile", icon: User, label: "Profil Saya", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
   { href: "/settings", icon: Settings, label: "Pengaturan Akun", roles: ['MasterAdmin', 'Admin', 'PIC', 'Kurir'] },
 ];
-
-const LoadingScreen = ({ message }: { message: string }) => (
-    <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
-        <div className="relative flex h-24 w-24 items-center justify-center">
-            <div className="absolute h-full w-full animate-spin rounded-full border-4 border-primary/20 border-t-primary"></div>
-            <AppLogo className="h-16 w-16" />
-        </div>
-        <p className="mt-4 text-lg text-muted-foreground">{message}</p>
-    </div>
-);
 
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -181,12 +172,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   if (loadingAuth) {
-    return <LoadingScreen message="Memverifikasi sesi..." />;
+    return <SplashScreen />;
   }
   
   const publicPages = ['/', '/login', '/setup-admin'];
   if (!currentUser && !publicPages.includes(pathname)) {
-    return <LoadingScreen message="Mengalihkan..." />;
+    return <SplashScreen />;
   }
   
   if (publicPages.includes(pathname)) {

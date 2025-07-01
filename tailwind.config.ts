@@ -100,11 +100,21 @@ export default {
           '0%, 100%': { transform: 'translateY(10px)' },
           '50%': { transform: 'translateY(246px)' },
         },
+        'splash-logo-fade-in-scale': {
+          'from': { opacity: '0', transform: 'scale(0.9)' },
+          'to': { opacity: '1', transform: 'scale(1)' },
+        },
+        'splash-text-fade-in': {
+            'from': { opacity: '0' },
+            'to': { opacity: '1' },
+        }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'scan-line': 'scan-line 3s ease-in-out infinite',
+        'splash-logo': 'splash-logo-fade-in-scale 0.8s ease-out forwards',
+        'splash-text': 'splash-text-fade-in 1s ease-out 0.5s forwards'
       },
     },
   },
