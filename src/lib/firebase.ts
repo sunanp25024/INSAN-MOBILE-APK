@@ -13,6 +13,13 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+// Validate the config to prevent silent failures
+const missingConfig = Object.entries(firebaseConfig).find(([, value]) => !value);
+if (missingConfig) {
+  throw new Error(`Firebase config is missing or invalid: ${missingConfig[0]}. Please check your .env file and ensure all NEXT_PUBLIC_FIREBASE_* variables are set.`);
+}
+
+
 let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
