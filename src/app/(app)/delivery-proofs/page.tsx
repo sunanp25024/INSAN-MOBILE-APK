@@ -248,6 +248,7 @@ export default function DeliveryProofsPage() {
                                             <TableHead>ID Kurir</TableHead>
                                             <TableHead>Nama Kurir</TableHead>
                                             <TableHead>No. Resi</TableHead>
+                                            <TableHead>Tanggal Kembali</TableHead>
                                             <TableHead>Leader Penerima</TableHead>
                                             <TableHead className="text-center">Bukti Foto Serah Terima</TableHead>
                                         </TableRow>
@@ -259,6 +260,12 @@ export default function DeliveryProofsPage() {
                                                     <TableCell>{pkg.kurirId}</TableCell>
                                                     <TableCell>{pkg.kurirFullName}</TableCell>
                                                     <TableCell className="font-medium break-all">{pkg.id}</TableCell>
+                                                    <TableCell>
+                                                        {pkg.lastUpdateTime && isValid(parseISO(pkg.lastUpdateTime))
+                                                            ? format(parseISO(pkg.lastUpdateTime), 'dd MMM yyyy', { locale: indonesiaLocale })
+                                                            : 'N/A'
+                                                        }
+                                                    </TableCell>
                                                     <TableCell>{pkg.finalReturnLeadReceiverName || 'N/A'}</TableCell>
                                                     <TableCell className="text-center">
                                                         {isValidImageUrl(pkg.finalReturnProofPhotoUrl) ? (
@@ -273,7 +280,7 @@ export default function DeliveryProofsPage() {
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="text-center h-24">Tidak ada data paket yang dikembalikan yang cocok dengan filter.</TableCell>
+                                                <TableCell colSpan={6} className="text-center h-24">Tidak ada data paket yang dikembalikan yang cocok dengan filter.</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
