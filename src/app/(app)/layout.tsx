@@ -72,7 +72,7 @@ const allNavItems: NavItem[] = [
   
   // Managerial (PIC & Up)
   { href: "/manage-kurirs", icon: Users, label: "Manage Kurir", roles: ['MasterAdmin', 'Admin', 'PIC'] },
-  { href: "/pending-approvals", icon: MailCheck, label: "Status Persetujuan", roles: ['Admin', 'PIC'] },
+  { href: "/pending-approvals", icon: MailCheck, label: "Status Persetujuan", roles: ['PIC'] },
   { href: "/courier-management", icon: ClipboardList, label: "Monitoring Kurir", roles: ['MasterAdmin', 'Admin', 'PIC'] },
   { href: "/courier-updates", icon: Bell, label: "Ringkasan Aktifitas", roles: ['MasterAdmin', 'Admin', 'PIC'] },
   { href: "/delivery-proofs", icon: PackageSearch, label: "Bukti Pengiriman", roles: ['MasterAdmin', 'Admin', 'PIC'] },
