@@ -1019,7 +1019,7 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {dailyTaskData && dailyTaskData.taskStatus === 'in_progress' && deliveryStarted && inTransitPackages.filter(p => p.status === 'in_transit').length > 0 && !dayFinished && isCourierCheckedIn && (
+        {dailyTaskData && dailyTaskData.taskStatus === 'in_progress' && inTransitPackages.filter(p => p.status === 'in_transit').length > 0 && !dayFinished && isCourierCheckedIn && (
            <Card>
             <CardHeader><CardTitle className="flex items-center"><PackageX className="mr-2 h-6 w-6 text-red-500" /> Paket Pending/Retur</CardTitle><CardDescription>{inTransitPackages.filter(p => p.status === 'in_transit').length} paket belum terkirim dan perlu di-retur.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
