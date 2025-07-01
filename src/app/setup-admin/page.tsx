@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { UserPlus, ArrowLeft } from 'lucide-react';
 import type { UserProfile } from '@/types';
 import { auth, db } from '@/lib/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser, type User } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -38,14 +38,15 @@ export default function SetupAdminPage() {
 
   const handleSetup: SubmitHandler<SetupFormData> = async (data) => {
     setIsLoading(true);
-    let success = false;
+    let firebaseUser: User | null = null;
+  
     try {
-      // 1. Create user in Firebase Authentication
+      // Step 1: Create user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      const firebaseUser = userCredential.user;
-
-      if (firebaseUser) {
-        // 2. Create user profile in Firestore
+      firebaseUser = userCredential.user;
+  
+      // Step 2: Create user profile in Firestore. This is now in its own try/catch.
+      try {
         const newAdminProfile: Omit<UserProfile, 'uid'> = {
           id: data.appId,
           fullName: data.fullName,
@@ -55,31 +56,39 @@ export default function SetupAdminPage() {
           joinDate: new Date().toISOString(),
           createdAt: new Date().toISOString(),
         };
-
+  
         // Use Firebase Auth UID as document ID in Firestore for consistency
         await setDoc(doc(db, "users", firebaseUser.uid), {
             ...newAdminProfile,
             uid: firebaseUser.uid,
         });
-
+  
         toast({
           title: "Setup MasterAdmin Berhasil!",
           description: `Akun untuk ${data.fullName} telah dibuat. Silakan login.`,
         });
         
-        success = true;
+        router.push('/login'); // Redirect to login page ONLY on full success
+  
+      } catch (firestoreError: any) {
+        // CRITICAL: Firestore failed. Rollback Auth user to prevent orphaned accounts.
+        if (firebaseUser) {
+          await deleteUser(firebaseUser);
+        }
+        // Re-throw a more specific error to be caught by the outer catch block.
+        throw new Error(`Gagal menyimpan profil ke database: ${firestoreError.message}. Akun telah dibatalkan.`);
       }
+  
     } catch (error: any) {
+      // This outer catch handles both Auth errors and the re-thrown Firestore error.
       let errorMessage = "Gagal membuat akun MasterAdmin.";
-      
-      if (error.message && error.message.includes('auth/requests-from-referer')) {
-        errorMessage = 'Domain aplikasi Vercel Anda diblokir. Pastikan Anda telah menambahkan "apk-para-kurir-tau.vercel.app" ke daftar "HTTP referrers" pada setelan API Key di Google Cloud Console untuk melanjutkan setup.';
-      } else if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "Email ini sudah terdaftar. Gunakan email lain atau periksa Firebase Authentication.";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "Email ini sudah terdaftar. Gunakan email lain.";
       } else if (error.code === 'auth/weak-password') {
         errorMessage = "Password terlalu lemah. Gunakan minimal 6 karakter.";
-      } else if (error.code === 'permission-denied' || error.code === 'permission_denied') {
-        errorMessage = "Gagal menyimpan profil karena masalah izin. Pastikan Firestore Security Rules sudah diperbarui sesuai instruksi terbaru.";
+      } else {
+        // Use the more specific error message from the inner catch if it exists.
+        errorMessage = error.message;
       }
       
       toast({
@@ -90,9 +99,6 @@ export default function SetupAdminPage() {
       });
     } finally {
       setIsLoading(false);
-      if (success) {
-        router.push('/login'); // Redirect to login page ONLY on success
-      }
     }
   };
 
