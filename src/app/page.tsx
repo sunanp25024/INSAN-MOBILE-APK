@@ -94,12 +94,23 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       {/* Header */}
-      <header className="sticky top-0 z-50 p-2">
-        <div className="container mx-auto flex h-16 items-center justify-between rounded-lg bg-card/90 px-4 shadow-md backdrop-blur-lg md:px-6">
+       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-lg">
+        <div className="container flex h-16 items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
             <AppLogo className="h-10 w-10 text-primary" />
             <span className="text-xl font-bold text-foreground">INSAN MOBILE</span>
             </Link>
+            <nav className="hidden items-center gap-6 text-sm md:flex">
+              <Link href="#features" className="text-muted-foreground transition-colors hover:text-foreground">
+                Fitur
+              </Link>
+              <Link href="#how-it-works" className="text-muted-foreground transition-colors hover:text-foreground">
+                Cara Kerja
+              </Link>
+              <Link href="#" className="text-muted-foreground transition-colors hover:text-foreground">
+                Bantuan
+              </Link>
+            </nav>
             <Button onClick={() => router.push('/login')}>
             Masuk Aplikasi <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -109,7 +120,6 @@ export default function LandingPage() {
       <main className="flex-1">
         {/* Hero Section */}
         <section className="relative overflow-hidden bg-background py-20 lg:py-28">
-            {/* Background Image */}
             <Image
                 src="https://placehold.co/1920x1080.png"
                 alt="Modern logistics background"
@@ -122,7 +132,6 @@ export default function LandingPage() {
             <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm" />
 
             <div className="container relative z-20 mx-auto flex flex-col items-center gap-12 px-4 text-center">
-                {/* Text Content */}
                 <div className="flex flex-col items-center">
                     <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-6xl">
                         Aplikasi Visual untuk Operasional Kurir Anda.
@@ -148,7 +157,6 @@ export default function LandingPage() {
                     </div>
                 </div>
                 
-                {/* Phone Mockup */}
                 <div className="relative w-[280px] lg:w-[320px] mt-8">
                      <Image
                         src="https://placehold.co/400x800.png"
@@ -205,7 +213,7 @@ export default function LandingPage() {
         </section>
 
         {/* How it Works Section */}
-        <section className="py-24">
+        <section id="how-it-works" className="py-24">
             <div className="container mx-auto px-4 md:px-6">
                  <div className="mx-auto max-w-3xl text-center">
                     <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Alur Kerja yang Disederhanakan</h2>
