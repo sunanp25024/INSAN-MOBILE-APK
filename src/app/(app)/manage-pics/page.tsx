@@ -298,10 +298,14 @@ export default function ManagePICsPage() {
   };
   
   const handleDownloadTemplate = () => {
-    const headers = [['fullName', 'email', 'passwordValue', 'workLocation', 'id (optional)']];
+    const headers = [
+      ['fullName', 'email', 'passwordValue', 'workLocation', 'id'],
+      ['Contoh Nama PIC', 'contoh.pic@internal.spx', 'passwordaman123', 'Jakarta Pusat', 'PIC007']
+    ];
     const ws = XLSX.utils.aoa_to_sheet(headers);
+    ws['!cols'] = [{ wch: 25 }, { wch: 30 }, { wch: 20 }, { wch: 25 }, { wch: 20 }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.utils.book_append_sheet(wb, ws, 'Template PIC');
     XLSX.writeFile(wb, 'PIC_Template.xlsx');
     toast({ title: "Template Diunduh", description: "Template PIC_Template.xlsx telah berhasil diunduh." });
   };
@@ -605,7 +609,7 @@ export default function ManagePICsPage() {
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Format kolom yang diharapkan: fullName, email, passwordValue, workLocation, id (optional).
+            PENTING: Gunakan template yang diunduh. Pastikan baris pertama file Excel Anda adalah header dengan nama kolom persis: `fullName`, `email`, `passwordValue`, `workLocation`, `id`. Kolom `id` bersifat opsional.
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
             <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting}>

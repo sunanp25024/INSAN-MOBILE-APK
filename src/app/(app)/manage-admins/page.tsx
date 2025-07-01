@@ -300,10 +300,14 @@ export default function ManageAdminsPage() {
 };
 
   const handleDownloadTemplate = () => {
-    const headers = [['fullName', 'email', 'passwordValue', 'id (optional)']];
+    const headers = [
+      ['fullName', 'email', 'passwordValue', 'id'],
+      ['Contoh Nama Admin', 'contoh.admin@internal.spx', 'passwordaman123', 'ADMIN007']
+    ];
     const ws = XLSX.utils.aoa_to_sheet(headers);
+    ws['!cols'] = [{ wch: 25 }, { wch: 30 }, { wch: 20 }, { wch: 20 }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.utils.book_append_sheet(wb, ws, 'Template Admin');
     XLSX.writeFile(wb, 'Admin_Template.xlsx');
     toast({ title: "Template Diunduh", description: "Template Admin_Template.xlsx telah berhasil diunduh." });
   };
@@ -594,7 +598,7 @@ export default function ManageAdminsPage() {
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Format kolom yang diharapkan: fullName, email, passwordValue, id (optional).
+            PENTING: Gunakan template yang diunduh. Pastikan baris pertama file Excel Anda adalah header dengan nama kolom persis: `fullName`, `email`, `passwordValue`, `id`. Kolom `id` bersifat opsional.
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
             <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting}>
