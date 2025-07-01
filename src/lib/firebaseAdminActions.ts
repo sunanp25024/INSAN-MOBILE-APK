@@ -222,6 +222,11 @@ export async function importUsers(
     errors: [] as string[],
   };
 
+  // Fetch existing users from Firestore to check for duplicates proactively.
+  const usersSnapshot = await adminDb.collection('users').get();
+  const existingEmails = new Set(usersSnapshot.docs.map(doc => doc.data().email));
+  const existingIds = new Set(usersSnapshot.docs.map(doc => doc.data().id));
+
   const emailInFile = new Set();
   const idInFile = new Set();
 
@@ -249,6 +254,7 @@ export async function importUsers(
       }
     }
 
+    // Proactive checks for duplicates in file and in database
     if (emailInFile.has(email)) {
       results.failedCount++;
       results.errors.push(`Baris ${rowNum}: Duplikat email '${email}' dalam file.`);
@@ -263,11 +269,21 @@ export async function importUsers(
     }
     if(appId) idInFile.add(appId);
     
+    if (existingEmails.has(email)) {
+        results.failedCount++;
+        results.errors.push(`Baris ${rowNum}: Email '${email}' sudah terdaftar di sistem.`);
+        continue;
+    }
+    if (appId && existingIds.has(appId)) {
+        results.failedCount++;
+        results.errors.push(`Baris ${rowNum}: ID Aplikasi '${appId}' sudah digunakan.`);
+        continue;
+    }
+    
     try {
       let newProfileData: Omit<UserProfile, 'uid'>;
 
       if (roleToAssign === 'Kurir') {
-        // Kurir specific validations
         if (!userData.nik || !userData.jabatan || !userData.workLocation || !userData.joinDate || !userData.contractStatus) {
           results.failedCount++;
           results.errors.push(`Baris ${rowNum}: Data Kurir tidak lengkap (nik, jabatan, workLocation, joinDate, contractStatus wajib).`);
@@ -331,6 +347,8 @@ export async function importUsers(
 
       if (creationResult.success) {
         results.createdCount++;
+        existingEmails.add(email); // Add to set to prevent duplicates from same file run
+        existingIds.add(appUserId);
       } else {
         results.failedCount++;
         results.errors.push(`Baris ${rowNum} (${email}): ${creationResult.message}`);
@@ -393,9 +411,14 @@ export async function handleApprovalRequest(
                 const rawJoinDate = userData.joinDate;
 
                 if (typeof rawJoinDate === 'number') {
+                    // Handle Excel date serial number
                     joinDate = new Date(Math.round((rawJoinDate - 25569) * 86400 * 1000));
+                } else if (rawJoinDate && typeof rawJoinDate === 'string') {
+                    // Handle string date
+                    joinDate = new Date(rawJoinDate.trim());
                 } else {
-                    joinDate = new Date(String(rawJoinDate).trim());
+                    // Fallback or throw error if joinDate is missing/invalid
+                    throw new Error(`Tanggal join tidak ada atau tidak valid untuk pengguna '${userData.fullName}'.`);
                 }
 
                 if (isNaN(joinDate.getTime())) {
