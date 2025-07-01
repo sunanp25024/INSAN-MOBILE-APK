@@ -429,37 +429,47 @@ export default function DashboardPage() {
                             
                             const processScan = async (resi: string) => {
                                 if (isScanning) {
-                                    if (dailyTaskData && managedPackages.length < dailyTaskData.totalPackages) {
-                                        const newPackage: PackageItem = { 
-                                            id: resi, 
-                                            status: 'process', 
-                                            isCOD: false,
-                                            lastUpdateTime: new Date().toISOString() 
-                                        };
-                                        try {
-                                            if (!dailyTaskDocId) throw new Error("Daily task ID not set");
-                                            const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", resi);
-                                            await setDoc(packageDocRef, { ...newPackage, lastUpdateTime: serverTimestamp() });
-                                            setManagedPackages(prev => [...prev, newPackage]);
-                                            setIsScanning(false);
-                                            toast({ title: "Resi Ditambahkan!", description: resi });
-                                        } catch (e) {
-                                            console.error("Error saving scanned package:", e);
-                                            toast({title: "Error Simpan", description: "Gagal menyimpan paket scan.", variant: "destructive"});
-                                            setIsScanning(false);
-                                        }
-                                    } else if (dailyTaskData) {
+                                    setIsScanning(false); // Close the scanner UI immediately
+                            
+                                    if (!dailyTaskData || managedPackages.length >= dailyTaskData.totalPackages) {
                                         toast({ title: "Batas Paket Tercapai", variant: "destructive" });
-                                        setIsScanning(false);
+                                        return;
+                                    }
+                                    
+                                    // Comprehensive duplicate check
+                                    if (managedPackages.some(p => p.id === resi) || inTransitPackages.some(p => p.id === resi)) {
+                                        toast({
+                                            title: "Resi Duplikat",
+                                            description: `Resi ${resi} sudah ada dalam daftar.`,
+                                            variant: "destructive",
+                                        });
+                                        return;
+                                    }
+                            
+                                    const newPackage: PackageItem = {
+                                        id: resi,
+                                        status: 'process',
+                                        isCOD: false,
+                                        lastUpdateTime: new Date().toISOString()
+                                    };
+                                    try {
+                                        if (!dailyTaskDocId) throw new Error("Daily task ID not set");
+                                        const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", resi);
+                                        await setDoc(packageDocRef, { ...newPackage, lastUpdateTime: serverTimestamp() });
+                                        setManagedPackages(prev => [...prev, newPackage]);
+                                        toast({ title: "Resi Ditambahkan!", description: resi });
+                                    } catch (e) {
+                                        console.error("Error saving scanned package:", e);
+                                        toast({ title: "Error Simpan", description: "Gagal menyimpan paket scan.", variant: "destructive" });
                                     }
                                 } else if (isScanningForDeliveryUpdate) {
+                                    setIsScanningForDeliveryUpdate(false); // Close UI
                                     const packageToUpdate = inTransitPackages.find(p => p.id === resi && p.status === 'in_transit');
                                     if (packageToUpdate) {
                                         handleOpenPackageCamera(packageToUpdate.id);
                                     } else {
                                         toast({ variant: 'destructive', title: "Resi Tidak Cocok", description: "Resi ini tidak ada dalam daftar antar Anda saat ini." });
                                     }
-                                    setIsScanningForDeliveryUpdate(false);
                                 }
                             };
                             processScan(scannedText);
