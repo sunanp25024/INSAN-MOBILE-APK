@@ -22,7 +22,7 @@ import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, requestBulkUserCreation, updateUserStatus, requestUserDeletion, resetUserPassword, submitApprovalRequest } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount, requestBulkUserCreation, updateUserStatus, requestUserDeletion, resetUserPassword, submitApprovalRequest, importUsers } from '@/lib/firebaseAdminActions';
 import * as XLSX from 'xlsx';
 
 const kurirSchema = z.object({
@@ -366,9 +366,27 @@ export default function ManageKurirsPage() {
             }
             
             const creatorProfile = { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role };
-            // Admins create directly, PICs create an approval request
+            
             if (['MasterAdmin', 'Admin'].includes(currentUser.role)) {
-                 toast({ title: "Fitur ini dalam pengembangan", description: "Impor massal oleh Admin akan segera hadir.", variant: "default" });
+                const result = await importUsers(JSON.parse(JSON.stringify(jsonData)), 'Kurir', creatorProfile);
+                 if (result.success || result.createdCount > 0) {
+                    toast({
+                        title: "Impor Selesai",
+                        description: `${result.createdCount} dari ${result.totalRows} kurir berhasil ditambahkan. ${result.failedCount > 0 ? `${result.failedCount} gagal.` : ''}`,
+                        duration: 9000,
+                    });
+                    if (result.errors && result.errors.length > 0) {
+                        console.error("Import Errors:", result.errors);
+                    }
+                    fetchKurirs();
+                } else {
+                    toast({
+                        title: "Impor Gagal Total",
+                        description: `Tidak ada kurir yang berhasil ditambahkan. Error: ${result.errors?.[0] || 'Unknown error'}`,
+                        variant: "destructive",
+                        duration: 9000,
+                    });
+                }
             } else if (currentUser.role === 'PIC') {
                 const result = await requestBulkUserCreation(JSON.parse(JSON.stringify(jsonData)), creatorProfile);
                 if(result.success) {

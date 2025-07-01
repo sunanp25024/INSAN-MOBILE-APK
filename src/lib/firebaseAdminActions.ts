@@ -208,7 +208,7 @@ export async function requestBulkUserCreation(
 
 export async function importUsers(
   usersData: any[],
-  roleToAssign: 'Admin' | 'PIC',
+  roleToAssign: 'Admin' | 'PIC' | 'Kurir',
   creatorProfile: { uid: string; fullName: string; role: UserRole }
 ) {
   if (!['MasterAdmin', 'Admin'].includes(creatorProfile.role)) {
@@ -228,18 +228,27 @@ export async function importUsers(
   for (const [index, userData] of usersData.entries()) {
     const rowNum = index + 2;
 
-    if (!userData.fullName || !userData.email || !userData.passwordValue) {
+    // Common validations
+    if (!userData.fullName || !userData.passwordValue) {
       results.failedCount++;
-      results.errors.push(`Baris ${rowNum}: Data tidak lengkap (fullName, email, passwordValue wajib).`);
+      results.errors.push(`Baris ${rowNum}: Data tidak lengkap (fullName & passwordValue wajib).`);
       continue;
     }
-    if (roleToAssign === 'PIC' && !userData.workLocation) {
-       results.failedCount++;
-       results.errors.push(`Baris ${rowNum}: Area Tanggung Jawab (workLocation) wajib untuk PIC.`);
-       continue;
+
+    let email = userData.email?.toString().trim();
+    const appId = userData.id?.toString().trim();
+    const appUserId = appId || `${roleToAssign.toUpperCase()}${String(Date.now()).slice(-6) + index}`;
+
+    if (!email) {
+      if (roleToAssign === 'Kurir') {
+        email = `${appUserId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`;
+      } else {
+        results.failedCount++;
+        results.errors.push(`Baris ${rowNum}: Email wajib untuk ${roleToAssign}.`);
+        continue;
+      }
     }
-    
-    const email = userData.email.toString().trim();
+
     if (emailInFile.has(email)) {
       results.failedCount++;
       results.errors.push(`Baris ${rowNum}: Duplikat email '${email}' dalam file.`);
@@ -247,7 +256,6 @@ export async function importUsers(
     }
     emailInFile.add(email);
     
-    const appId = userData.id?.toString().trim();
     if (appId && idInFile.has(appId)) {
       results.failedCount++;
       results.errors.push(`Baris ${rowNum}: Duplikat ID Aplikasi '${appId}' dalam file.`);
@@ -256,20 +264,69 @@ export async function importUsers(
     if(appId) idInFile.add(appId);
     
     try {
-      const appUserId = appId || `${roleToAssign.toUpperCase()}${String(Date.now()).slice(-6) + index}`;
-      
-      const newProfileData: Omit<UserProfile, 'uid'> = {
-        id: appUserId,
-        fullName: userData.fullName.toString().trim(),
-        email: email,
-        role: roleToAssign,
-        status: 'Aktif',
-        workLocation: userData.workLocation?.toString().trim() || undefined,
-        position: roleToAssign,
-        joinDate: new Date().toISOString(),
-        createdBy: creatorProfile,
-      };
+      let newProfileData: Omit<UserProfile, 'uid'>;
 
+      if (roleToAssign === 'Kurir') {
+        // Kurir specific validations
+        if (!userData.nik || !userData.jabatan || !userData.workLocation || !userData.joinDate || !userData.contractStatus) {
+          results.failedCount++;
+          results.errors.push(`Baris ${rowNum}: Data Kurir tidak lengkap (nik, jabatan, workLocation, joinDate, contractStatus wajib).`);
+          continue;
+        }
+
+        let joinDate: Date;
+        const rawJoinDate = userData.joinDate;
+        if (typeof rawJoinDate === 'number') {
+            joinDate = new Date(Math.round((rawJoinDate - 25569) * 86400 * 1000));
+        } else {
+            joinDate = new Date(String(rawJoinDate).trim());
+        }
+
+        if (isNaN(joinDate.getTime())) {
+            results.failedCount++;
+            results.errors.push(`Baris ${rowNum}: Format tanggal join tidak valid untuk pengguna '${userData.fullName}'. Harap gunakan format YYYY-MM-DD.`);
+            continue;
+        }
+
+        newProfileData = {
+            id: appUserId,
+            fullName: String(userData.fullName).trim(),
+            nik: String(userData.nik).trim(),
+            email: email,
+            role: 'Kurir',
+            position: String(userData.jabatan).trim(),
+            wilayah: String(userData.wilayah || '').trim(),
+            area: String(userData.area || '').trim(),
+            workLocation: String(userData.workLocation).trim(),
+            joinDate: joinDate.toISOString(),
+            contractStatus: String(userData.contractStatus).trim(),
+            bankName: String(userData.bankName || '').trim(),
+            bankAccountNumber: String(userData.bankAccountNumber || '').trim(),
+            bankRecipientName: String(userData.bankRecipientName || '').trim(),
+            status: 'Aktif',
+            createdBy: creatorProfile,
+        };
+
+      } else { // For Admin or PIC
+        if (roleToAssign === 'PIC' && !userData.workLocation) {
+           results.failedCount++;
+           results.errors.push(`Baris ${rowNum}: Area Tanggung Jawab (workLocation) wajib untuk PIC.`);
+           continue;
+        }
+
+        newProfileData = {
+          id: appUserId,
+          fullName: userData.fullName.toString().trim(),
+          email: email,
+          role: roleToAssign,
+          status: 'Aktif',
+          workLocation: userData.workLocation?.toString().trim() || undefined,
+          position: roleToAssign,
+          joinDate: new Date().toISOString(),
+          createdBy: creatorProfile,
+        };
+      }
+      
       const creationResult = await createUserAccount(email, userData.passwordValue.toString(), newProfileData);
 
       if (creationResult.success) {
@@ -286,6 +343,7 @@ export async function importUsers(
 
   return { success: results.failedCount === 0, ...results };
 }
+
 
 
 export async function handleApprovalRequest(
