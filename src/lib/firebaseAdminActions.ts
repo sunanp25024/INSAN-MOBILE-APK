@@ -2,7 +2,7 @@
 'use server';
 
 import { admin, adminAuth, adminDb } from '@/lib/firebaseAdmin';
-import type { UserProfile, UserRole, ApprovalRequest } from '@/types';
+import type { UserProfile, UserRole, ApprovalRequest, KurirDailyTaskDoc } from '@/types';
 import { getStorage } from 'firebase-admin/storage';
 
 /**
@@ -67,26 +67,53 @@ export async function deleteUserAccount(uid: string) {
     return { success: false, message: 'User UID is required.' };
   }
 
-  try {
-    // First, delete the user from Firebase Authentication.
-    await adminAuth.deleteUser(uid);
-    
-    // Then, delete the user's profile from Firestore.
-    await adminDb.collection('users').doc(uid).delete();
+  const transactionPromises: Promise<any>[] = [];
 
-    return { success: true, message: 'User deleted successfully from Auth and Firestore.' };
-  } catch (error: any) {
-    console.error(`Error deleting user ${uid}:`, error);
+  try {
+    // Step 1: Find all daily task documents for the user
+    const tasksQuery = adminDb.collection('kurir_daily_tasks').where('kurirUid', '==', uid);
+    const tasksSnapshot = await tasksQuery.get();
+
+    if (!tasksSnapshot.empty) {
+      const batch = adminDb.batch();
+      
+      // Step 2: For each task, find and delete all subcollection 'packages' documents
+      for (const taskDoc of tasksSnapshot.docs) {
+        const packagesQuery = taskDoc.ref.collection('packages');
+        const packagesSnapshot = await packagesQuery.get();
+        if (!packagesSnapshot.empty) {
+          packagesSnapshot.docs.forEach(pkgDoc => {
+            batch.delete(pkgDoc.ref);
+          });
+        }
+        // Step 3: Add the parent task document to the batch deletion
+        batch.delete(taskDoc.ref);
+      }
+      
+      // Add the batch commit to our transaction promises
+      transactionPromises.push(batch.commit());
+    }
+
+    // Step 4: Add deletion from the main 'users' collection to the promises
+    transactionPromises.push(adminDb.collection('users').doc(uid).delete());
     
-    // If the user was deleted from Auth but not Firestore (or vice-versa),
-    // this could be logged for manual cleanup. For now, we return a generic error.
+    // Step 5: Add deletion from Firebase Authentication to the promises
+    transactionPromises.push(adminAuth.deleteUser(uid));
+
+    // Execute all deletion operations
+    await Promise.all(transactionPromises);
+
+    return { success: true, message: 'User and all associated data deleted successfully.' };
+  } catch (error: any) {
+    console.error(`Error deleting user ${uid} and their data:`, error);
     return {
       success: false,
-      message: `Failed to delete user: ${error.message}`,
+      message: `Failed to completely delete user: ${error.message}`,
       errorCode: error.code,
     };
   }
 }
+
 
 /**
  * Submits a request to delete a user, which requires MasterAdmin approval.
@@ -300,17 +327,22 @@ export async function handleApprovalRequest(
             if (!Array.isArray(payload.users)) {
                 throw new Error("Payload untuk impor massal tidak valid.");
             }
-            // We process this sequentially to avoid hitting rate limits and to collect errors.
             const creationPromises = payload.users.map((userData: any, index: number) => {
                 const appUserId = userData.id?.toString().trim() || `K${String(Date.now()).slice(-7) + index}`;
                 const emailForAuth = userData.email?.trim() || `${appUserId.toLowerCase().replace(/\s+/g, '.')}@internal.spx`;
                 
-                 let joinDate: Date;
-                  if (typeof userData.joinDate === 'number') {
-                     joinDate = new Date(Math.round((userData.joinDate - 25569) * 86400 * 1000));
-                  } else {
-                     joinDate = new Date(String(userData.joinDate).trim());
-                  }
+                let joinDate: Date;
+                const rawJoinDate = userData.joinDate;
+
+                if (typeof rawJoinDate === 'number') {
+                    joinDate = new Date(Math.round((rawJoinDate - 25569) * 86400 * 1000));
+                } else {
+                    joinDate = new Date(String(rawJoinDate).trim());
+                }
+
+                if (isNaN(joinDate.getTime())) {
+                    throw new Error(`Format tanggal join tidak valid untuk pengguna '${userData.fullName}'. Harap gunakan format YYYY-MM-DD.`);
+                }
 
                 const profileToCreate: Omit<UserProfile, 'uid'> = {
                     id: appUserId,
@@ -332,8 +364,6 @@ export async function handleApprovalRequest(
                 };
                 return createUserAccount(emailForAuth, String(userData.passwordValue), profileToCreate);
             });
-            // Note: In a real-world scenario with hundreds of users, this should be a background job.
-            // For now, Promise.all is acceptable for dozens of users.
             await Promise.all(creationPromises);
             break;
 
