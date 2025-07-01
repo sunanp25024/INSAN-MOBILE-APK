@@ -67,48 +67,46 @@ export async function deleteUserAccount(uid: string) {
     return { success: false, message: 'User UID is required.' };
   }
 
-  const transactionPromises: Promise<any>[] = [];
-
   try {
-    // Step 1: Find all daily task documents for the user
+    // Step 1: Find all daily task documents for the user to be deleted.
     const tasksQuery = adminDb.collection('kurir_daily_tasks').where('kurirUid', '==', uid);
     const tasksSnapshot = await tasksQuery.get();
 
+    // Step 2: If tasks exist, delete them and their subcollections.
     if (!tasksSnapshot.empty) {
       const batch = adminDb.batch();
-      
-      // Step 2: For each task, find and delete all subcollection 'packages' documents
-      for (const taskDoc of tasksSnapshot.docs) {
-        const packagesQuery = taskDoc.ref.collection('packages');
-        const packagesSnapshot = await packagesQuery.get();
-        if (!packagesSnapshot.empty) {
-          packagesSnapshot.docs.forEach(pkgDoc => {
-            batch.delete(pkgDoc.ref);
-          });
+
+      // For each task, get a promise that resolves with its 'packages' subcollection snapshot.
+      const packagePromises = tasksSnapshot.docs.map(doc => doc.ref.collection('packages').get());
+      const packageSnapshots = await Promise.all(packagePromises);
+
+      // Add all package documents from all tasks to the batch for deletion.
+      packageSnapshots.forEach(snap => {
+        if (!snap.empty) {
+            snap.docs.forEach(doc => batch.delete(doc.ref));
         }
-        // Step 3: Add the parent task document to the batch deletion
-        batch.delete(taskDoc.ref);
-      }
+      });
       
-      // Add the batch commit to our transaction promises
-      transactionPromises.push(batch.commit());
+      // Add all parent task documents to the batch for deletion.
+      tasksSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      
+      // Commit the batch to delete all tasks and packages.
+      // This is atomic but has a 500 document limit. For larger scale, a Cloud Function is better.
+      await batch.commit();
     }
 
-    // Step 4: Add deletion from the main 'users' collection to the promises
-    transactionPromises.push(adminDb.collection('users').doc(uid).delete());
+    // Step 3: Delete the user's main profile document from Firestore.
+    await adminDb.collection('users').doc(uid).delete();
     
-    // Step 5: Add deletion from Firebase Authentication to the promises
-    transactionPromises.push(adminAuth.deleteUser(uid));
+    // Step 4: Delete the user from Firebase Authentication. This is the last step.
+    await adminAuth.deleteUser(uid);
 
-    // Execute all deletion operations
-    await Promise.all(transactionPromises);
-
-    return { success: true, message: 'User and all associated data deleted successfully.' };
+    return { success: true, message: 'Pengguna dan semua data terkait berhasil dihapus.' };
   } catch (error: any) {
     console.error(`Error deleting user ${uid} and their data:`, error);
     return {
       success: false,
-      message: `Failed to completely delete user: ${error.message}`,
+      message: `Gagal menghapus pengguna secara menyeluruh: ${error.message}`,
       errorCode: error.code,
     };
   }
@@ -324,12 +322,6 @@ export async function importUsers(
         };
 
       } else { // For Admin or PIC
-        if (roleToAssign === 'PIC' && !userData.workLocation) {
-           results.failedCount++;
-           results.errors.push(`Baris ${rowNum}: Area Tanggung Jawab (workLocation) wajib untuk PIC.`);
-           continue;
-        }
-        
         // Define a base profile that works for both Admin and PIC initially
         const baseProfile: Omit<UserProfile, 'uid'> = {
             id: appUserId,
@@ -343,8 +335,12 @@ export async function importUsers(
         };
 
         // Conditionally add workLocation only if the role is PIC.
-        // This prevents the 'undefined' error for Admins.
         if (roleToAssign === 'PIC') {
+            if (!userData.workLocation) {
+                results.failedCount++;
+                results.errors.push(`Baris ${rowNum}: Area Tanggung Jawab (workLocation) wajib untuk PIC.`);
+                continue;
+            }
             baseProfile.workLocation = userData.workLocation.toString().trim();
         }
 
