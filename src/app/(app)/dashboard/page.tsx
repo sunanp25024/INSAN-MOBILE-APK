@@ -21,7 +21,7 @@ import { format, subDays, formatDistanceToNow, startOfWeek, endOfWeek, parseISO,
 import { id as indonesiaLocale } from 'date-fns/locale';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BrowserMultiFormatReader, NotFoundException, ChecksumException, FormatException, type IScannerControls } from '@zxing/library';
+import { BrowserMultiFormatReader, NotFoundException, ChecksumException, FormatException, type IScannerControls, BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, getDoc, collection, addDoc, updateDoc, query, where, getDocs, Timestamp, serverTimestamp, writeBatch, deleteDoc, runTransaction, orderBy } from 'firebase/firestore';
 import { mockLocationsData } from '@/types';
@@ -399,93 +399,96 @@ export default function DashboardPage() {
 
   // Effect for Barcode Scanning
   useEffect(() => {
-    // Only proceed if a scan is active, the video element is ready, and we have permission
     if ((isScanning || isScanningForDeliveryUpdate) && videoRef.current && hasCameraPermission) {
-      const codeReader = new BrowserMultiFormatReader();
-      const videoElement = videoRef.current;
+        const hints = new Map();
+        const formats = [
+            BarcodeFormat.CODE_128,
+            BarcodeFormat.CODE_39,
+            BarcodeFormat.EAN_13,
+            BarcodeFormat.QR_CODE,
+            BarcodeFormat.UPC_A,
+            BarcodeFormat.DATA_MATRIX,
+        ];
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, formats);
+        const codeReader = new BrowserMultiFormatReader(hints);
+        const videoElement = videoRef.current;
 
-      const startScan = async () => {
-        try {
-          if (scannerControlsRef.current) {
-            scannerControlsRef.current.stop();
-          }
-
-          const controls = await codeReader.decodeFromVideoElementContinuously(
-            videoElement,
-            (result, err) => {
-              if (result) {
+        const startScan = async () => {
+            try {
                 if (scannerControlsRef.current) {
-                  scannerControlsRef.current.stop();
-                  scannerControlsRef.current = null;
+                    scannerControlsRef.current.stop();
                 }
-                const scannedText = result.getText();
-                toast({ title: "Barcode Terbaca!", description: `Resi: ${scannedText}` });
 
-                if (isScanning) {
-                  if (dailyTaskData && managedPackages.length < dailyTaskData.totalPackages) {
-                    const newPackage: PackageItem = { 
-                        id: scannedText, 
-                        status: 'process', 
-                        isCOD: false,
-                        lastUpdateTime: new Date().toISOString() 
-                    };
-                    const savePackage = async () => {
-                        try {
-                            if (!dailyTaskDocId) throw new Error("Daily task ID not set");
-                            const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", scannedText);
-                            await setDoc(packageDocRef, { ...newPackage, lastUpdateTime: serverTimestamp() });
-                            setManagedPackages(prev => [...prev, newPackage]);
-                            setCurrentScannedResi('');
-                            if (managedPackages.length + 1 >= dailyTaskData.totalPackages) {
-                                setIsScanning(false);
-                            }
-                        } catch (e) {
-                            console.error("Error saving scanned package:", e);
-                            toast({title: "Error Simpan", description: "Gagal menyimpan paket scan.", variant: "destructive"});
+                const controls = await codeReader.decodeFromVideoElementContinuously(
+                    videoElement,
+                    (result, err) => {
+                        if (result) {
+                            controls.stop();
+                            scannerControlsRef.current = null;
+                            const scannedText = result.getText();
+                            
+                            const processScan = async (resi: string) => {
+                                if (isScanning) {
+                                    if (dailyTaskData && managedPackages.length < dailyTaskData.totalPackages) {
+                                        const newPackage: PackageItem = { 
+                                            id: resi, 
+                                            status: 'process', 
+                                            isCOD: false,
+                                            lastUpdateTime: new Date().toISOString() 
+                                        };
+                                        try {
+                                            if (!dailyTaskDocId) throw new Error("Daily task ID not set");
+                                            const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", resi);
+                                            await setDoc(packageDocRef, { ...newPackage, lastUpdateTime: serverTimestamp() });
+                                            setManagedPackages(prev => [...prev, newPackage]);
+                                            setIsScanning(false);
+                                            toast({ title: "Resi Ditambahkan!", description: resi });
+                                        } catch (e) {
+                                            console.error("Error saving scanned package:", e);
+                                            toast({title: "Error Simpan", description: "Gagal menyimpan paket scan.", variant: "destructive"});
+                                            setIsScanning(false);
+                                        }
+                                    } else if (dailyTaskData) {
+                                        toast({ title: "Batas Paket Tercapai", variant: "destructive" });
+                                        setIsScanning(false);
+                                    }
+                                } else if (isScanningForDeliveryUpdate) {
+                                    const packageToUpdate = inTransitPackages.find(p => p.id === resi && p.status === 'in_transit');
+                                    if (packageToUpdate) {
+                                        handleOpenPackageCamera(packageToUpdate.id);
+                                    } else {
+                                        toast({ variant: 'destructive', title: "Resi Tidak Cocok", description: "Resi ini tidak ada dalam daftar antar Anda saat ini." });
+                                    }
+                                    setIsScanningForDeliveryUpdate(false);
+                                }
+                            };
+                            processScan(scannedText);
                         }
-                    };
-                    savePackage();
-                  } else if (dailyTaskData) {
-                    toast({ title: "Batas Paket Tercapai", variant: "destructive" });
-                    setIsScanning(false);
-                  }
-                } else if (isScanningForDeliveryUpdate) {
-                  const packageToUpdate = inTransitPackages.find(p => p.id === scannedText && p.status === 'in_transit');
-                  if (packageToUpdate) {
-                    handleOpenPackageCamera(packageToUpdate.id);
-                  } else {
-                    toast({ variant: 'destructive', title: "Resi Tidak Cocok" });
-                  }
-                  setIsScanningForDeliveryUpdate(false);
-                }
-              }
 
-              if (err && !(err instanceof NotFoundException) && !(err instanceof ChecksumException) && !(err instanceof FormatException)) {
-                console.error('Barcode scan error:', err);
-              }
+                        if (err && !(err instanceof NotFoundException) && !(err instanceof ChecksumException) && !(err instanceof FormatException)) {
+                            console.error('Barcode scan error:', err);
+                        }
+                    }
+                );
+                scannerControlsRef.current = controls;
+            } catch (error) {
+                console.error("Gagal memulai pemindai:", error);
+                toast({ title: "Error Kamera", description: "Gagal memulai pemindai. Coba lagi.", variant: "destructive" });
+                setIsScanning(false);
+                setIsScanningForDeliveryUpdate(false);
             }
-          );
-          scannerControlsRef.current = controls;
-        } catch (error) {
-           console.error("Gagal memulai pemindai:", error);
-           toast({ title: "Error Kamera", description: "Gagal memulai pemindai. Coba lagi.", variant: "destructive" });
-           setIsScanning(false);
-           setIsScanningForDeliveryUpdate(false);
-        }
-      };
+        };
 
-      videoElement.addEventListener('canplay', startScan);
-      videoElement.play().catch(err => console.error("Video play failed:", err));
+        videoElement.play().then(startScan).catch(err => console.error("Video play failed:", err));
       
-      return () => {
-        videoElement.removeEventListener('canplay', startScan);
-        if (scannerControlsRef.current) {
-          scannerControlsRef.current.stop();
-          scannerControlsRef.current = null;
-        }
-      };
+        return () => {
+            if (scannerControlsRef.current) {
+                scannerControlsRef.current.stop();
+                scannerControlsRef.current = null;
+            }
+        };
     }
-  }, [isScanning, isScanningForDeliveryUpdate, hasCameraPermission, dailyTaskData, managedPackages.length, inTransitPackages, dailyTaskDocId, toast]);
+  }, [isScanning, isScanningForDeliveryUpdate, hasCameraPermission, dailyTaskData, managedPackages, inTransitPackages, dailyTaskDocId, toast]);
 
 
   const handleDailyPackageInputSubmit: SubmitHandler<DailyPackageInput> = async (data) => {
