@@ -426,14 +426,12 @@ export default function ManageKurirsPage() {
   
   const handleDownloadTemplate = () => {
     const headers = [[
-      'fullName', 'nik', 'passwordValue', 'email (optional)', 'jabatan', 
-      'wilayah', 'area', 'workLocation', 'joinDate (YYYY-MM-DD)', 
-      'contractStatus', 'id (optional)', 'bankName (optional)', 
-      'bankAccountNumber (optional)', 'bankRecipientName (optional)'
+      'fullName', 'nik', 'passwordValue', 'jabatan', 'contractStatus', 'workLocation', 'joinDate',
+      'wilayah', 'area', 'email', 'id', 'bankName', 'bankAccountNumber', 'bankRecipientName'
     ]];
     const ws = XLSX.utils.aoa_to_sheet(headers);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.utils.book_append_sheet(wb, ws, 'Template Kurir');
     XLSX.writeFile(wb, 'Kurir_Template.xlsx');
     toast({ title: "Template Diunduh", description: "Template Kurir_Template.xlsx telah berhasil diunduh." });
   };
@@ -849,7 +847,7 @@ export default function ManageKurirsPage() {
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Format kolom yang diharapkan: fullName, nik, passwordValue, jabatan, wilayah, area, workLocation, joinDate (YYYY-MM-DD), contractStatus, dll.
+            Pastikan file Excel memiliki kolom: fullName, nik, passwordValue, jabatan, contractStatus, workLocation, dan joinDate (format: YYYY-MM-DD). Kolom lain bersifat opsional.
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
               <Button onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto" disabled={isImporting}>
