@@ -781,6 +781,8 @@ export default function DashboardPage() {
     setReturnLeadReceiverName('');
     setPackagePhotoMap({});
     setMotivationalQuote(MotivationalQuotes[Math.floor(Math.random() * MotivationalQuotes.length)]);
+    setIsCourierCheckedIn(false);
+    localStorage.removeItem('courierCheckedInToday');
     
     toast({ title: "Tugas Baru Siap Dimulai", description: "Semua data tugas lokal telah direset. Selamat bekerja!" });
   };
