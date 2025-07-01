@@ -1,106 +1,95 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // --- Helper Functions ---
-    
-    // Is the user signed in?
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    // Is the user accessing their OWN document?
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    // Get the role of the currently signed-in user from their profile
-    function getRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
-
-    // Check if the current user has a specific role
+    // Helper function to check if the requesting user has a specific role.
     function isRole(role) {
-      return isSignedIn() && getRole() == role;
+      // Check if the user document exists and has the specified role.
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
     
-    // Check if the current user's role is in a list of allowed roles
-    function isOneOfRoles(roles) {
-      return isSignedIn() && getRole() in roles;
+    // Helper function to check if the requesting user's role is in a list of roles.
+    function isRoleIn(roles) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in roles;
     }
-
-    // --- Collection Rules ---
-
-    // /users/{userId}
+    
+    // USERS Collection
+    // Manages all user profiles for MasterAdmin, Admin, PIC, and Kurir.
     match /users/{userId} {
-      // READ: 
-      // 1. You can get your own profile.
-      // 2. Managerial roles (MasterAdmin, Admin, PIC) can get any profile.
-      // 3. Managerial roles can list all users for management pages.
-      allow get: if isOwner(userId) || isOneOfRoles(['MasterAdmin', 'Admin', 'PIC']);
-      allow list: if isOneOfRoles(['MasterAdmin', 'Admin', 'PIC']);
+      // Allow any newly authenticated user to create THEIR OWN user document.
+      // This is essential for the initial MasterAdmin setup page to function.
+      allow create: if request.auth.uid == userId;
 
-      // WRITE:
-      // 1. You can update your own profile.
-      allow update: if isOwner(userId);
-      // 2. MasterAdmins can create/update/delete any user.
-      allow write: if isRole('MasterAdmin');
-      // 3. Admins can create/update/delete PICs and Kurirs.
-      allow write: if isRole('Admin') && (resource.data.role == 'PIC' || resource.data.role == 'Kurir');
-    }
-    
-    // /approval_requests/{requestId}
-    match /approval_requests/{requestId} {
-      // READ:
-      // 1. MasterAdmins and Admins can see all requests.
-      // 2. You can see the requests you created (for the status page).
-      allow read: if isOneOfRoles(['MasterAdmin', 'Admin']) || (resource.data.requestedByUid == request.auth.uid);
+      // A user can read their own profile.
+      // Managerial roles (MasterAdmin, Admin, PIC) can read any user's profile.
+      allow read: if request.auth.uid == userId || isRoleIn(['MasterAdmin', 'Admin', 'PIC']);
       
-      // WRITE:
-      // 1. PICs and Admins can create new requests. This is the key fix.
-      allow create: if isOneOfRoles(['PIC', 'Admin']) && request.resource.data.requestedByUid == request.auth.uid;
-      // 2. MasterAdmins and Admins can update requests to approve or reject them.
-      allow update: if isOneOfRoles(['MasterAdmin', 'Admin']);
-      // 3. Nobody can delete approval requests, for audit trail purposes.
+      // A user can update their own profile, BUT CANNOT change their own role.
+      // MasterAdmins and Admins can update any user profile.
+      allow update: if (request.auth.uid == userId && request.resource.data.role == resource.data.role) 
+                    || isRoleIn(['MasterAdmin', 'Admin']);
+                    
+      // Only a MasterAdmin can delete a user document.
+      allow delete: if isRole('MasterAdmin');
+    }
+
+    // APPROVAL_REQUESTS Collection
+    // Manages requests that need approval from Admin/MasterAdmin.
+    match /approval_requests/{requestId} {
+      // PICs and Admins are allowed to create approval requests.
+      allow create: if isRoleIn(['Admin', 'PIC']);
+      
+      // The user who created the request can read it to check its status.
+      // MasterAdmins and Admins can read all requests to process them.
+      allow read: if isRoleIn(['MasterAdmin', 'Admin']) || request.auth.uid == resource.data.requestedByUid;
+      
+      // Only MasterAdmins and Admins can update (approve/reject) requests.
+      allow update: if isRoleIn(['MasterAdmin', 'Admin']);
+      
+      // Nobody should delete requests, to maintain a clear audit trail.
       allow delete: if false;
     }
 
-    // /kurir_daily_tasks/{taskId} and its subcollections
-    match /kurir_daily_tasks/{taskId} {
-      // READ: Managerial roles can see all task data for monitoring.
-      allow read: if isOneOfRoles(['MasterAdmin', 'Admin', 'PIC']);
+    // ATTENDANCE Collection
+    // Manages Kurir daily check-in and check-out.
+    match /attendance/{attendanceId} {
+      // A Kurir can only write to their own attendance document.
+      // The document ID format is {kurirUid}_{date}.
+      allow write: if request.auth.uid == attendanceId.split('_')[0];
       
-      // WRITE: Only the assigned Kurir can create or update their own task.
-      allow write: if isRole('Kurir') && (request.resource.data.kurirUid == request.auth.uid);
+      // A Kurir can read their own attendance.
+      // Managerial roles can read any attendance record for reporting.
+      allow read: if request.auth.uid == resource.data.kurirUid || isRoleIn(['MasterAdmin', 'Admin', 'PIC']);
+    }
 
-      // Subcollection for packages within a task
+    // KURIR_DAILY_TASKS Collection
+    // Manages daily package assignments and progress for Kurirs.
+    match /kurir_daily_tasks/{taskId} {
+      // A Kurir can only write to their own task document.
+      // The document ID format is {kurirUid}_{date}.
+      allow write: if request.auth.uid == taskId.split('_')[0];
+      
+      // A Kurir can read their own task.
+      // Managerial roles can read any task for monitoring.
+      allow read: if request.auth.uid == resource.data.kurirUid || isRoleIn(['MasterAdmin', 'Admin', 'PIC']);
+      
+      // Rules for the 'packages' subcollection within a daily task.
       match /packages/{packageId} {
-         // READ: Managerial roles can see package details.
-        allow read: if isOneOfRoles(['MasterAdmin', 'Admin', 'PIC']);
+        // The Kurir who owns the parent task can add/update packages.
+        allow write: if request.auth.uid == taskId.split('_')[0];
         
-        // WRITE: Only the Kurir who owns the parent task can manage the packages inside it.
-        allow write: if isRole('Kurir') && get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid == request.auth.uid;
+        // The Kurir and managerial roles can read package details.
+        allow read: if get(/databases/$(database)/documents/kurir_daily_tasks/$(taskId)).data.kurirUid == request.auth.uid 
+                    || isRoleIn(['MasterAdmin', 'Admin', 'PIC']);
       }
     }
     
-    // /attendance/{attendanceId}
-    match /attendance/{attendanceId} {
-      // READ: Managerial roles can read all attendance for monitoring.
-      allow read: if isOneOfRoles(['MasterAdmin', 'Admin', 'PIC']);
-      
-      // WRITE: A Kurir can only create or update their own attendance.
-      allow write: if isRole('Kurir') && request.resource.data.kurirUid == request.auth.uid;
-    }
-    
-    // /notifications/{notificationId}
+    // NOTIFICATIONS Collection
+    // For system-wide notifications, primarily for MasterAdmins.
     match /notifications/{notificationId} {
-      // READ: Only MasterAdmins can see system-wide notifications.
-      allow read: if isRole('MasterAdmin');
-      
-      // WRITE: Only the server can create notifications.
-      allow write: if false; 
+      // Only MasterAdmins and Admins can read or write notifications.
+      allow read, write: if isRoleIn(['MasterAdmin', 'Admin']);
     }
   }
 }
