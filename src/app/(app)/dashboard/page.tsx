@@ -367,6 +367,8 @@ export default function DashboardPage() {
   // Effect for Camera Permission and Stream Setup
   useEffect(() => {
     let stream: MediaStream | null = null;
+    const isCameraActive = isScanning || !!capturingForPackageId || isScanningForDeliveryUpdate;
+
     const setupCamera = async () => {
         try {
             stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
@@ -381,7 +383,7 @@ export default function DashboardPage() {
         }
     };
 
-    if (isScanning || capturingForPackageId || isScanningForDeliveryUpdate) {
+    if (isCameraActive) {
         setupCamera();
     }
   
@@ -397,45 +399,57 @@ export default function DashboardPage() {
 
   // Effect for Barcode Scanning
   useEffect(() => {
+    // Only proceed if a scan is active, the video element is ready, and we have permission
     if ((isScanning || isScanningForDeliveryUpdate) && videoRef.current && hasCameraPermission) {
       const codeReader = new BrowserMultiFormatReader();
+      const videoElement = videoRef.current;
+
       const startScan = async () => {
         try {
-          if (!videoRef.current || !videoRef.current.srcObject) return;
-          await videoRef.current.play();
+          if (scannerControlsRef.current) {
+            scannerControlsRef.current.stop();
+          }
+
           const controls = await codeReader.decodeFromVideoElementContinuously(
-            videoRef.current,
-            async (result, err, scanControls) => {
-              if (scannerControlsRef.current === null && scanControls) scannerControlsRef.current = scanControls;
+            videoElement,
+            (result, err) => {
               if (result) {
-                if (scannerControlsRef.current) { scannerControlsRef.current.stop(); scannerControlsRef.current = null; }
+                if (scannerControlsRef.current) {
+                  scannerControlsRef.current.stop();
+                  scannerControlsRef.current = null;
+                }
                 const scannedText = result.getText();
                 toast({ title: "Barcode Terbaca!", description: `Resi: ${scannedText}` });
 
-                if (isScanning) { 
+                if (isScanning) {
                   if (dailyTaskData && managedPackages.length < dailyTaskData.totalPackages) {
                     const newPackage: PackageItem = { 
                         id: scannedText, 
                         status: 'process', 
-                        isCOD: false, // Safer default. Can be edited manually.
+                        isCOD: false,
                         lastUpdateTime: new Date().toISOString() 
                     };
-                    try {
-                        if (!dailyTaskDocId) throw new Error("Daily task ID not set");
-                        const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", scannedText);
-                        await setDoc(packageDocRef, { ...newPackage, lastUpdateTime: serverTimestamp() });
-                        setManagedPackages(prev => [...prev, newPackage]);
-                        setCurrentScannedResi('');
-                        if (managedPackages.length + 1 === dailyTaskData.totalPackages) setIsScanning(false);
-                    } catch (e) {
-                        console.error("Error saving scanned package:", e);
-                        toast({title: "Error Simpan", description: "Gagal menyimpan paket scan.", variant: "destructive"});
-                    }
+                    const savePackage = async () => {
+                        try {
+                            if (!dailyTaskDocId) throw new Error("Daily task ID not set");
+                            const packageDocRef = doc(db, "kurir_daily_tasks", dailyTaskDocId, "packages", scannedText);
+                            await setDoc(packageDocRef, { ...newPackage, lastUpdateTime: serverTimestamp() });
+                            setManagedPackages(prev => [...prev, newPackage]);
+                            setCurrentScannedResi('');
+                            if (managedPackages.length + 1 >= dailyTaskData.totalPackages) {
+                                setIsScanning(false);
+                            }
+                        } catch (e) {
+                            console.error("Error saving scanned package:", e);
+                            toast({title: "Error Simpan", description: "Gagal menyimpan paket scan.", variant: "destructive"});
+                        }
+                    };
+                    savePackage();
                   } else if (dailyTaskData) {
                     toast({ title: "Batas Paket Tercapai", variant: "destructive" });
                     setIsScanning(false);
                   }
-                } else if (isScanningForDeliveryUpdate) { 
+                } else if (isScanningForDeliveryUpdate) {
                   const packageToUpdate = inTransitPackages.find(p => p.id === scannedText && p.status === 'in_transit');
                   if (packageToUpdate) {
                     handleOpenPackageCamera(packageToUpdate.id);
@@ -445,6 +459,7 @@ export default function DashboardPage() {
                   setIsScanningForDeliveryUpdate(false);
                 }
               }
+
               if (err && !(err instanceof NotFoundException) && !(err instanceof ChecksumException) && !(err instanceof FormatException)) {
                 console.error('Barcode scan error:', err);
               }
@@ -452,20 +467,25 @@ export default function DashboardPage() {
           );
           scannerControlsRef.current = controls;
         } catch (error) {
-           console.error("Failed to start scanner:", error);
+           console.error("Gagal memulai pemindai:", error);
+           toast({ title: "Error Kamera", description: "Gagal memulai pemindai. Coba lagi.", variant: "destructive" });
+           setIsScanning(false);
+           setIsScanningForDeliveryUpdate(false);
         }
       };
+
+      videoElement.addEventListener('canplay', startScan);
+      videoElement.play().catch(err => console.error("Video play failed:", err));
       
-      const timeoutId = setTimeout(startScan, 300); 
-      return () => clearTimeout(timeoutId);
+      return () => {
+        videoElement.removeEventListener('canplay', startScan);
+        if (scannerControlsRef.current) {
+          scannerControlsRef.current.stop();
+          scannerControlsRef.current = null;
+        }
+      };
     }
-    return () => {
-       if (scannerControlsRef.current) {
-         scannerControlsRef.current.stop();
-         scannerControlsRef.current = null;
-       }
-    };
-  }, [isScanning, isScanningForDeliveryUpdate, hasCameraPermission, dailyTaskData, managedPackages, inTransitPackages, dailyTaskDocId, toast]);
+  }, [isScanning, isScanningForDeliveryUpdate, hasCameraPermission, dailyTaskData, managedPackages.length, inTransitPackages, dailyTaskDocId, toast]);
 
 
   const handleDailyPackageInputSubmit: SubmitHandler<DailyPackageInput> = async (data) => {
@@ -517,7 +537,7 @@ export default function DashboardPage() {
         canvas.height = video.videoHeight;
         const context = canvas.getContext('2d');
         if (context) {
-          // Reduce quality to 0.5 for smaller base64 string, as requested.
+          context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
           return canvas.toDataURL('image/jpeg', 0.5);
         }
       }
@@ -994,7 +1014,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center space-x-2 pt-1"><Checkbox id="isManualCOD" checked={isManualCOD} onCheckedChange={(checked) => setIsManualCOD(checked as boolean)} disabled={managedPackages.length >= dailyTaskData.totalPackages}/><Label htmlFor="isManualCOD" className="text-sm font-normal text-muted-foreground">Paket COD</Label></div>
               </div>
-              {isScanning && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-0 md:p-4"> <Card className="w-full h-full md:h-auto md:rounded-lg md:max-w-2xl"><CardHeader><CardTitle>Scan Barcode Paket</CardTitle><CardDescription>Arahkan kamera ke barcode paket.</CardDescription></CardHeader><CardContent><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && ( <Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert> )}{hasCameraPermission === null && <p>Meminta izin kamera...</p>}</CardContent><CardFooter className="flex justify-end gap-2"><Button variant="outline" onClick={() => setIsScanning(false)} className="w-full sm:w-auto">Tutup</Button></CardFooter></Card></div> )}
+              
               {managedPackages.length > 0 && ( <div className="space-y-2 max-h-60 overflow-y-auto p-1 border rounded-md"><h3 className="font-semibold text-muted-foreground px-2">Paket Diproses ({managedPackages.length}):</h3>{managedPackages.map(pkg => (<div key={pkg.id} className="flex items-center justify-between p-2 bg-card-foreground/5 rounded-md"><span className="text-sm break-all">{pkg.id} ({pkg.isCOD ? 'COD' : 'Non-COD'}) - <span className="italic text-xs text-primary">Proses</span></span><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive flex-shrink-0" onClick={() => handleDeleteManagedPackage(pkg.id)}><Trash2 size={16} /></Button></div>))}</div> )}
               <Progress value={(managedPackages.length / (dailyTaskData.totalPackages || 1)) * 100} className="w-full h-2.5" />
             </CardContent>
@@ -1013,8 +1033,7 @@ export default function DashboardPage() {
                   {isValidImageUrl(pkg.deliveryProofPhotoUrl) && (<div className="mt-2"><p className="text-xs text-muted-foreground mb-1">Penerima: <span className="font-medium text-foreground">{pkg.recipientName || 'N/A'}</span></p><div className="flex items-end gap-2"><Image src={pkg.deliveryProofPhotoUrl} alt={`Bukti ${pkg.id}`} className="w-24 h-24 object-cover rounded border" width={96} height={96} data-ai-hint="package door"/><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeletePackagePhoto(pkg.id)}><Trash2 size={16} /></Button></div></div>)}
                 </Card>
             ))}</CardContent>
-            {capturingForPackageId && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-0 md:p-4"><Card className="w-full h-full md:h-auto md:rounded-lg md:max-w-2xl"><CardHeader><CardTitle>Foto Bukti Paket: {capturingForPackageId}</CardTitle><CardDescription>Ambil foto dan nama penerima.</CardDescription></CardHeader><CardContent className="space-y-4"><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}<div><Label htmlFor="photoRecipientName">Nama Penerima <span className="text-destructive">*</span></Label><Input id="photoRecipientName" type="text" placeholder="Nama penerima" value={photoRecipientName} onChange={(e) => setPhotoRecipientName(e.target.value)}/></div></CardContent><CardFooter className="flex flex-col sm:flex-row justify-between gap-2"><Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim() || isSubmitting} className="w-full sm:w-auto"><Camera className="mr-2 h-4 w-4" /> {isSubmitting ? 'Mengunggah...' : 'Ambil & Simpan'}</Button></CardFooter></Card></div>)}
-            {isScanningForDeliveryUpdate && ( <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-0 md:p-4"><Card className="w-full h-full md:h-auto md:rounded-lg md:max-w-2xl"><CardHeader><CardTitle>Scan Resi Update Pengiriman</CardTitle><CardDescription>Arahkan kamera ke barcode.</CardDescription></CardHeader><CardContent><video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline /><canvas ref={photoCanvasRef} style={{display: 'none'}} />{hasCameraPermission === false && (<Alert variant="destructive" className="mt-2"><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert>)}</CardContent><CardFooter className="flex justify-end gap-2"><Button variant="outline" onClick={() => setIsScanningForDeliveryUpdate(false)} className="w-full sm:w-auto">Tutup</Button></CardFooter></Card></div>)}
+            
             <CardFooter><Button onClick={handleFinishDay} className="w-full" variant="destructive" disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : 'Selesaikan Pengantaran Hari Ini'}</Button></CardFooter>
           </Card>
         )}
@@ -1032,6 +1051,45 @@ export default function DashboardPage() {
         )}
         
         {dailyTaskData && dailyTaskData.taskStatus !== 'completed' && isCourierCheckedIn && (<Card className="bg-gradient-to-r from-primary/10 to-accent/10 dark:from-primary/20 dark:to-accent/20 border-transparent"><CardContent className="pt-6"><p className="text-center text-lg italic text-foreground/70 dark:text-primary-foreground/80">{motivationalQuote}</p></CardContent></Card>)}
+
+        {/* Full-screen Camera Modals */}
+        {(isScanning || isScanningForDeliveryUpdate) && (
+          <div className="fixed inset-0 z-50 bg-black">
+            <video ref={videoRef} className="absolute inset-0 h-full w-full object-cover" autoPlay muted playsInline />
+            <canvas ref={photoCanvasRef} className="hidden" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
+              <div className="relative h-64 w-11/12 max-w-sm">
+                <div className="absolute inset-0 rounded-lg border-4 border-white/50" />
+                <div className="absolute top-0 h-1 w-full animate-scan-line rounded-full bg-primary" />
+              </div>
+              <p className="mt-4 text-white">Arahkan kamera ke barcode</p>
+            </div>
+            <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white" onClick={() => { setIsScanning(false); setIsScanningForDeliveryUpdate(false); }}>
+              <X className="h-6 w-6" />
+            </Button>
+            {hasCameraPermission === false && (<div className="absolute bottom-10 left-4 right-4"><Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle><AlertDescription>Izinkan akses kamera di pengaturan browser untuk memindai.</AlertDescription></Alert></div>)}
+          </div>
+        )}
+        
+        {capturingForPackageId && (
+          <div className="fixed inset-0 z-50 bg-black flex flex-col">
+            <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+            <canvas ref={photoCanvasRef} className="hidden" />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 space-y-4">
+              <div className="bg-black/50 rounded-lg p-4">
+                  <Label htmlFor="photoRecipientName" className="text-white">Nama Penerima <span className="text-destructive">*</span></Label>
+                  <Input id="photoRecipientName" type="text" placeholder="Masukkan nama penerima paket" value={photoRecipientName} onChange={(e) => setPhotoRecipientName(e.target.value)} className="bg-white/90 text-black"/>
+              </div>
+              <div className="flex items-center justify-center gap-4">
+                <Button variant="outline" onClick={() => setCapturingForPackageId(null)} className="flex-1 bg-white/20 text-white border-white/50 hover:bg-white/30">Batal</Button>
+                <Button onClick={handleCapturePackagePhoto} disabled={!hasCameraPermission || !photoRecipientName.trim() || isSubmitting} className="flex-1 bg-primary hover:bg-primary/90">
+                  <Camera className="mr-2 h-5 w-5" /> {isSubmitting ? 'Mengunggah...' : 'Ambil Foto & Simpan'}
+                </Button>
+              </div>
+            </div>
+             {hasCameraPermission === false && (<div className="absolute top-10 left-4 right-4"><Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Akses Kamera Dibutuhkan</AlertTitle></Alert></div>)}
+          </div>
+        )}
       </div>
     );
   }
