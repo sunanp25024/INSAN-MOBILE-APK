@@ -108,24 +108,37 @@ export default function LandingPage() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative overflow-hidden">
-            <div className="container relative mx-auto grid grid-cols-1 items-center gap-12 px-4 py-20 md:grid-cols-2 lg:py-28">
-                <div className="flex flex-col items-center text-center md:items-start md:text-left">
-                    <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
+        <section className="relative overflow-hidden bg-background py-20 lg:py-28">
+            {/* Background Image */}
+            <Image
+                src="https://placehold.co/1920x1080.png"
+                alt="Modern logistics background"
+                layout="fill"
+                objectFit="cover"
+                className="z-0"
+                data-ai-hint="logistics background"
+                priority
+            />
+            <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm" />
+
+            <div className="container relative z-20 mx-auto flex flex-col items-center gap-12 px-4 text-center">
+                {/* Text Content */}
+                <div className="flex flex-col items-center">
+                    <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-6xl">
                         Aplikasi Visual untuk Operasional Kurir Anda.
                     </h1>
-                    <p className="mt-6 max-w-xl text-lg text-muted-foreground">
+                    <p className="mt-6 max-w-2xl text-lg text-primary-foreground/80">
                         Lihat langsung bagaimana aplikasi kami menyederhanakan pelacakan paket, absensi, dan pelaporan performa—semuanya dalam satu platform.
                     </p>
-                    <div className="mt-8 flex flex-col gap-4 sm:flex-row w-full sm:w-auto">
-                        <Button size="lg" className="text-lg w-full" onClick={() => router.push('/login')}>
+                    <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+                        <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6 shadow-lg" onClick={() => router.push('/login')}>
                             Lihat Dashboard
                         </Button>
                         {installPromptEvent && (
                         <Button
-                            variant="outline"
+                            variant="secondary"
                             size="lg"
-                            className="text-lg w-full"
+                            className="text-lg px-8 py-6 shadow-lg"
                             onClick={handleInstallClick}
                         >
                             <Download className="mr-2 h-5 w-5" />
@@ -134,18 +147,17 @@ export default function LandingPage() {
                         )}
                     </div>
                 </div>
-                <div className="relative flex h-full items-center justify-center">
-                    <div className="w-[280px] lg:w-[320px]">
-                        <Image
-                            src="https://placehold.co/400x800.png"
-                            alt="App Dashboard Mockup"
-                            width={400}
-                            height={800}
-                            className="rounded-3xl border-8 border-foreground shadow-2xl"
-                            data-ai-hint="app mockup phone"
-                            priority
-                        />
-                    </div>
+                
+                {/* Phone Mockup */}
+                <div className="relative w-[280px] lg:w-[320px] mt-8">
+                     <Image
+                        src="https://placehold.co/400x800.png"
+                        alt="App Dashboard Mockup"
+                        width={400}
+                        height={800}
+                        className="rounded-3xl border-8 border-neutral-700 shadow-2xl"
+                        data-ai-hint="app mockup phone"
+                    />
                 </div>
             </div>
         </section>
