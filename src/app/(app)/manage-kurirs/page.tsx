@@ -20,9 +20,9 @@ import { format, parseISO, isValid } from "date-fns";
 import { id as indonesiaLocale } from "date-fns/locale";
 import { Switch } from '@/components/ui/switch';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { createUserAccount, deleteUserAccount, requestBulkUserCreation, updateUserStatus, requestUserDeletion, resetUserPassword } from '@/lib/firebaseAdminActions';
+import { createUserAccount, deleteUserAccount, requestBulkUserCreation, updateUserStatus, requestUserDeletion, resetUserPassword, submitApprovalRequest } from '@/lib/firebaseAdminActions';
 import * as XLSX from 'xlsx';
 
 const kurirSchema = z.object({
@@ -122,21 +122,6 @@ export default function ManageKurirsPage() {
     }
   }, [currentUser]);
 
-  const createNotification = async (message: string) => {
-    try {
-      await addDoc(collection(db, 'notifications'), {
-        title: 'Permintaan Persetujuan Baru',
-        message,
-        type: 'APPROVAL_REQUEST',
-        timestamp: serverTimestamp(),
-        read: false,
-        linkTo: '/approvals',
-      });
-    } catch (error) {
-      console.error("Failed to create notification:", error);
-    }
-  };
-
   const handleAddKurirSubmit: SubmitHandler<KurirFormData> = async (data) => {
     if (!currentUser) return;
     setIsSubmitting(true);
@@ -177,30 +162,32 @@ export default function ManageKurirsPage() {
 
     if (currentUser.role === 'PIC') {
        newKurirProfile.status = 'PendingApproval';
-       newKurirProfile.passwordValue = data.passwordValue; // Include password for request payload
+       newKurirProfile.passwordValue = data.passwordValue;
 
-       const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+       const requestData: Omit<ApprovalRequest, 'id' | 'requestTimestamp'> = {
         type: 'NEW_USER_KURIR',
         status: 'pending',
         requestedByUid: currentUser.uid,
         requestedByName: currentUser.fullName,
         requestedByRole: currentUser.role,
-        requestTimestamp: serverTimestamp(),
         targetEntityType: 'USER_PROFILE_DATA',
         targetEntityId: appKurirId,
         targetEntityName: data.fullName,
         payload: newKurirProfile,
         notesFromRequester: "Pengajuan kurir baru dari PIC.",
       };
-      try {
-        await addDoc(collection(db, "approval_requests"), approvalRequest);
-        await createNotification(`PIC ${currentUser.fullName} mengajukan penambahan kurir baru: ${data.fullName}.`);
+      
+      const notificationMessage = `PIC ${currentUser.fullName} mengajukan penambahan kurir baru: ${data.fullName}.`;
+      const result = await submitApprovalRequest(requestData, notificationMessage);
+
+      if (result.success) {
         toast({ title: "Permintaan Diajukan", description: `Permintaan penambahan kurir ${data.fullName} telah dikirim untuk persetujuan.` });
         reset();
         setIsAddKurirDialogOpen(false);
-      } catch (error: any) {
-        toast({ title: "Error Pengajuan", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
+      } else {
+         toast({ title: "Error Pengajuan", description: result.message, variant: "destructive" });
       }
+
     } else if (['MasterAdmin', 'Admin'].includes(currentUser.role)) {
         const result = await createUserAccount(emailForAuth, data.passwordValue, newKurirProfile);
         if (result.success) {
@@ -264,13 +251,12 @@ export default function ManageKurirsPage() {
     }
 
     if (currentUser.role === 'PIC') {
-        const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+        const requestData: Omit<ApprovalRequest, 'id' | 'requestTimestamp'> = {
             type: 'UPDATE_USER_PROFILE',
             status: 'pending',
             requestedByUid: currentUser.uid,
             requestedByName: currentUser.fullName,
             requestedByRole: currentUser.role,
-            requestTimestamp: serverTimestamp(),
             targetEntityType: 'USER_PROFILE_DATA',
             targetEntityId: currentEditingKurir.uid,
             targetEntityName: currentEditingKurir.fullName,
@@ -278,12 +264,13 @@ export default function ManageKurirsPage() {
             oldPayload: oldPayload,
             notesFromRequester: `Pengajuan perubahan data untuk Kurir ID: ${currentEditingKurir.id}`,
         };
-        try {
-            await addDoc(collection(db, "approval_requests"), approvalRequest);
-            await createNotification(`PIC ${currentUser.fullName} mengajukan perubahan data untuk Kurir: ${currentEditingKurir.fullName}.`);
+        const notificationMessage = `PIC ${currentUser.fullName} mengajukan perubahan data untuk Kurir: ${currentEditingKurir.fullName}.`;
+        const result = await submitApprovalRequest(requestData, notificationMessage);
+
+        if (result.success) {
             toast({ title: "Permintaan Perubahan Diajukan", description: `Permintaan perubahan data kurir ${data.fullName} telah dikirim.` });
-        } catch (error: any) {
-            toast({ title: "Error Pengajuan Update", description: `Gagal mengajukan permintaan: ${error.message}`, variant: "destructive" });
+        } else {
+            toast({ title: "Error Pengajuan Update", description: result.message, variant: "destructive" });
         }
     } else if (['MasterAdmin', 'Admin'].includes(currentUser.role)) {
         try {
@@ -438,26 +425,28 @@ export default function ManageKurirsPage() {
     const newStatus = newStatusActive ? 'Aktif' : 'Nonaktif';
     
     if (currentUser.role === 'PIC') {
-        const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+        const requestData: Omit<ApprovalRequest, 'id' | 'requestTimestamp'> = {
             type: newStatusActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
             status: 'pending',
             requestedByUid: currentUser.uid,
             requestedByName: currentUser.fullName,
             requestedByRole: currentUser.role,
-            requestTimestamp: serverTimestamp(),
             targetEntityType: 'USER_PROFILE_DATA',
             targetEntityId: kurirToUpdate.uid,
             targetEntityName: kurirToUpdate.fullName,
             payload: { status: newStatus },
             notesFromRequester: `Pengajuan perubahan status Kurir ID ${kurirToUpdate.id} menjadi ${newStatus}.`,
         };
-         try {
-            await addDoc(collection(db, "approval_requests"), approvalRequest);
-            await createNotification(`PIC ${currentUser.fullName} mengajukan perubahan status untuk Kurir: ${kurirToUpdate.fullName} menjadi ${newStatus}.`);
+        
+        const notificationMessage = `PIC ${currentUser.fullName} mengajukan perubahan status untuk Kurir: ${kurirToUpdate.fullName} menjadi ${newStatus}.`;
+        const result = await submitApprovalRequest(requestData, notificationMessage);
+
+        if (result.success) {
             toast({ title: "Permintaan Perubahan Status Diajukan", description: `Permintaan perubahan status kurir ${kurirToUpdate.fullName} menjadi ${newStatus} telah dikirim.` });
-        } catch (error: any) {
-            toast({ title: "Error Pengajuan", description: `Gagal mengajukan perubahan status: ${error.message}`, variant: "destructive" });
+        } else {
+            toast({ title: "Error Pengajuan", description: result.message, variant: "destructive" });
         }
+
     } else if (['MasterAdmin', 'Admin'].includes(currentUser.role)) {
         const handlerProfile = { uid: currentUser.uid, name: currentUser.fullName, role: currentUser.role };
         const result = await updateUserStatus(kurirToUpdate.uid, newStatus, handlerProfile);

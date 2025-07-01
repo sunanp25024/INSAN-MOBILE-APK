@@ -106,13 +106,12 @@ export async function requestUserDeletion(
     return { success: false, message: 'Data pengguna yang akan dihapus tidak lengkap.'};
   }
 
-  const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+  const approvalRequest: Omit<ApprovalRequest, 'id'|'requestTimestamp'> = {
     type: 'DELETE_USER',
     status: 'pending',
     requestedByUid: requesterProfile.uid,
     requestedByName: requesterProfile.fullName,
     requestedByRole: requesterProfile.role,
-    requestTimestamp: admin.firestore.FieldValue.serverTimestamp(),
     targetEntityType: 'USER_PROFILE_DATA',
     targetEntityId: userToDelete.uid,
     targetEntityName: userToDelete.fullName,
@@ -126,13 +125,9 @@ export async function requestUserDeletion(
     notesFromRequester: `Pengajuan penghapusan untuk pengguna: ${userToDelete.fullName} (ID: ${userToDelete.id}, Role: ${userToDelete.role}).`,
   };
 
-  try {
-    await adminDb.collection('approval_requests').add(approvalRequest);
-    return { success: true, message: 'Permintaan penghapusan telah berhasil diajukan.' };
-  } catch (error: any) {
-    console.error('Error requesting user deletion:', error);
-    return { success: false, message: `Gagal mengajukan permintaan: ${error.message}` };
-  }
+  const notificationMessage = `PIC ${requesterProfile.fullName} mengajukan penghapusan untuk Kurir: ${userToDelete.fullName}.`;
+  
+  return await submitApprovalRequest(approvalRequest, notificationMessage);
 }
 
 
@@ -162,25 +157,25 @@ export async function requestBulkUserCreation(
     return { success: false, errors: ['Tidak ada data pengguna yang valid untuk diajukan.'], requestedCount: 0 };
   }
   
-  const approvalRequest: Omit<ApprovalRequest, 'id'> = {
+  const approvalRequest: Omit<ApprovalRequest, 'id' | 'requestTimestamp'> = {
     type: 'NEW_USER_BULK',
     status: 'pending',
     requestedByUid: requesterProfile.uid,
     requestedByName: requesterProfile.fullName,
     requestedByRole: requesterProfile.role,
-    requestTimestamp: admin.firestore.FieldValue.serverTimestamp(),
     targetEntityType: 'USER_PROFILE_DATA',
     targetEntityName: `Impor Massal ${validUsersToCreate.length} Pengguna`,
     payload: { users: validUsersToCreate }, // Store the array of users in the payload
     notesFromRequester: `Pengajuan impor massal untuk ${validUsersToCreate.length} kurir baru.`,
   };
+  
+  const notificationMessage = `PIC ${requesterProfile.fullName} mengajukan impor massal untuk ${validUsersToCreate.length} kurir baru.`;
+  const result = await submitApprovalRequest(approvalRequest, notificationMessage);
 
-  try {
-    await adminDb.collection('approval_requests').add(approvalRequest);
-    return { success: true, requestedCount: validUsersToCreate.length, errors };
-  } catch (error: any) {
-    console.error('Error requesting bulk user creation:', error);
-    return { success: false, errors: [`Gagal membuat permintaan persetujuan: ${error.message}`], requestedCount: 0 };
+  if (result.success) {
+      return { success: true, requestedCount: validUsersToCreate.length, errors };
+  } else {
+      return { success: false, errors: [result.message || 'Gagal mengajukan permintaan persetujuan.'], requestedCount: 0 };
   }
 }
 
@@ -411,5 +406,43 @@ export async function uploadFileToServer(filePath: string, dataUrl: string) {
   } catch (error: any) {
     console.error(`Error processing data URL for Firestore:`, error);
     return { success: false, message: `Failed to process data URL: ${error.message}` };
+  }
+}
+
+/**
+ * A robust server action to handle the creation of any approval request.
+ * This centralizes the logic and uses admin privileges for writes.
+ * @param requestData The core data for the approval request.
+ * @param notificationMessage The message for the system notification.
+ * @returns An object with the success status and a message.
+ */
+export async function submitApprovalRequest(
+  requestData: Omit<ApprovalRequest, 'id' | 'requestTimestamp'>,
+  notificationMessage: string
+) {
+  try {
+    // 1. Add server timestamp to the request data
+    const fullRequestData = {
+      ...requestData,
+      requestTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // 2. Create the approval request document in Firestore
+    await adminDb.collection('approval_requests').add(fullRequestData);
+
+    // 3. Create the corresponding notification
+    await adminDb.collection('notifications').add({
+      title: 'Permintaan Persetujuan Baru',
+      message: notificationMessage,
+      type: 'APPROVAL_REQUEST',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      read: false,
+      linkTo: '/approvals',
+    });
+
+    return { success: true, message: 'Permintaan berhasil diajukan.' };
+  } catch (error: any) {
+    console.error('Error submitting approval request via server action:', error);
+    return { success: false, message: `Gagal mengajukan permintaan: ${error.message}` };
   }
 }
