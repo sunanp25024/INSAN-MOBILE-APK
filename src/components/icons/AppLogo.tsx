@@ -10,7 +10,10 @@ const LOGO_HEIGHT = 128;
 export function AppLogo({ className }: { className?: string }) {
   return (
     <Image
-      src="/Logo_PIS-removebg-preview.png" // Path relative to the public folder
+      // CARA MENGGANTI LOGO:
+      // 1. Upload file logo Anda (misalnya, "logo-baru.png") ke dalam folder "public".
+      // 2. Ganti nilai `src` di bawah ini menjadi "/logo-baru.png".
+      src="/Logo_PIS-removebg-preview.png" // Path ini relatif ke folder "public".
       alt="INSAN MOBILE Logo"
       width={LOGO_WIDTH}
       height={LOGO_HEIGHT}
