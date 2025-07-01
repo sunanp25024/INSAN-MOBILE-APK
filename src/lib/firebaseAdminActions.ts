@@ -329,18 +329,26 @@ export async function importUsers(
            results.errors.push(`Baris ${rowNum}: Area Tanggung Jawab (workLocation) wajib untuk PIC.`);
            continue;
         }
-
-        newProfileData = {
-          id: appUserId,
-          fullName: userData.fullName.toString().trim(),
-          email: email,
-          role: roleToAssign,
-          status: 'Aktif',
-          workLocation: userData.workLocation?.toString().trim() || undefined,
-          position: roleToAssign,
-          joinDate: new Date().toISOString(),
-          createdBy: creatorProfile,
+        
+        // Define a base profile that works for both Admin and PIC initially
+        const baseProfile: Omit<UserProfile, 'uid'> = {
+            id: appUserId,
+            fullName: userData.fullName.toString().trim(),
+            email: email,
+            role: roleToAssign,
+            status: 'Aktif',
+            position: roleToAssign,
+            joinDate: new Date().toISOString(),
+            createdBy: creatorProfile,
         };
+
+        // Conditionally add workLocation only if the role is PIC.
+        // This prevents the 'undefined' error for Admins.
+        if (roleToAssign === 'PIC') {
+            baseProfile.workLocation = userData.workLocation.toString().trim();
+        }
+
+        newProfileData = baseProfile;
       }
       
       const creationResult = await createUserAccount(email, userData.passwordValue.toString(), newProfileData);
