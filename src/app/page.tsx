@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { AppLogo } from '@/components/icons/AppLogo';
-import { ArrowRight, ShieldCheck, Truck, Users, ScanLine, FileText, Download, BarChart3, CheckCircle, Smartphone, LayoutDashboard } from 'lucide-react';
+import { ArrowRight, Download, ScanLine, LayoutDashboard, ShieldCheck, BarChart3, Users, Smartphone, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
@@ -23,17 +23,35 @@ const FeatureCard = ({
   icon: Icon,
   title,
   description,
+  imageUrl,
+  imageHint,
 }: {
   icon: React.ElementType;
   title: string;
   description: string;
+  imageUrl: string;
+  imageHint: string;
 }) => (
-    <div className="relative overflow-hidden rounded-lg border bg-background p-6 shadow-sm transition-all hover:shadow-lg hover:-translate-y-1">
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Icon className="h-6 w-6" />
+    <div className="relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-lg transition-all hover:shadow-2xl hover:-translate-y-1">
+        <div className="aspect-video overflow-hidden border-b">
+             <Image
+                src={imageUrl}
+                alt={title}
+                width={500}
+                height={300}
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                data-ai-hint={imageHint}
+            />
         </div>
-        <h3 className="mb-2 text-xl font-semibold">{title}</h3>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <div className="p-6 flex flex-col flex-grow">
+            <div className="mb-3 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Icon className="h-5 w-5" />
+                </div>
+                <h3 className="text-xl font-bold">{title}</h3>
+            </div>
+            <p className="text-sm text-muted-foreground flex-grow">{description}</p>
+        </div>
     </div>
 );
 
@@ -87,128 +105,123 @@ export default function LandingPage() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative overflow-hidden">
-            <div className="absolute inset-0 bg-grid-pattern opacity-5 dark:opacity-[0.08]"></div>
-            <div className="container relative mx-auto flex flex-col items-center justify-center px-4 py-24 text-center md:py-32">
-                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-                    Platform Operasional Cerdas untuk Tim Anda
-                </h1>
-                <p className="mt-6 max-w-3xl text-lg text-muted-foreground md:text-xl">
-                    Solusi terintegrasi untuk manajemen kurir, absensi, pelacakan performa, dan alur persetujuan. Efisiensi operasional di ujung jari Anda.
-                </p>
-                <div className="mt-8 flex flex-col gap-4 sm:flex-row justify-center">
-                    <Button size="lg" className="text-lg px-8 py-6 shadow-lg" onClick={() => router.push('/login')}>
-                    Mulai Sekarang
-                    </Button>
-                    {installPromptEvent && (
-                    <Button
-                        variant="outline"
-                        size="lg"
-                        className="text-lg px-8 py-6"
-                        onClick={handleInstallClick}
-                    >
-                        <Download className="mr-2 h-5 w-5" />
-                        Instal Aplikasi
-                    </Button>
-                    )}
+        <section className="relative overflow-hidden bg-muted/30">
+            <div className="container relative mx-auto grid grid-cols-1 items-center gap-12 px-4 py-20 md:grid-cols-2 lg:py-28">
+                <div className="flex flex-col items-center text-center md:items-start md:text-left">
+                    <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
+                        Lihat Cara Kerjanya. Rasakan Efisiensinya.
+                    </h1>
+                    <p className="mt-6 max-w-xl text-lg text-muted-foreground">
+                        Platform tunggal untuk mengelola absensi, melacak paket dengan bukti foto, hingga memantau performa tim secara real-time.
+                    </p>
+                    <div className="mt-8 flex flex-col gap-4 sm:flex-row w-full sm:w-auto">
+                        <Button size="lg" className="text-lg w-full" onClick={() => router.push('/login')}>
+                        Mulai Sekarang
+                        </Button>
+                        {installPromptEvent && (
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            className="text-lg w-full"
+                            onClick={handleInstallClick}
+                        >
+                            <Download className="mr-2 h-5 w-5" />
+                            Instal Aplikasi
+                        </Button>
+                        )}
+                    </div>
+                </div>
+                <div className="relative flex h-full items-center justify-center">
+                    <div className="w-[300px] lg:w-[350px]">
+                        <Image
+                            src="https://placehold.co/400x800.png"
+                            alt="App Mockup"
+                            width={400}
+                            height={800}
+                            className="rounded-3xl border-8 border-foreground shadow-2xl"
+                            data-ai-hint="app mockup phone"
+                            priority
+                        />
+                    </div>
                 </div>
             </div>
         </section>
 
         {/* Features Section */}
-        <section id="features" className="bg-muted/50 py-24">
+        <section id="features" className="py-24">
             <div className="container mx-auto px-4 md:px-6">
                 <div className="mx-auto max-w-3xl text-center">
-                    <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Solusi Lengkap untuk Operasional Anda</h2>
+                    <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Fitur Unggulan Kami</h2>
                     <p className="mt-4 text-lg text-muted-foreground">
-                        Dari manajemen tugas harian kurir hingga laporan strategis untuk manajer, semua yang Anda butuhkan ada di satu platform.
+                        Setiap fitur dirancang untuk menyederhanakan proses yang kompleks dan memberikan kontrol penuh kepada Anda.
                     </p>
                 </div>
-                <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="mt-16 grid gap-8 sm:grid-cols-1 lg:grid-cols-2">
                     <FeatureCard
                         icon={LayoutDashboard}
-                        title="Manajemen Terpusat"
-                        description="Pantau seluruh operasional dari satu dashboard. Ambil keputusan berdasarkan data dengan laporan performa yang mendalam."
+                        title="Dashboard Terpusat"
+                        description="Pantau semua aktivitas kurir, status pengiriman, dan ringkasan persetujuan dari satu layar yang intuitif dan informatif."
+                        imageUrl="https://placehold.co/500x300.png"
+                        imageHint="app dashboard"
                     />
                     <FeatureCard
-                        icon={Truck}
-                        title="Alur Kerja Kurir Modern"
-                        description="Kurir dapat melakukan absensi, memindai resi, dan mengunggah bukti pengiriman langsung dari ponsel dengan mudah."
+                        icon={ScanLine}
+                        title="Scan & Bukti Pengiriman"
+                        description="Kurir dapat memindai barcode resi dan mengunggah bukti foto pengiriman langsung dari lapangan untuk akuntabilitas maksimal."
+                        imageUrl="https://placehold.co/500x300.png"
+                        imageHint="package scanning"
                     />
                     <FeatureCard
                         icon={ShieldCheck}
                         title="Alur Persetujuan Aman"
-                        description="Setiap perubahan data penting seperti penambahan pengguna baru harus melalui otorisasi untuk menjaga integritas data."
+                        description="Setiap perubahan data krusial, seperti penambahan pengguna baru, harus melalui persetujuan berjenjang untuk menjaga integritas data."
+                        imageUrl="https://placehold.co/500x300.png"
+                        imageHint="approval list"
                     />
                     <FeatureCard
                         icon={BarChart3}
-                        title="Pelaporan & Analisis"
-                        description="Hasilkan laporan kehadiran dan performa dengan filter dinamis, lalu unduh dalam format Excel untuk analisis lebih lanjut."
-                    />
-                    <FeatureCard
-                        icon={Users}
-                        title="Manajemen Pengguna"
-                        description="Kelola akun untuk berbagai peran—MasterAdmin, Admin, PIC, dan Kurir—dengan mudah, termasuk impor data massal."
-                    />
-                    <FeatureCard
-                        icon={Smartphone}
-                        title="Akses Mobile & PWA"
-                        description="Dirancang untuk bekerja di perangkat apa pun dan dapat diinstal langsung di ponsel Anda untuk pengalaman seperti aplikasi native."
+                        title="Laporan Performa Detail"
+                        description="Hasilkan laporan performa dan kehadiran dengan filter dinamis, lalu unduh dalam format Excel untuk analisis lebih mendalam."
+                        imageUrl="https://placehold.co/500x300.png"
+                        imageHint="report chart"
                     />
                 </div>
             </div>
         </section>
 
-        {/* How it Works / Image Section */}
-        <section className="py-24">
-            <div className="container mx-auto grid grid-cols-1 items-center gap-12 md:grid-cols-2 md:gap-16">
-                 <div className="space-y-6">
-                    <div className="inline-block rounded-lg bg-primary/10 px-3 py-1 text-sm font-medium text-primary">Alur Kerja Efisien</div>
-                    <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Dari Lapangan ke Laporan dalam Sekejap</h2>
-                    <p className="text-muted-foreground md:text-lg">
-                        INSAN MOBILE menyederhanakan proses yang rumit menjadi langkah-langkah yang mudah diikuti, menghubungkan tim lapangan dengan manajemen secara real-time.
+        {/* How it Works Section */}
+        <section className="bg-muted/30 py-24">
+            <div className="container mx-auto px-4 md:px-6">
+                 <div className="mx-auto max-w-3xl text-center">
+                    <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Alur Kerja yang Disederhanakan</h2>
+                    <p className="mt-4 text-lg text-muted-foreground">
+                       Hanya dalam tiga langkah mudah, ubah operasional manual menjadi proses digital yang efisien dan transparan.
                     </p>
-                    <div className="space-y-4">
-                        <div className="flex items-start gap-4">
-                            <CheckCircle className="h-6 w-6 flex-shrink-0 text-green-500 mt-1" />
-                            <div>
-                                <h4 className="font-semibold">Absensi dan Input Paket</h4>
-                                <p className="text-sm text-muted-foreground">Kurir memulai hari dengan check-in dan menginput data paket harian.</p>
-                            </div>
-                        </div>
-                         <div className="flex items-start gap-4">
-                            <CheckCircle className="h-6 w-6 flex-shrink-0 text-green-500 mt-1" />
-                            <div>
-                                <h4 className="font-semibold">Update Status Real-time</h4>
-                                <p className="text-sm text-muted-foreground">Setiap paket terkirim diperbarui statusnya dengan bukti foto.</p>
-                            </div>
-                        </div>
-                         <div className="flex items-start gap-4">
-                            <CheckCircle className="h-6 w-6 flex-shrink-0 text-green-500 mt-1" />
-                            <div>
-                                <h4 className="font-semibold">Monitoring oleh Manajer</h4>
-                                <p className="text-sm text-muted-foreground">PIC dan Admin memantau progres dan mengunduh laporan kapan saja.</p>
-                            </div>
-                        </div>
-                    </div>
                 </div>
-                <div className="overflow-hidden rounded-lg shadow-2xl">
-                    <Image
-                        src="https://placehold.co/600x700.png"
-                        alt="Aplikasi di berbagai perangkat"
-                        width={600}
-                        height={700}
-                        className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-                        data-ai-hint="app interface"
-                    />
+                <div className="mt-16 grid items-start gap-12 md:grid-cols-3">
+                    <div className="flex flex-col items-center text-center">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-primary bg-primary/10 text-2xl font-bold text-primary">1</div>
+                        <h3 className="mt-6 text-xl font-semibold">Input & Scan Paket</h3>
+                        <p className="mt-2 text-muted-foreground">Kurir melakukan absensi, menginput data paket harian, dan memindai semua resi untuk memulai hari kerja.</p>
+                    </div>
+                     <div className="flex flex-col items-center text-center">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-primary bg-primary/10 text-2xl font-bold text-primary">2</div>
+                        <h3 className="mt-6 text-xl font-semibold">Kirim & Lapor Bukti</h3>
+                        <p className="mt-2 text-muted-foreground">Setiap paket terkirim diperbarui statusnya secara real-time dengan unggahan bukti foto langsung dari lokasi.</p>
+                    </div>
+                     <div className="flex flex-col items-center text-center">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-primary bg-primary/10 text-2xl font-bold text-primary">3</div>
+                        <h3 className="mt-6 text-xl font-semibold">Pantau & Analisa</h3>
+                        <p className="mt-2 text-muted-foreground">Manajemen memantau progres pengiriman dari dashboard, melihat riwayat, dan mengunduh laporan performa.</p>
+                    </div>
                 </div>
             </div>
         </section>
 
         {/* Final CTA */}
-        <section className="bg-muted/50">
+        <section className="bg-background">
             <div className="container mx-auto px-4 py-24 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Siap Meningkatkan Efisiensi Tim Anda?</h2>
+            <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Siap Mengubah Cara Kerja Tim Anda?</h2>
             <p className="mt-4 max-w-xl mx-auto text-lg text-muted-foreground">
                 Bergabunglah dengan platform yang dirancang untuk menyederhanakan alur kerja dan memaksimalkan produktivitas.
             </p>
@@ -220,7 +233,7 @@ export default function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t">
+      <footer className="border-t bg-muted/50">
         <div className="container mx-auto flex flex-col items-center justify-between gap-4 py-8 px-4 text-center sm:flex-row sm:text-left md:px-6">
             <div className="flex items-center gap-2">
                 <AppLogo className="h-8 w-8 text-primary" />
