@@ -398,38 +398,18 @@ export async function resetUserPassword(uid: string, newPassword: string) {
  */
 export async function uploadFileToServer(filePath: string, dataUrl: string) {
   try {
-    const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-    if (!bucketName) {
-      throw new Error("Firebase Storage bucket name is not configured in environment variables (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET).");
-    }
-
-    const bucket = getStorage().bucket(bucketName);
+    // This function now returns the dataUrl to be stored directly in Firestore,
+    // bypassing Firebase Storage for end-to-end testing.
     const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
     if (!match) {
       throw new Error('Invalid data URL format.');
     }
-    const contentType = match[1];
-    const base64Data = match[2];
-    const buffer = Buffer.from(base64Data, 'base64');
     
-    const file = bucket.file(filePath);
-
-    await file.save(buffer, {
-      metadata: {
-        contentType: contentType,
-      },
-    });
-    
-    // Using a signed URL is more secure than making files public
-    const [url] = await file.getSignedUrl({
-      action: 'read',
-      expires: '03-09-2491', // A far-future date
-    });
-    
-    return { success: true, url: url };
+    // Simply return the dataUrl itself.
+    return { success: true, url: dataUrl };
 
   } catch (error: any) {
-    console.error(`Error uploading file to ${filePath}:`, error);
-    return { success: false, message: `Failed to upload file: ${error.message}` };
+    console.error(`Error processing data URL for Firestore:`, error);
+    return { success: false, message: `Failed to process data URL: ${error.message}` };
   }
 }

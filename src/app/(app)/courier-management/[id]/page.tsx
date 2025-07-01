@@ -23,7 +23,7 @@ import { getKurirTaskHistory } from '@/lib/kurirActions';
 
 // Helper to validate image URLs before rendering
 const isValidImageUrl = (url?: string): url is string => {
-    return !!url && url.startsWith('http');
+    return !!url && (url.startsWith('http') || url.startsWith('data:image'));
 };
 
 function DetailItem({ icon: Icon, label, value }: { icon: React.ElementType, label: string, value?: string | React.ReactNode }) {

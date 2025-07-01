@@ -517,8 +517,8 @@ export default function DashboardPage() {
         canvas.height = video.videoHeight;
         const context = canvas.getContext('2d');
         if (context) {
-          context.drawImage(video, 0, 0, canvas.width, canvas.height);
-          return canvas.toDataURL('image/jpeg', 0.8);
+          // Reduce quality to 0.5 for smaller base64 string, as requested.
+          return canvas.toDataURL('image/jpeg', 0.5);
         }
       }
       return null;

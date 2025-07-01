@@ -37,7 +37,7 @@ type AggregatedPackageData = {
 
 // Helper to validate image URLs before rendering
 const isValidImageUrl = (url?: string): url is string => {
-    return !!url && (url.startsWith('http://') || url.startsWith('https://'));
+    return !!url && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image'));
 };
 
 
