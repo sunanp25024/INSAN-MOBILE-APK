@@ -179,6 +179,87 @@ export async function requestBulkUserCreation(
   }
 }
 
+export async function importUsers(
+  usersData: any[],
+  roleToAssign: 'Admin' | 'PIC',
+  creatorProfile: { uid: string; fullName: string; role: UserRole }
+) {
+  if (!['MasterAdmin', 'Admin'].includes(creatorProfile.role)) {
+    return { success: false, createdCount: 0, failedCount: usersData.length, totalRows: usersData.length, errors: ['Hanya Admin atau MasterAdmin yang dapat melakukan impor massal.'] };
+  }
+
+  const results = {
+    totalRows: usersData.length,
+    createdCount: 0,
+    failedCount: 0,
+    errors: [] as string[],
+  };
+
+  const emailInFile = new Set();
+  const idInFile = new Set();
+
+  for (const [index, userData] of usersData.entries()) {
+    const rowNum = index + 2;
+
+    if (!userData.fullName || !userData.email || !userData.passwordValue) {
+      results.failedCount++;
+      results.errors.push(`Baris ${rowNum}: Data tidak lengkap (fullName, email, passwordValue wajib).`);
+      continue;
+    }
+    if (roleToAssign === 'PIC' && !userData.workLocation) {
+       results.failedCount++;
+       results.errors.push(`Baris ${rowNum}: Area Tanggung Jawab (workLocation) wajib untuk PIC.`);
+       continue;
+    }
+    
+    const email = userData.email.toString().trim();
+    if (emailInFile.has(email)) {
+      results.failedCount++;
+      results.errors.push(`Baris ${rowNum}: Duplikat email '${email}' dalam file.`);
+      continue;
+    }
+    emailInFile.add(email);
+    
+    const appId = userData.id?.toString().trim();
+    if (appId && idInFile.has(appId)) {
+      results.failedCount++;
+      results.errors.push(`Baris ${rowNum}: Duplikat ID Aplikasi '${appId}' dalam file.`);
+      continue;
+    }
+    if(appId) idInFile.add(appId);
+    
+    try {
+      const appUserId = appId || `${roleToAssign.toUpperCase()}${String(Date.now()).slice(-6) + index}`;
+      
+      const newProfileData: Omit<UserProfile, 'uid'> = {
+        id: appUserId,
+        fullName: userData.fullName.toString().trim(),
+        email: email,
+        role: roleToAssign,
+        status: 'Aktif',
+        workLocation: userData.workLocation?.toString().trim() || undefined,
+        position: roleToAssign,
+        joinDate: new Date().toISOString(),
+        createdBy: creatorProfile,
+      };
+
+      const creationResult = await createUserAccount(email, userData.passwordValue.toString(), newProfileData);
+
+      if (creationResult.success) {
+        results.createdCount++;
+      } else {
+        results.failedCount++;
+        results.errors.push(`Baris ${rowNum} (${email}): ${creationResult.message}`);
+      }
+    } catch (error: any) {
+      results.failedCount++;
+      results.errors.push(`Baris ${rowNum} (${email}): ${error.message}`);
+    }
+  }
+
+  return { success: results.failedCount === 0, ...results };
+}
+
 
 export async function handleApprovalRequest(
   requestId: string,

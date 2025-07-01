@@ -257,13 +257,14 @@ export default function ManageAdminsPage() {
 
             if (jsonData.length === 0) {
               toast({ title: "File Kosong", description: "File Excel yang Anda unggah tidak berisi data.", variant: "destructive" });
+              setIsImporting(false);
               return;
             }
 
             const creatorProfile = { uid: currentUser.uid, fullName: currentUser.fullName, role: currentUser.role };
             const result = await importUsers(JSON.parse(JSON.stringify(jsonData)), 'Admin', creatorProfile);
 
-            if (result.success) {
+            if (result.success || result.createdCount > 0) {
                 toast({
                     title: "Impor Selesai",
                     description: `${result.createdCount} dari ${result.totalRows} admin berhasil ditambahkan. ${result.failedCount > 0 ? `${result.failedCount} gagal.` : ''}`,
