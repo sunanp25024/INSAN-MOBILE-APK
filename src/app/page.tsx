@@ -120,9 +120,8 @@ export default function LandingPage() {
             <Image
                 src="/images/landing/hero-background.png"
                 alt="Modern logistics background"
-                layout="fill"
-                objectFit="cover"
-                className="z-0"
+                fill
+                className="z-0 object-cover"
                 priority
             />
             <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm" />
