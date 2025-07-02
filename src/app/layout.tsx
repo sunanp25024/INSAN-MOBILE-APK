@@ -30,9 +30,9 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#F9FAFC" />
         
-        <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
-        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="https://placehold.co/32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="https://placehold.co/16x16.png" />
+        <link rel="apple-touch-icon" href="https://placehold.co/180x180.png" />
       </head>
       <body className="font-body antialiased">
         {children}
