@@ -25,13 +25,11 @@ const FeatureCard = ({
   title,
   description,
   imageUrl,
-  imageHint,
 }: {
   icon: React.ElementType;
   title: string;
   description: string;
   imageUrl: string;
-  imageHint: string;
 }) => (
     <Card className="flex flex-col overflow-hidden transition-all hover:shadow-2xl hover:-translate-y-1 h-full">
         <div className="aspect-video overflow-hidden border-b">
@@ -41,7 +39,6 @@ const FeatureCard = ({
                 width={500}
                 height={300}
                 className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                data-ai-hint={imageHint}
             />
         </div>
         <CardHeader className="flex-row items-center gap-4 pb-3">
@@ -121,12 +118,11 @@ export default function LandingPage() {
         {/* Hero Section */}
         <section className="relative overflow-hidden bg-background py-20 lg:py-28">
             <Image
-                src="https://placehold.co/1920x1080.png"
+                src="/images/landing/hero-background.png"
                 alt="Modern logistics background"
                 layout="fill"
                 objectFit="cover"
                 className="z-0"
-                data-ai-hint="logistics background"
                 priority
             />
             <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm" />
@@ -159,12 +155,11 @@ export default function LandingPage() {
                 
                 <div className="relative w-[280px] lg:w-[320px] mt-8">
                      <Image
-                        src="https://placehold.co/400x800.png"
+                        src="/images/landing/hero-mockup.png"
                         alt="App Dashboard Mockup"
                         width={400}
                         height={800}
                         className="rounded-3xl border-8 border-neutral-700 shadow-2xl"
-                        data-ai-hint="app mockup phone"
                     />
                 </div>
             </div>
@@ -184,29 +179,25 @@ export default function LandingPage() {
                         icon={LayoutDashboard}
                         title="Dashboard Terpusat"
                         description="Pantau semua aktivitas kurir, status pengiriman, dan ringkasan persetujuan dari satu layar yang intuitif dan informatif."
-                        imageUrl="https://placehold.co/500x300.png"
-                        imageHint="app dashboard"
+                        imageUrl="/images/landing/feature-dashboard.png"
                     />
                     <FeatureCard
                         icon={ScanLine}
                         title="Scan & Bukti Pengiriman"
                         description="Kurir dapat memindai barcode resi dan mengunggah bukti foto pengiriman langsung dari lapangan untuk akuntabilitas maksimal."
-                        imageUrl="https://placehold.co/500x300.png"
-                        imageHint="package scanning"
+                        imageUrl="/images/landing/feature-scan.png"
                     />
                     <FeatureCard
                         icon={ShieldCheck}
                         title="Alur Persetujuan Aman"
                         description="Setiap perubahan data krusial, seperti penambahan pengguna baru, harus melalui persetujuan berjenjang untuk menjaga integritas data."
-                        imageUrl="https://placehold.co/500x300.png"
-                        imageHint="approval list"
+                        imageUrl="/images/landing/feature-approval.png"
                     />
                     <FeatureCard
                         icon={BarChart3}
                         title="Laporan Performa Detail"
                         description="Hasilkan laporan performa dan kehadiran dengan filter dinamis, lalu unduh dalam format Excel untuk analisis lebih mendalam."
-                        imageUrl="https://placehold.co/500x300.png"
-                        imageHint="report chart"
+                        imageUrl="/images/landing/feature-report.png"
                     />
                 </div>
             </div>
