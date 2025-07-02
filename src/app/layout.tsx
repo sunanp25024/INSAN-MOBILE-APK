@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 export const metadata: Metadata = {
   title: 'INSAN MOBILE',
   description: 'Aplikasi INSAN MOBILE',
-  // manifest: '/manifest.json', // Temporarily disabled for TWA build
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
@@ -21,8 +21,6 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
         
-        {/* PWA and Favicon Links temporarily disabled for build */}
-        {/*
         <meta name="application-name" content="INSAN MOBILE" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -35,7 +33,6 @@ export default function RootLayout({
         <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-        */}
       </head>
       <body className="font-body antialiased">
         {children}
