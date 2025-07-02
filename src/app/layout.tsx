@@ -28,11 +28,10 @@ export default function RootLayout({
         <meta name="description" content="Aplikasi INSAN MOBILE" />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#F9FAFC" />
+        <meta name="theme-color" content="#200600" />
         
-        <link rel="icon" type="image/png" sizes="32x32" href="https://placehold.co/32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="https://placehold.co/16x16.png" />
-        <link rel="apple-touch-icon" href="https://placehold.co/180x180.png" />
+        <link rel="icon" href="/Logo_PIS-removebg-preview.png" type="image/png" sizes="any" />
+        <link rel="apple-touch-icon" href="/Logo_PIS-removebg-preview.png" />
       </head>
       <body className="font-body antialiased">
         {children}

@@ -2,10 +2,9 @@
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
-    "package_name": "GANTI_DENGAN_PACKAGE_NAME_ANDA",
+    "package_name": "app.vercel.insan_mobile_apk.twa",
     "sha256_cert_fingerprints": [
       "18:9E:A6:A5:46:7D:9D:1F:2F:54:73:9A:DF:F0:D4:8A:BE:A6:D6:74:08:76:4D:15:00:DA:79:7B:2B:8B:57:B6"
     ]
   }
-}]
-    
+}
