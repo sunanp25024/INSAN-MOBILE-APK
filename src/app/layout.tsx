@@ -30,8 +30,8 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#200600" />
         
-        <link rel="icon" href="/Logo_PIS-removebg-preview.png" type="image/png" sizes="any" />
-        <link rel="apple-touch-icon" href="/Logo_PIS-removebg-preview.png" />
+        <link rel="icon" href="/icons/favicon.ico" sizes="any" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
       <body className="font-body antialiased">
         {children}
