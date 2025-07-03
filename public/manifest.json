@@ -1,11 +1,12 @@
 {
   "name": "INSAN MOBILE",
-  "short_name": "INSAN MOBILE",
-  "description": "Aplikasi Mobile untuk Operasional Kurir",
-  "start_url": "/",
+  "short_name": "INSAN",
+  "theme_color": "#E6A43E",
+  "background_color": "#1A2026",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#200600",
+  "orientation": "portrait",
+  "scope": "/",
+  "start_url": "/",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
