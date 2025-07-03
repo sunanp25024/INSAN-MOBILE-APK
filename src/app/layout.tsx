@@ -30,8 +30,8 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#f9fafb" />
         
-        <link rel="icon" href="/icons/favicon.ico?v=2" sizes="any" />
-        <link rel="apple-touch-icon" href="/icons/icon-192x192.png?v=2" />
+        <link rel="icon" href="/icons/favicon.ico?v=3" sizes="any" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png?v=3" />
       </head>
       <body className="font-body antialiased">
         {children}

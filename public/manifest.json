@@ -1,36 +1,23 @@
-
 {
-    "name": "INSAN MOBILE",
-    "short_name": "INSAN MOBILE",
-    "description": "Aplikasi Visual untuk Operasional Kurir Anda.",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#f9fafb",
-    "theme_color": "#3b82f6",
-    "icons": [
-        {
-            "src": "/icons/icon-192x192.png?v=2",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any"
-        },
-        {
-            "src": "/icons/icon-512x512.png?v=2",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any"
-        },
-        {
-            "src": "/icons/icon-192x192.png?v=2",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "maskable"
-        },
-        {
-            "src": "/icons/icon-512x512.png?v=2",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "maskable"
-        }
-    ]
+  "name": "INSAN MOBILE",
+  "short_name": "INSAN",
+  "description": "Aplikasi Visual untuk Operasional Kurir Anda.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png?v=3",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png?v=3",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
 }
