@@ -107,6 +107,10 @@ export default {
         'progress-bar': {
           'from': { width: '0%' },
           'to': { width: '100%' },
+        },
+        'loading-dots': {
+          '0%, 80%, 100%': { transform: 'scale(0)', opacity: 0.5 },
+          '40%': { transform: 'scale(1)', opacity: 1 },
         }
       },
       animation: {
@@ -115,6 +119,7 @@ export default {
         'scan-line': 'scan-line 3s ease-in-out infinite',
         'pulse-subtle': 'pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'progress-bar': 'progress-bar 1.5s ease-out forwards',
+        'loading-dots': 'loading-dots 1.4s infinite ease-in-out both',
       },
     },
   },

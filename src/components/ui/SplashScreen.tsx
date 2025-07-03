@@ -17,9 +17,11 @@ export function SplashScreen() {
           Memuat aplikasi...
         </p>
         
-        {/* Animated Progress Bar */}
-        <div className="mt-8 w-48 h-2 rounded-full bg-muted overflow-hidden">
-          <div className="h-full bg-primary rounded-full animate-progress-bar"></div>
+        {/* Loading Dots Animation */}
+        <div className="mt-8 flex space-x-2">
+            <div className="h-3 w-3 bg-primary rounded-full animate-loading-dots" style={{ animationDelay: '-0.32s' }}></div>
+            <div className="h-3 w-3 bg-primary rounded-full animate-loading-dots" style={{ animationDelay: '-0.16s' }}></div>
+            <div className="h-3 w-3 bg-primary rounded-full animate-loading-dots"></div>
         </div>
       </div>
     </div>
