@@ -1,12 +1,11 @@
 {
-  "theme_color": "#200600",
-  "background_color": "#F5F5DC",
-  "display": "standalone",
-  "scope": "/",
-  "start_url": "/",
   "name": "INSAN MOBILE",
-  "short_name": "INSAN",
-  "description": "Aplikasi Visual untuk Operasional Kurir Anda.",
+  "short_name": "INSAN MOBILE",
+  "description": "Aplikasi Mobile untuk Operasional Kurir",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#200600",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
