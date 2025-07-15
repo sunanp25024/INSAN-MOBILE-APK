@@ -118,7 +118,7 @@ export default function LandingPage() {
         {/* Hero Section */}
         <section className="relative overflow-hidden bg-background py-20 lg:py-28">
             <Image
-                src="/images/landing/hero-background.png"
+                src="/images/landing/hero-background.jpg"
                 alt="Modern logistics background"
                 fill
                 className="z-0 object-cover"
