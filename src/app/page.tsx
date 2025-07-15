@@ -154,7 +154,7 @@ export default function LandingPage() {
                 
                 <div className="relative w-[280px] lg:w-[320px] mt-8">
                      <Image
-                        src="/images/landing/hero-mockup.png"
+                        src="/images/landing/hero-mockup.jpg"
                         alt="App Dashboard Mockup"
                         width={400}
                         height={800}
