@@ -178,25 +178,25 @@ export default function LandingPage() {
                         icon={LayoutDashboard}
                         title="Dashboard Terpusat"
                         description="Pantau semua aktivitas kurir, status pengiriman, dan ringkasan persetujuan dari satu layar yang intuitif dan informatif."
-                        imageUrl="/images/landing/feature-dashboard.png"
+                        imageUrl="/images/landing/feature-dashboard.jpg"
                     />
                     <FeatureCard
                         icon={ScanLine}
                         title="Scan & Bukti Pengiriman"
                         description="Kurir dapat memindai barcode resi dan mengunggah bukti foto pengiriman langsung dari lapangan untuk akuntabilitas maksimal."
-                        imageUrl="/images/landing/feature-scan.png"
+                        imageUrl="/images/landing/feature-scan.jpg"
                     />
                     <FeatureCard
                         icon={ShieldCheck}
                         title="Alur Persetujuan Aman"
                         description="Setiap perubahan data krusial, seperti penambahan pengguna baru, harus melalui persetujuan berjenjang untuk menjaga integritas data."
-                        imageUrl="/images/landing/feature-approval.png"
+                        imageUrl="/images/landing/feature-approval.jpg"
                     />
                     <FeatureCard
                         icon={BarChart3}
                         title="Laporan Performa Detail"
                         description="Hasilkan laporan performa dan kehadiran dengan filter dinamis, lalu unduh dalam format Excel untuk analisis lebih mendalam."
-                        imageUrl="/images/landing/feature-report.png"
+                        imageUrl="/images/landing/feature-report.jpg"
                     />
                 </div>
             </div>
