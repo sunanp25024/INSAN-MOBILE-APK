@@ -21,6 +21,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useToast } from '@/hooks/use-toast';
 import { getKurirTaskHistory } from '@/lib/kurirActions';
 
+export const dynamic = 'force-dynamic';
+
 // Helper to validate image URLs before rendering
 const isValidImageUrl = (url?: string): url is string => {
     return !!url && (url.startsWith('http') || url.startsWith('data:image'));
@@ -330,3 +332,5 @@ export default function CourierDetailPage() {
     </div>
   );
 }
+
+    
