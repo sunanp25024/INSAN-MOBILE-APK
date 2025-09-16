@@ -19,7 +19,7 @@ const nextConfig = {
   output: 'export', // Required for Capacitor to work with static files
   // This prevents build errors for dynamic routes that are not pre-rendered.
   // The pages will be generated on the client-side.
-  dynamicParams: false,
+  dynamicParams: true,
   reactStrictMode: true,
   typescript: {
     ignoreBuildErrors: true,
