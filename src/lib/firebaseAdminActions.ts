@@ -4,6 +4,7 @@
 import { admin, adminAuth, adminDb } from '@/lib/firebaseAdmin';
 import type { UserProfile, UserRole, ApprovalRequest, KurirDailyTaskDoc } from '@/types';
 import { getStorage } from 'firebase-admin/storage';
+import { getMessaging } from 'firebase-admin/messaging';
 
 /**
  * Creates a user account in Firebase Auth and their profile in Firestore
@@ -624,9 +625,9 @@ export async function submitApprovalRequest(
     };
 
     // 2. Create the approval request document in Firestore
-    await adminDb.collection('approval_requests').add(fullRequestData);
-
-    // 3. Create the corresponding notification
+    const requestRef = await adminDb.collection('approval_requests').add(fullRequestData);
+    
+    // 3. Create a system notification in Firestore
     await adminDb.collection('notifications').add({
       title: 'Permintaan Persetujuan Baru',
       message: notificationMessage,
@@ -634,7 +635,36 @@ export async function submitApprovalRequest(
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       read: false,
       linkTo: '/approvals',
+      relatedEntityId: requestRef.id,
     });
+    
+    // 4. Send Push Notifications to Admins/MasterAdmins
+    const adminsSnapshot = await adminDb.collection('users').where('role', 'in', ['Admin', 'MasterAdmin']).get();
+    const tokens: string[] = [];
+    adminsSnapshot.forEach(doc => {
+      const user = doc.data() as UserProfile;
+      if (user.fcmToken) {
+        tokens.push(user.fcmToken);
+      }
+    });
+
+    if (tokens.length > 0) {
+      await getMessaging().sendEachForMulticast({
+        tokens,
+        notification: {
+          title: 'Permintaan Persetujuan Baru',
+          body: notificationMessage,
+        },
+        webpush: {
+          notification: {
+            icon: '/icons/icon-192x192.png',
+          },
+          fcmOptions: {
+            link: '/approvals'
+          }
+        }
+      });
+    }
 
     return { success: true, message: 'Permintaan berhasil diajukan.' };
   } catch (error: any) {

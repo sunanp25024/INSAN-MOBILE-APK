@@ -22,6 +22,7 @@ export interface UserProfile {
   avatarUrl?: string;
   photoIdUrl?: string; // URL for KTP/SIM photo
   status?: 'Aktif' | 'Nonaktif' | 'PendingApproval'; // Status of the user account
+  fcmToken?: string; // For push notifications
 
   // Optional audit fields
   createdAt?: string; // ISO string (Timestamp from Firestore)

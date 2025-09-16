@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/toaster";
 import type { UserRole, UserProfile } from "@/types";
-import { auth, db } from '@/lib/firebase';
+import { auth, db, initializeFirebaseMessaging } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from "firebase/firestore";
 import { SplashScreen } from "@/components/ui/SplashScreen";
@@ -95,6 +95,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = React.useState<UserProfile | null>(null);
   const [navItems, setNavItems] = React.useState<NavItem[]>([]);
   const [loadingAuth, setLoadingAuth] = React.useState(true);
+  const [notificationSetupDone, setNotificationSetupDone] = React.useState(false);
 
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -158,6 +159,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       unsubscribe();
     };
   }, [router, pathname]);
+
+  // Effect for setting up push notifications
+  React.useEffect(() => {
+      if (currentUser && currentUser.uid && !notificationSetupDone) {
+          if (process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
+              initializeFirebaseMessaging(currentUser.uid);
+              setNotificationSetupDone(true); // Ensure it only runs once per session
+          } else {
+              console.warn("VAPID key is missing. Push notifications are disabled.");
+              setNotificationSetupDone(true);
+          }
+      }
+  }, [currentUser, notificationSetupDone]);
 
 
   const handleLogout = async () => {
