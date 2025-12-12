@@ -125,7 +125,7 @@ export default function ApprovalsPage() {
                 <div className="overflow-x-auto">
                     <p className="font-semibold mb-2">Daftar Pengguna Baru yang Diajukan:</p>
                     <Table>
-                        <TableHeader className="bg-muted/50">
+                        <TableHeader className="bg-primary/10">
                             <TableRow>
                                 <TableHead>Nama</TableHead>
                                 <TableHead>NIK</TableHead>
@@ -255,5 +255,7 @@ export default function ApprovalsPage() {
     </div>
   );
 }
+
+    
 
     

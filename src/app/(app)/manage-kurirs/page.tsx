@@ -685,7 +685,7 @@ export default function ManageKurirsPage() {
             <>
             <Card className="border shadow-sm">
               <Table>
-                <TableHeader className="bg-muted/50">
+                <TableHeader className="bg-primary/10">
                   <TableRow>
                     <TableHead>ID Kurir</TableHead>
                     <TableHead>Nama</TableHead>
@@ -862,5 +862,7 @@ export default function ManageKurirsPage() {
     </div>
   );
 }
+
+    
 
     

@@ -191,7 +191,7 @@ export default function DeliveryProofsPage() {
                         <CardContent>
                              <div className="overflow-x-auto">
                                 <Table>
-                                    <TableHeader className="bg-muted/50">
+                                    <TableHeader className="bg-primary/10">
                                         <TableRow>
                                             <TableHead>ID Kurir</TableHead>
                                             <TableHead>Nama Kurir</TableHead>
@@ -243,7 +243,7 @@ export default function DeliveryProofsPage() {
                         <CardContent>
                             <div className="overflow-x-auto">
                                 <Table>
-                                    <TableHeader className="bg-muted/50">
+                                    <TableHeader className="bg-primary/10">
                                         <TableRow>
                                             <TableHead>ID Kurir</TableHead>
                                             <TableHead>Nama Kurir</TableHead>
@@ -306,5 +306,7 @@ export default function DeliveryProofsPage() {
         </div>
     );
 }
+
+    
 
     
