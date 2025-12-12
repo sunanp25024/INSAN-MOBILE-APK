@@ -430,11 +430,11 @@ export default function ManageAdminsPage() {
               <Table>
                 <TableHeader className="bg-primary text-primary-foreground">
                   <TableRow>
-                    <TableHead>ID Aplikasi</TableHead>
-                    <TableHead>Nama Lengkap</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-center">Aksi</TableHead>
+                    <TableHead className="text-primary-foreground">ID Aplikasi</TableHead>
+                    <TableHead className="text-primary-foreground">Nama Lengkap</TableHead>
+                    <TableHead className="text-primary-foreground">Email</TableHead>
+                    <TableHead className="text-primary-foreground">Status</TableHead>
+                    <TableHead className="text-center text-primary-foreground">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

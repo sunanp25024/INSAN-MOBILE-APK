@@ -432,12 +432,12 @@ export default function ManagePICsPage() {
                 <Table>
                   <TableHeader className="bg-primary text-primary-foreground">
                     <TableRow>
-                      <TableHead>ID PIC</TableHead>
-                      <TableHead>Nama Lengkap</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Area Tanggung Jawab</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-center">Aksi</TableHead>
+                      <TableHead className="text-primary-foreground">ID PIC</TableHead>
+                      <TableHead className="text-primary-foreground">Nama Lengkap</TableHead>
+                      <TableHead className="text-primary-foreground">Email</TableHead>
+                      <TableHead className="text-primary-foreground">Area Tanggung Jawab</TableHead>
+                      <TableHead className="text-primary-foreground">Status</TableHead>
+                      <TableHead className="text-center text-primary-foreground">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

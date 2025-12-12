@@ -112,12 +112,12 @@ export default function CourierManagementPage() {
             <Table>
               <TableHeader className="bg-primary text-primary-foreground">
                 <TableRow>
-                  <TableHead>ID Kurir</TableHead>
-                  <TableHead>Nama Kurir</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Lokasi Hub</TableHead>
-                  <TableHead>Jabatan</TableHead>
-                  <TableHead className="text-center">Aksi</TableHead>
+                  <TableHead className="text-primary-foreground">ID Kurir</TableHead>
+                  <TableHead className="text-primary-foreground">Nama Kurir</TableHead>
+                  <TableHead className="text-primary-foreground">Status</TableHead>
+                  <TableHead className="text-primary-foreground">Lokasi Hub</TableHead>
+                  <TableHead className="text-primary-foreground">Jabatan</TableHead>
+                  <TableHead className="text-center text-primary-foreground">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

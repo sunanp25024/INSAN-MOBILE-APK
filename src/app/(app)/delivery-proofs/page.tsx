@@ -193,12 +193,12 @@ export default function DeliveryProofsPage() {
                                 <Table>
                                     <TableHeader className="bg-primary text-primary-foreground">
                                         <TableRow>
-                                            <TableHead>ID Kurir</TableHead>
-                                            <TableHead>Nama Kurir</TableHead>
-                                            <TableHead>No. Resi</TableHead>
-                                            <TableHead>Tanggal Kirim</TableHead>
-                                            <TableHead>Penerima</TableHead>
-                                            <TableHead className="text-center">Bukti Foto</TableHead>
+                                            <TableHead className="text-primary-foreground">ID Kurir</TableHead>
+                                            <TableHead className="text-primary-foreground">Nama Kurir</TableHead>
+                                            <TableHead className="text-primary-foreground">No. Resi</TableHead>
+                                            <TableHead className="text-primary-foreground">Tanggal Kirim</TableHead>
+                                            <TableHead className="text-primary-foreground">Penerima</TableHead>
+                                            <TableHead className="text-center text-primary-foreground">Bukti Foto</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -245,12 +245,12 @@ export default function DeliveryProofsPage() {
                                 <Table>
                                     <TableHeader className="bg-primary text-primary-foreground">
                                         <TableRow>
-                                            <TableHead>ID Kurir</TableHead>
-                                            <TableHead>Nama Kurir</TableHead>
-                                            <TableHead>No. Resi</TableHead>
-                                            <TableHead>Tanggal Kembali</TableHead>
-                                            <TableHead>Leader Penerima</TableHead>
-                                            <TableHead className="text-center">Bukti Foto Serah Terima</TableHead>
+                                            <TableHead className="text-primary-foreground">ID Kurir</TableHead>
+                                            <TableHead className="text-primary-foreground">Nama Kurir</TableHead>
+                                            <TableHead className="text-primary-foreground">No. Resi</TableHead>
+                                            <TableHead className="text-primary-foreground">Tanggal Kembali</TableHead>
+                                            <TableHead className="text-primary-foreground">Leader Penerima</TableHead>
+                                            <TableHead className="text-center text-primary-foreground">Bukti Foto Serah Terima</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>

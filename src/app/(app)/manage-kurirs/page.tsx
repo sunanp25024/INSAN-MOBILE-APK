@@ -687,12 +687,12 @@ export default function ManageKurirsPage() {
               <Table>
                 <TableHeader className="bg-primary text-primary-foreground">
                   <TableRow>
-                    <TableHead>ID Kurir</TableHead>
-                    <TableHead>Nama</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Hub</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-center">Aksi</TableHead>
+                    <TableHead className="text-primary-foreground">ID Kurir</TableHead>
+                    <TableHead className="text-primary-foreground">Nama</TableHead>
+                    <TableHead className="text-primary-foreground">Email</TableHead>
+                    <TableHead className="text-primary-foreground">Hub</TableHead>
+                    <TableHead className="text-primary-foreground">Status</TableHead>
+                    <TableHead className="text-center text-primary-foreground">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

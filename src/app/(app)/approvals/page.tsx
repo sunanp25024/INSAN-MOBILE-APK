@@ -127,10 +127,10 @@ export default function ApprovalsPage() {
                     <Table>
                         <TableHeader className="bg-primary text-primary-foreground">
                             <TableRow>
-                                <TableHead>Nama</TableHead>
-                                <TableHead>NIK</TableHead>
-                                <TableHead>Jabatan</TableHead>
-                                <TableHead>Lokasi</TableHead>
+                                <TableHead className="text-primary-foreground">Nama</TableHead>
+                                <TableHead className="text-primary-foreground">NIK</TableHead>
+                                <TableHead className="text-primary-foreground">Jabatan</TableHead>
+                                <TableHead className="text-primary-foreground">Lokasi</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
