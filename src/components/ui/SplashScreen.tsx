@@ -9,7 +9,7 @@ export function SplashScreen() {
         
         {/* App Title */}
         <h1 className="mt-6 text-2xl font-bold text-foreground">
-          INSAN MOBILE
+          MORA Apps
         </h1>
         
         {/* Loading Text */}

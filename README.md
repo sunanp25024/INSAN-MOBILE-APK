@@ -1,6 +1,6 @@
-# INSAN MOBILE - Platform Operasional Kurir
+# MORA Apps - Platform Operasional Kurir
 
-Selamat datang di INSAN MOBILE, sebuah platform operasional kurir visual berbasis web yang dirancang untuk menjadi alat utama bagi kurir di lapangan dan tim manajemen di kantor. Aplikasi ini dibangun dengan filosofi *mobile-first* dan dapat diinstal di perangkat seluler seperti aplikasi native (PWA - Progressive Web App).
+Selamat datang di MORA Apps, sebuah platform operasional kurir visual berbasis web yang dirancang untuk menjadi alat utama bagi kurir di lapangan dan tim manajemen di kantor. Aplikasi ini dibangun dengan filosofi *mobile-first* dan dapat diinstal di perangkat seluler seperti aplikasi native (PWA - Progressive Web App).
 
 ---
 

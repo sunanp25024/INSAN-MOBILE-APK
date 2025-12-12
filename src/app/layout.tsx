@@ -3,7 +3,7 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
-const APP_NAME = "INSAN MOBILE";
+const APP_NAME = "MORA Apps";
 const APP_DESCRIPTION = "Aplikasi Visual untuk Operasional Kurir Anda.";
 
 export const metadata: Metadata = {

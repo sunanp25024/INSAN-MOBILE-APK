@@ -208,7 +208,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center space-x-3">
             <AppLogo className="h-10 w-10 text-primary" />
             <div className="flex flex-col">
-              <h2 className="text-xl font-semibold text-sidebar-foreground">INSAN MOBILE</h2>
+              <h2 className="text-xl font-semibold text-sidebar-foreground">MORA Apps</h2>
               <span className="text-xs text-muted-foreground">Aplikasi Mobile</span>
             </div>
           </div>

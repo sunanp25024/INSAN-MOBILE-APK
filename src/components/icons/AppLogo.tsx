@@ -12,7 +12,7 @@ export function AppLogo({ className }: { className?: string }) {
     <div className={cn('relative', className)}>
       <Image
         src="/icons/icon-512x512.png" // This path is relative to the "public" folder.
-        alt="INSAN MOBILE Logo"
+        alt="MORA Apps Logo"
         fill
         className="object-contain" // Maintains aspect ratio
         priority

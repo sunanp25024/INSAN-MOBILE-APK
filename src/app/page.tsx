@@ -95,7 +95,7 @@ export default function LandingPage() {
         <div className="container flex h-16 items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
             <AppLogo className="h-12 w-12 text-primary" />
-            <span className="text-xl font-bold text-foreground">INSAN MOBILE</span>
+            <span className="text-xl font-bold text-foreground">MORA Apps</span>
             </Link>
             <nav className="hidden items-center gap-6 text-sm md:flex">
               <Link href="#features" className="text-muted-foreground transition-colors hover:text-foreground">
@@ -262,7 +262,7 @@ export default function LandingPage() {
         <div className="container mx-auto flex flex-col items-center justify-between gap-4 py-8 px-4 text-center sm:flex-row sm:text-left md:px-6">
             <div className="flex items-center gap-2">
                 <AppLogo className="h-10 w-10 text-primary" />
-                <span className="font-semibold">INSAN MOBILE</span>
+                <span className="font-semibold">MORA Apps</span>
             </div>
             <p className="text-sm text-muted-foreground">
                 &copy; {new Date().getFullYear()} PIS. All rights reserved.
