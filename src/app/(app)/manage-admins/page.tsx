@@ -428,7 +428,7 @@ export default function ManageAdminsPage() {
             <>
             <Card className="border shadow-sm">
               <Table>
-                <TableHeader className="bg-primary/10">
+                <TableHeader className="bg-primary text-primary-foreground">
                   <TableRow>
                     <TableHead>ID Aplikasi</TableHead>
                     <TableHead>Nama Lengkap</TableHead>

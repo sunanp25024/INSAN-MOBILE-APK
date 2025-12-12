@@ -685,7 +685,7 @@ export default function ManageKurirsPage() {
             <>
             <Card className="border shadow-sm">
               <Table>
-                <TableHeader className="bg-primary/10">
+                <TableHeader className="bg-primary text-primary-foreground">
                   <TableRow>
                     <TableHead>ID Kurir</TableHead>
                     <TableHead>Nama</TableHead>
