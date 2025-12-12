@@ -987,13 +987,13 @@ export default function DashboardPage() {
   if (currentUser.role === 'Kurir') {
     return (
       <div className="space-y-8">
-        <Card className="shadow-lg">
+        <Card className="shadow-lg bg-primary text-primary-foreground">
           <CardHeader className="flex flex-row items-center space-x-4">
             <Avatar className="h-16 w-16">
               <AvatarImage src={currentUser.avatarUrl || `https://placehold.co/150x150.png?text=${userInitials}`} alt={currentUser.fullName} data-ai-hint="man face" />
               <AvatarFallback>{userInitials}</AvatarFallback>
             </Avatar>
-            <div><CardTitle className="text-2xl">{currentUser.fullName}</CardTitle><CardDescription>{currentUser.id} - {currentUser.workLocation}</CardDescription></div>
+            <div><CardTitle className="text-2xl">{currentUser.fullName}</CardTitle><CardDescription className="text-primary-foreground/80">{currentUser.id} - {currentUser.workLocation}</CardDescription></div>
           </CardHeader>
         </Card>
 
@@ -1111,13 +1111,13 @@ export default function DashboardPage() {
   if (currentUser.role !== 'Kurir' && displayData) {
     return (
       <div className="space-y-6">
-        <Card className="shadow-lg">
+        <Card className="shadow-lg bg-primary text-primary-foreground">
           <CardHeader>
-            <CardTitle className="text-2xl text-primary flex items-center">
+            <CardTitle className="text-2xl flex items-center">
               {currentUser.role === 'MasterAdmin' ? <UserCog className="mr-2 h-7 w-7" /> : currentUser.role === 'Admin' ? <Users className="mr-2 h-7 w-7" /> : <Briefcase className="mr-2 h-7 w-7" />}
               Selamat Datang, {currentUser.fullName}!
             </CardTitle>
-            <CardDescription>Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir.</CardDescription>
+            <CardDescription className="text-primary-foreground/80">Anda login sebagai {currentUser.role}. Berikut ringkasan operasional kurir.</CardDescription>
           </CardHeader>
         </Card>
 
@@ -1166,10 +1166,10 @@ export default function DashboardPage() {
         </Card>
         
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Kurir Aktif Hari Ini</CardTitle><Users className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.activeCouriersToday}</div><p className="text-xs text-muted-foreground">Total kurir beroperasi</p></CardContent></Card>
-          <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Diproses Hari Ini</CardTitle><PackageIcon className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesProcessedToday}</div><p className="text-xs text-muted-foreground">Total paket ditugaskan</p></CardContent></Card>
-          <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Terkirim Hari Ini</CardTitle><PackageCheck className="h-5 w-5 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesDeliveredToday}</div><p className="text-xs text-muted-foreground">Dari {displayData.totalPackagesProcessedToday} paket</p></CardContent></Card>
-          <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Rate Tepat Waktu</CardTitle><Clock className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.onTimeDeliveryRateToday.toFixed(1)}%</div><p className="text-xs text-muted-foreground">Kurir check-in tepat waktu</p></CardContent></Card>
+          <Card className="bg-secondary"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Kurir Aktif Hari Ini</CardTitle><Users className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.activeCouriersToday}</div><p className="text-xs text-muted-foreground">Total kurir beroperasi</p></CardContent></Card>
+          <Card className="bg-secondary"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Diproses Hari Ini</CardTitle><PackageIcon className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesProcessedToday}</div><p className="text-xs text-muted-foreground">Total paket ditugaskan</p></CardContent></Card>
+          <Card className="bg-secondary"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Terkirim Hari Ini</CardTitle><PackageCheck className="h-5 w-5 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesDeliveredToday}</div><p className="text-xs text-muted-foreground">Dari {displayData.totalPackagesProcessedToday} paket</p></CardContent></Card>
+          <Card className="bg-secondary"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Rate Tepat Waktu</CardTitle><Clock className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.onTimeDeliveryRateToday.toFixed(1)}%</div><p className="text-xs text-muted-foreground">Kurir check-in tepat waktu</p></CardContent></Card>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1193,3 +1193,5 @@ export default function DashboardPage() {
   )
 
 }
+
+    
