@@ -430,7 +430,7 @@ export default function ManagePICsPage() {
             <>
               <Card className="border shadow-sm">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead>ID PIC</TableHead>
                       <TableHead>Nama Lengkap</TableHead>

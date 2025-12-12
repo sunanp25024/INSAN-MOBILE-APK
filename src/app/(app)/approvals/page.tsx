@@ -125,7 +125,7 @@ export default function ApprovalsPage() {
                 <div className="overflow-x-auto">
                     <p className="font-semibold mb-2">Daftar Pengguna Baru yang Diajukan:</p>
                     <Table>
-                        <TableHeader>
+                        <TableHeader className="bg-muted/50">
                             <TableRow>
                                 <TableHead>Nama</TableHead>
                                 <TableHead>NIK</TableHead>
