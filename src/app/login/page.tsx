@@ -147,7 +147,7 @@ export default function LoginPage() {
            <p>
               Bermasalah saat login? <Link href="/setup-admin" className="underline hover:text-primary">Setup Akun MasterAdmin</Link>
           </p>
-          <p className="pt-2">&copy; {new Date().getFullYear()} PIS. All rights reserved.</p>
+          <p className="pt-2">&copy; {new Date().getFullYear()} MAHA MORA MANDIRI. All rights reserved.</p>
         </CardFooter>
       </Card>
     </div>

@@ -265,7 +265,7 @@ export default function LandingPage() {
                 <span className="font-semibold">MORA Apps</span>
             </div>
             <p className="text-sm text-muted-foreground">
-                &copy; {new Date().getFullYear()} PIS. All rights reserved.
+                &copy; {new Date().getFullYear()} MAHA MORA MANDIRI. All rights reserved.
             </p>
             <nav className="flex gap-4 sm:gap-6 text-sm text-muted-foreground">
                 <Link href="#" className="hover:text-primary">Bantuan</Link>
@@ -276,5 +276,3 @@ export default function LandingPage() {
     </div>
   );
 }
-
-    
