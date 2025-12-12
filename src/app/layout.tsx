@@ -23,7 +23,8 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
-    shortcut: "/favicon.ico",
+    shortcut: "/icons/icon-192x192.png",
+    icon: "/icons/icon-192x192.png",
     apple: [{ url: "/icons/icon-192x192.png", sizes: "192x192" }],
   },
 };
