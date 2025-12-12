@@ -94,7 +94,7 @@ export default function LandingPage() {
        <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-lg">
         <div className="container flex h-16 items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
-            <AppLogo className="h-10 w-10 text-primary" />
+            <AppLogo className="h-12 w-12 text-primary" />
             <span className="text-xl font-bold text-foreground">INSAN MOBILE</span>
             </Link>
             <nav className="hidden items-center gap-6 text-sm md:flex">
@@ -261,7 +261,7 @@ export default function LandingPage() {
       <footer className="border-t bg-background">
         <div className="container mx-auto flex flex-col items-center justify-between gap-4 py-8 px-4 text-center sm:flex-row sm:text-left md:px-6">
             <div className="flex items-center gap-2">
-                <AppLogo className="h-8 w-8 text-primary" />
+                <AppLogo className="h-10 w-10 text-primary" />
                 <span className="font-semibold">INSAN MOBILE</span>
             </div>
             <p className="text-sm text-muted-foreground">
