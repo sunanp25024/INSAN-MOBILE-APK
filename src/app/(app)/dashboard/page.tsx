@@ -1166,10 +1166,10 @@ export default function DashboardPage() {
         </Card>
         
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="bg-secondary"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Kurir Aktif Hari Ini</CardTitle><Users className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.activeCouriersToday}</div><p className="text-xs text-muted-foreground">Total kurir beroperasi</p></CardContent></Card>
-          <Card className="bg-secondary"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Diproses Hari Ini</CardTitle><PackageIcon className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesProcessedToday}</div><p className="text-xs text-muted-foreground">Total paket ditugaskan</p></CardContent></Card>
-          <Card className="bg-secondary"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Terkirim Hari Ini</CardTitle><PackageCheck className="h-5 w-5 text-green-500" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesDeliveredToday}</div><p className="text-xs text-muted-foreground">Dari {displayData.totalPackagesProcessedToday} paket</p></CardContent></Card>
-          <Card className="bg-secondary"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Rate Tepat Waktu</CardTitle><Clock className="h-5 w-5 text-primary" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.onTimeDeliveryRateToday.toFixed(1)}%</div><p className="text-xs text-muted-foreground">Kurir check-in tepat waktu</p></CardContent></Card>
+          <Card className="bg-primary text-primary-foreground"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Kurir Aktif Hari Ini</CardTitle><Users className="h-5 w-5 text-primary-foreground/70" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.activeCouriersToday}</div><p className="text-xs text-primary-foreground/70">Total kurir beroperasi</p></CardContent></Card>
+          <Card className="bg-primary text-primary-foreground"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Diproses Hari Ini</CardTitle><PackageIcon className="h-5 w-5 text-primary-foreground/70" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesProcessedToday}</div><p className="text-xs text-primary-foreground/70">Total paket ditugaskan</p></CardContent></Card>
+          <Card className="bg-primary text-primary-foreground"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Paket Terkirim Hari Ini</CardTitle><PackageCheck className="h-5 w-5 text-green-300" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.totalPackagesDeliveredToday}</div><p className="text-xs text-primary-foreground/70">Dari {displayData.totalPackagesProcessedToday} paket</p></CardContent></Card>
+          <Card className="bg-primary text-primary-foreground"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Rate Tepat Waktu</CardTitle><Clock className="h-5 w-5 text-primary-foreground/70" /></CardHeader><CardContent><div className="text-2xl font-bold">{displayData.onTimeDeliveryRateToday.toFixed(1)}%</div><p className="text-xs text-primary-foreground/70">Kurir check-in tepat waktu</p></CardContent></Card>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1193,5 +1193,3 @@ export default function DashboardPage() {
   )
 
 }
-
-    
